@@ -54,3 +54,13 @@ test('unavailable capture API explains secure-context requirements',async()=>{
     assert.equal(error.name,'MediaDevicesUnavailable');assert.match(formatMicrophoneError(error),/HTTPS or localhost/);return true;
   });
 });
+test('changed origin device IDs recover by saved label and release the temporary default capture',async()=>{
+  const calls=[];let stops=0;
+  const probe={getTracks:()=>[{stop(){stops++;}}]};
+  const recovered={getTracks:()=>[]};
+  const result=await openMicrophone({...preferences,input:'old-id',inputLabel:'USB Microphone'},{
+    getUserMedia:async constraints=>{calls.push(constraints);if(calls.length===1)throw failure('NotFoundError');return calls.length===2?probe:recovered;},
+    enumerateDevices:async()=>[{kind:'audioinput',deviceId:'new-id',label:'USB Microphone'}],
+  });
+  assert.equal(result.stream,recovered);assert.equal(result.usedDefault,false);assert.equal(stops,1);assert.equal(calls[2].audio.deviceId.exact,'new-id');
+});

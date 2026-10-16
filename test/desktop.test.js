@@ -1,3 +1,4 @@
+import {EventEmitter} from 'node:events';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
@@ -6,7 +7,7 @@ import path from 'node:path';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 const {createClientState}=require('../electron/client-state.cjs');
-const {createRendererServer}=require('../electron/renderer-server.cjs');
+const {createRendererServer,listenRendererServer}=require('../electron/renderer-server.cjs');
 const build=require('../electron-builder.cjs');
 const plain={isEncryptionAvailable:()=>false};
 
@@ -65,4 +66,24 @@ test('Windows portable build is x64 and includes UI and desktop runtime',()=>{
   assert.equal(build.appId,'org.driskord.desktop');assert.equal(build.win.target[0].target,'portable');assert.deepEqual(build.win.target[0].arch,['x64']);
   assert.equal(build.nsis,undefined);assert.match(build.win.artifactName,/-Portable\.\$\{ext\}$/);
   assert.ok(build.files.includes('dist/**/*'));assert.ok(build.files.includes('electron/**/*'));assert.equal(build.files.some(f=>f.startsWith('data/')),false);
+});
+
+test('desktop persists selected audio IDs, labels and renderer origin across launches',()=>{
+  const directory=mkdtempSync(path.join(tmpdir(),'driskord-devices-'));
+  try {
+    const state=createClientState(directory,plain);
+    const preferences={input:'mic',inputLabel:'USB Mic',output:'headset',outputLabel:'Headset'};
+    state.set('preferences',JSON.stringify(preferences));state.set('rendererPort','40509');
+    const next=createClientState(directory,plain);
+    assert.deepEqual(JSON.parse(next.get('preferences')),preferences);assert.equal(Number(next.get('rendererPort')),40509);
+  } finally {rmSync(directory,{recursive:true,force:true});}
+});
+test('renderer origin reuses its saved port and falls back only for an occupied port',async()=>{
+  function server(fail) {
+    const s=new EventEmitter();s.attempts=[];s.address=()=>({port:s.bound});
+    s.listen=port=>{s.attempts.push(port);queueMicrotask(()=>{if(port===fail)s.emit('error',Object.assign(new Error('busy'),{code:'EADDRINUSE'}));else{s.bound=port||45678;s.emit('listening');}});return s;};return s;
+  }
+  const stable=server();assert.equal(await listenRendererServer(stable,40509),40509);assert.deepEqual(stable.attempts,[40509]);
+  const occupied=server(40509);assert.equal(await listenRendererServer(occupied,40509),45678);assert.deepEqual(occupied.attempts,[40509,0]);
+  const invalid=server();await listenRendererServer(invalid,-1);assert.deepEqual(invalid.attempts,[0]);
 });

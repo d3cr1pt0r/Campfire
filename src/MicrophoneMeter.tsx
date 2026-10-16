@@ -30,7 +30,7 @@ export function MicrophoneMeter({ preferences, activeStream, onInputFallback }: 
             setError(formatMicrophoneError(reason)); setTesting(false);
         }
         // Restart an active test when its selected input or processing changes.
-    }, [testing, preferences.input, preferences.noise, activeStream]);
+    }, [testing, preferences.input, preferences.inputLabel, preferences.noise, activeStream]);
     const level = testing ? reading?.percent || 0 : 0;
     const status = !testing ? 'Test stopped' : !reading ? 'Opening microphone…' : reading.paused ? 'Meter paused' : reading.muted ? 'Microphone muted' : reading.clipping ? 'Input too loud' : reading.detected ? 'Input detected' : 'No input detected';
     return <section className="microphone-test" aria-labelledby="microphone-test-title">

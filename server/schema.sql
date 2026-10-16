@@ -12,3 +12,5 @@ CREATE INDEX IF NOT EXISTS messages_room_created ON messages(room,created);
 CREATE INDEX IF NOT EXISTS attachments_message ON attachments(message);
 CREATE INDEX IF NOT EXISTS reactions_message ON reactions(message);
 CREATE INDEX IF NOT EXISTS friends_recipient ON friends(recipient);
+CREATE TABLE IF NOT EXISTS avatars(id TEXT PRIMARY KEY,user TEXT UNIQUE REFERENCES users(id) ON DELETE CASCADE,data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS emojis(id TEXT PRIMARY KEY,name TEXT UNIQUE NOT NULL,author TEXT REFERENCES users(id),data TEXT NOT NULL);

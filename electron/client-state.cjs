@@ -1,6 +1,6 @@
 const { readFileSync, writeFileSync, renameSync, mkdirSync } = require('node:fs');
 const path = require('node:path');
-const allowedKeys = new Set(['connection', 'preferences']);
+const allowedKeys = new Set(['connection', 'preferences', 'rendererPort']);
 
 // Keep client state independent of the ephemeral renderer HTTP port.
 // On Windows Electron safeStorage encrypts this with the current user's DPAPI key.

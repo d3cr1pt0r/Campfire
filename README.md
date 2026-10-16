@@ -92,10 +92,10 @@ npm run dist:win
 
 The command type-checks and builds the interface, then downloads/runs the pinned `electron-builder@26.0.12` tool and its packaging dependencies. It needs internet access. Application dependencies remain controlled by `package-lock.json`; this packaging tool is fetched on demand rather than added to the app's dependency tree.
 
-Expected output for version 0.1.2:
+Expected output for version 0.1.3:
 
 ```text
-release/Driskord-0.1.2-x64-Portable.exe
+release/Driskord-0.1.3-x64-Portable.exe
 ```
 
 Send **that executable plus your shared server's HTTPS URL** to friends. They launch it, enter the server address, and create an account on your server. Your standalone server must remain running and reachable. To update, close Driskord and replace the old executable with the new one.
@@ -127,7 +127,7 @@ The executable is not code-signed, so Windows may show an unknown-publisher/Smar
 - In-app registration/sign-in, salted password hashes, expiring sessions, and server-local accounts.
 - Persistent text channels and DMs, friend requests/acceptance/removal, presence, and live messages.
 - Files up to 5 MB with authenticated downloads.
-- Own-message editing/deletion, five reaction emojis, typing indicators, session unread badges, search, and manager-pinned messages.
+- Own-message editing/deletion, over 200 standard emojis and custom emoji reactions, typing indicators, session unread badges, search, and manager-pinned messages.
 - Voice channels with microphone mute/deafen, webcam video and local preview, screen/window sharing, and individual participant volume.
 - Focused-app push-to-talk with Space, browser noise suppression/echo cancellation, and call sounds.
 - Role creation/editing, colors, chat/voice/management permissions, owner-only role assignment, and server naming.
@@ -135,7 +135,7 @@ The executable is not code-signed, so Windows may show an unknown-publisher/Smar
 
 Search, pinned views, and history currently operate on the latest 500 messages in a conversation. Unread counts are session-local. Screen sharing replaces the outgoing camera track and restores it when sharing stops. Windows desktop sharing supports system audio; see below for platform limitations. Settings affecting device capture apply on the next call/video start. Output-device support and capture picker behavior depend on the OS. Push-to-talk works while the app has focus and the cursor is outside an input field; it is not a system-wide hotkey.
 
-Private channels, moderation/ban UI, nicknames, custom server icons, saved multi-server sessions, direct-message calls, threads, bots, password recovery, mobile clients, code-signed desktop releases, auto-updates, and a large-call media server are future work. Message text is rendered as plain text, with no HTML or Markdown execution. DMs are access-controlled on the server; they are **not end-to-end encrypted** against the server owner. WebRTC encrypts media transport, and TURN can relay that media.
+Private channels, moderation/ban UI, nicknames, custom server icons, saved multi-server sessions, threads, bots, password recovery, mobile clients, code-signed desktop releases, auto-updates, and a large-call media server are future work. Message text supports clickable HTTP(S) links and custom emoji tokens, with no HTML or Markdown execution. DMs are access-controlled on the server; they are **not end-to-end encrypted** against the server owner. WebRTC encrypts media transport, and TURN can relay that media.
 
 ## Microphone troubleshooting
 
@@ -167,6 +167,19 @@ Microphone mute and push-to-talk affect only your voice; shared sound continues 
 
 Linux clients can listen to a Windows friend's shared audio. Capturing system audio from Linux desktop sharing is not implemented. Browser/native picker audio depends on the platform and selected source; enable its audio option when available. If capture provides no audio track, the app reports that it is sharing video only. No server changes or additional port forwarding are needed. Live Windows-to-Linux system audio still needs testing.
 
+## Profiles, emojis, and direct calls
+
+- **Settings → My account → Upload profile picture:** choose an image. The client fits it within 512 × 512 pixels and uploads a PNG; the server enforces those bounds. You can replace or remove it. Profile pictures appear in chat, member/friend lists and call tiles.
+- **Settings → Custom emojis:** upload a named image, resized to fit 128 × 128 pixels. Use the emoji picker or type `:name:` in chat. Standard and custom emojis also work as reactions. Click the smile-plus below a message to react; click your reaction again to remove it. Authors and managers can delete custom emojis. Animated custom uploads become still images; chat GIF attachments remain animated.
+- Drag files onto the chat area or use the attachment picker to queue up to 10 files (5 MB combined per message). Review the filenames, remove any unwanted files, then send. Drops never send automatically.
+- Chat PNG/JPEG/WebP/GIF attachments show inline previews and retain their download button. Attachment authorization still follows its channel/DM. HTTP(S) links open in your normal browser from Electron.
+- Click **Call friend** in the friends list or DM header. Friends must be accepted and online on this server. The recipient sees a **Join call / Decline** banner; joining opens the same voice/video/screen-share controls as a voice channel. In a private call, click **Invite friend** to add other accepted friends, up to eight members. Invitations expire after two minutes; the call disappears when its last participant leaves. Calls and invitations do not survive a server restart.
+- Green outlines on call tiles and voice-channel avatars indicate microphone activity. Mute and push-to-talk suppress the indicator. It measures the microphone before screen-share sound is mixed, so shared music does not light it up.
+- Input/output selections are saved with device names. Desktop launches reuse the local UI port, and a unique matching device name can recover a changed device ID. A disconnected device uses System default temporarily without discarding the saved choice. After this upgrade, select each device once if an old selection has no saved name. Test by closing/relaunching the app.
+- Voice channel names accept capitals and spaces, such as `Test Room`; text channel names normalize to lowercase and hyphens.
+
+Restart the updated server with `npm run server` and update/restart all clients (`npm start` on Linux; rebuild/download the Windows portable EXE). New avatar/emoji tables are created automatically without changing existing messages/accounts. No new dependency or port forward is required. Keep your normal database backup before updating.
+
 ## Validation
 
 ```bash
@@ -177,6 +190,6 @@ npm test
 
 The integration suite covers separate accounts/clients, live messages, DM isolation, friendship acceptance, edit/delete authorization, reactions, pin permissions, attachments, role changes, signaling, logout, and restart persistence. It uses temporary databases and ports. It does not test real microphone/camera hardware or NAT traversal.
 
-**Current environment result:** actual `npm run check` and `npm run build` now pass with installed dependencies; 42 unit tests pass across security, SQLite schema, desktop state, microphone capture, voice signaling/playback, system-audio mixing and microphone metering. Server integration tests are blocked here because the sandbox denies listening on localhost (`listen EPERM`). The portable build command completes checking/building but cannot download electron-builder because npm DNS is unavailable. No `.exe` has been produced or tested here. Electron launch, Docker build, live media, and Windows portable launch still need validation. The existing package lock pins application dependencies; the packaging tool is separately pinned in the build command.
+**Current environment result:** actual `npm run check` and `npm run build` now pass with installed dependencies; 59 tests pass in `npm run test:unit` across security, SQLite schema, desktop state, microphone capture, voice signaling/playback, system-audio mixing, microphone metering, multi-file uploads, profiles, previews, custom reactions and private-call authorization. The new request-handler tests run without listening sockets; the existing real-socket integration tests are blocked here because the sandbox denies listening on localhost (`listen EPERM`). The portable build command completes checking/building but cannot download electron-builder because npm DNS is unavailable. No `.exe` has been produced or tested here. Electron launch, Docker build, live media, and Windows portable launch still need validation. The existing package lock pins application dependencies; the packaging tool is separately pinned in the build command.
 
 See [IMPLEMENTATION.md](IMPLEMENTATION.md) for architecture, data model, event/API contracts, extension guidance, and remaining work.

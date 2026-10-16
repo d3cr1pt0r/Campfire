@@ -1,6 +1,7 @@
+import { rememberedDevice } from './devices.ts';
 import type { Preferences } from './types';
 
-type CapturePreferences = Pick<Preferences, 'input' | 'noise'>;
+type CapturePreferences = Pick<Preferences, 'input' | 'inputLabel' | 'noise'>;
 type MicrophoneResult = { stream: MediaStream; usedDefault: boolean };
 
 function errorDetails(error: unknown): { name: string; message: string; constraint: string } {
@@ -51,7 +52,7 @@ export function formatMicrophoneError(error: unknown): string {
 
 export async function openMicrophone(
     preferences: CapturePreferences,
-    devices: Pick<MediaDevices, 'getUserMedia'> | undefined = globalThis.navigator?.mediaDevices,
+    devices: Pick<MediaDevices, 'getUserMedia'> & Partial<Pick<MediaDevices, 'enumerateDevices'>> | undefined = globalThis.navigator?.mediaDevices,
 ): Promise<MicrophoneResult> {
     if (!devices?.getUserMedia) {
         throw Object.assign(new Error(''), { name: 'MediaDevicesUnavailable' });
@@ -77,6 +78,16 @@ export async function openMicrophone(
         // Retry only a missing selection; permission/busy-device errors must surface.
         if (!selected || (!missingDevice && !unavailableId)) throw error;
         const stream = await devices.getUserMedia({ audio: processing });
+        if (preferences.inputLabel && devices.enumerateDevices) {
+            try {
+                const resolved = rememberedDevice(await devices.enumerateDevices(), 'audioinput', preferences.input, preferences.inputLabel);
+                if (resolved !== preferences.input) {
+                    const recovered = await devices.getUserMedia({ audio: { ...processing, deviceId: { exact: resolved } } });
+                    stream.getTracks().forEach(track => track.stop());
+                    return { stream: recovered, usedDefault: false };
+                }
+            } catch { /* The available default still permits the call. */ }
+        }
         return { stream, usedDefault: true };
     }
 }

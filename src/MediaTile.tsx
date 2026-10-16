@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Maximize2 } from 'lucide-react';
+import { rememberedDevice } from './devices';
+import { AuthImage } from './ChatContent';
 import { ExpandedVideo } from './ExpandedVideo';
 import { playbackError, selectAudioOutput, syncPlaybackTracks } from './playback';
 
-export function MediaTile({ stream, name, muted = false, preview = false, output = '', onOutputFallback }: {
+export function MediaTile({ stream, name, muted = false, preview = false, output = '', outputLabel = '', avatar, speaking = false, onOutputFallback }: {
     stream: MediaStream | null;
     name: string;
     muted?: boolean;
     preview?: boolean;
     output?: string;
+    outputLabel?: string;
+    avatar?: string | null;
+    speaking?: boolean;
     onOutputFallback?: () => void;
 }) {
     const audioRef = useRef<HTMLAudioElement>(null), videoRef = useRef<HTMLVideoElement>(null);
@@ -71,7 +76,9 @@ export function MediaTile({ stream, name, muted = false, preview = false, output
             const audio = audioRef.current;
             if (canceled || !audio) return;
             try {
-                const reset = await selectAudioOutput(audio, output);
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const resolved = rememberedDevice(devices, 'audiooutput', output, outputLabel);
+                const reset = await selectAudioOutput(audio, resolved);
                 if (canceled) return;
                 setOutputNotice(reset ? 'Saved output unavailable; using System default.' : '');
                 if (reset) fallback.current?.();
@@ -80,10 +87,10 @@ export function MediaTile({ stream, name, muted = false, preview = false, output
             }
         });
         return () => { canceled = true; };
-    }, [output, preview]);
+    }, [output, outputLabel, preview]);
     const initials = name.split(/[ -]/).map(word => word[0]).join('').slice(0, 2).toUpperCase();
-    return <div className={`media-tile ${preview ? 'preview' : ''}`}>
-        <div className="media-placeholder">{initials}<small>{preview ? 'Your camera preview' : 'Call participant'}</small></div>
+    return <div className={`media-tile ${preview ? 'preview' : ''} ${speaking ? 'speaking' : ''}`}>
+        <div className="media-placeholder">{avatar ? <AuthImage path={`/avatars/${avatar}`} alt={name} className="call-avatar" /> : initials}<small>{preview ? 'Your camera preview' : 'Call participant'}</small></div>
         <audio ref={audioRef} autoPlay muted={muted || preview} />
         <video style={{ opacity: hasVideo ? 1 : 0 }} ref={videoRef} autoPlay playsInline muted title={hasVideo ? "Double-click to expand video" : undefined} onDoubleClick={() => { if (hasVideo) setExpanded(true); }} />
         {hasVideo && <button type="button" className="expand-video" title="Expand video" aria-label={`Expand video from ${name}`} onClick={() => setExpanded(true)}><Maximize2 size={17} /></button>}

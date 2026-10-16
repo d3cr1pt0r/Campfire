@@ -9,7 +9,7 @@ This document describes the initial source implementation and is intended to be 
 - The first account owns a new server. All later accounts use the Member role.
 - Up to eight peers per voice channel. Mesh WebRTC, not an SFU.
 - Text channels, DMs, attachments, all six requested messaging extras, and all six requested calling extras.
-- Community extras were not selected; the response instead requested this implementation document. The only channel visibility model in v1 is public text/voice channels; DMs are private to their participants.
+- Community extras were not selected; the response instead requested this implementation document. Channels remain public text/voice channels. DMs are private to their participants; the subsequent direct-call implementation adds invite-only temporary voice/video rooms.
 
 ## File map and boundaries
 
@@ -40,7 +40,7 @@ This document describes the initial source implementation and is intended to be 
 | `test/desktop.test.js` | Desktop storage persistence, encryption integration, asset-host isolation and portable-build configuration |
 | `Dockerfile`, `compose.yaml` | Standalone web/server deployment and persistent data volume |
 
-The UI is shared by browser and Electron. No Node.js primitives are exposed to renderer content; the preload exposes only get/set/remove of the connection and preferences keys. The Electron shell hosts only renderer assets on localhost and does not import the community server or create a community database. Remote community connections go through HTTP and Socket.IO, so the backend can later be moved to another runtime without replacing the UI. The current renderer keeps components together for initial delivery; extract `ChatView`, `FriendsView`, and `SettingsDialog` into separate modules when extending their behavior.
+The UI is shared by browser and Electron. No Node.js primitives are exposed to renderer content; the preload exposes only get/set/remove of the connection, preferences and rendererPort keys. The Electron shell hosts only renderer assets on localhost and does not import the community server or create a community database. Remote community connections go through HTTP and Socket.IO, so the backend can later be moved to another runtime without replacing the UI. The current renderer keeps components together for initial delivery; extract `ChatView`, `FriendsView`, and `SettingsDialog` into separate modules when extending their behavior.
 
 ## Data model
 
@@ -49,16 +49,18 @@ SQLite runs in WAL mode with foreign keys. All SQL inputs use bound parameters. 
 - `roles`: ID, name, hex name color, JSON permission array.
 - `users`: UUID, unique case-insensitive username, salted scrypt hash, role FK, reserved banned flag.
 - `sessions`: SHA-256 hash of a random 256-bit bearer token, user FK, expiration. Tokens last 30 days. Expired rows are cleaned during authentication requests.
-- `channels`: ID, lowercase name, `text` or `voice` kind.
+- `channels`: ID, normalized lowercase text-channel name or case-preserving voice display name, `text` or `voice` kind.
 - `messages`: UUID, conversation key, author FK, plain-text body, creation/edit timestamps, pinned flag.
-- `attachments`: UUID, message FK, original filename, forced binary MIME, base64 payload. Cascade deletion with the message.
+- `attachments`: UUID, message FK, original filename, sniffed raster MIME (otherwise binary), base64 payload. Cascade deletion with the message.
 - `reactions`: message/user/emoji primary key. Cascade deletion with the message.
 - `friends`: sender/recipient primary key, accepted flag. A reverse request accepts an incoming request.
 - `settings`: key/value store (currently server name).
+- `avatars`: version UUID, unique user FK, bounded PNG base64. Replacing an avatar replaces its ID.
+- `emojis`: UUID, unique shortcode name, author FK, bounded PNG base64. Private calls use in-memory state, not a table.
 
 Text conversation keys are channel IDs. DM keys are `dm:<smaller-user-UUID>:<larger-user-UUID>` using lexicographic sort in the client. The server checks exactly two existing, distinct participants and requester membership. All attachment access derives from its owning message's conversation. Account rosters are visible to server members. DMs can be initiated from any member, even before friendship acceptance.
 
-Attachments are intentionally simple and capped at 5 MB. Before larger deployments, move file bytes out of SQLite, stream uploads/downloads, enforce disk quotas, and add retention controls. Message insertion and attachment insertion are currently separate synchronous statements; use a database transaction when expanding upload processing.
+Attachments are capped at ten files and 5 MB combined per message. Before larger deployments, move file bytes out of SQLite, stream uploads/downloads, enforce disk quotas, and add retention controls. Message and attachment insertion run in one SQLite transaction, so a batch cannot create a partially attached message.
 
 ## Authentication and authorization
 
@@ -68,17 +70,17 @@ Owner always has all permissions. Other roles have independent `send`, `voice`, 
 
 | Permission | Capabilities |
 | --- | --- |
-| `send` | New messages and attachments |
-| `voice` | Join voice channels and signal peers |
+| `send` | New messages, attachments, reactions and custom emoji uploads |
+| `voice` | Join voice channels/private calls, invite accepted friends, signal peers and publish activity |
 | `manage` | Server naming, channel creation, non-management role editing/creation, pin/unpin and deletion of other users' messages |
 
-Only Owner assigns user roles or grants/edits roles containing `manage`. Owner cannot be demoted by the current API. Message authors can edit/delete their existing messages and any conversation participant can react, even if the role no longer permits new messages. Pinning requires management permission and conversation access. Clients losing voice permission receive `call:revoked`, and all other participants receive an updated call roster so their connections close.
+Only Owner assigns user roles or grants/edits roles containing `manage`. Owner cannot be demoted by the current API. Message authors can edit/delete their existing messages and reactions require conversation access and the send permission. Pinning requires management permission and conversation access. Clients losing voice permission receive `call:revoked`, and all other participants receive an updated call roster so their connections close.
 
 All channels are readable by all authenticated users. Do not implement private-channel UI alone: apply visibility checks consistently to state/rosters, message history, live event routing, attachments, typing, call joins, and signals. Public messages currently broadcast to all authenticated sockets; this must change when channel membership becomes private.
 
 The prototype uses synchronous scrypt and database queries. Auth attempts have a per-IP, in-memory 20/minute limit; behind a reverse proxy, clients share that proxy's IP unless a safe trusted-proxy strategy is added. Registration is open. Before public distribution, add registration controls, comprehensive route/socket throttles, asynchronous password hashing, quotas, audit logging, session management, backups, and recovery. Open registration plus first-user ownership means initial bootstrap must happen before exposure.
 
-Electron enables context isolation and sandboxing and disables Node integration. The preload storage IPC checks that requests originate from the local UI origin, restricts keys to connection/preferences and limits JSON values to 16 KB. New windows are denied and navigation is constrained to the renderer origin. Media/notification permissions are restricted to that local origin. The production server sends a CSP header that prevents remote scripts, object embeds, and inline scripts (the Vite development server uses its own development behavior); remote HTTP(S)/WebSocket connections remain enabled to support arbitrary self-hosted servers. Changing renderer-origin handling requires reviewing the permission handlers and CSP together.
+Electron enables context isolation and sandboxing and disables Node integration. The preload storage IPC checks that requests originate from the local UI origin, restricts keys to connection/preferences/rendererPort and limits JSON values to 16 KB. New renderer windows are denied; HTTP(S) links without embedded credentials open through shell.openExternal in the system browser. In-app navigation is constrained to the renderer origin. Media/notification permissions are restricted to that local origin. The production server sends a CSP header that prevents remote scripts, object embeds, and inline scripts (the Vite development server uses its own development behavior); remote HTTP(S)/WebSocket connections remain enabled to support arbitrary self-hosted servers. Changing renderer-origin handling requires reviewing the permission handlers and CSP together.
 
 ## REST API
 
@@ -89,13 +91,20 @@ All `/api` routes except `/info` and `/auth/:action` require a session. Errors r
 | GET | `/api/info` | Server name and registration availability |
 | POST | `/api/auth/register`, `/api/auth/login` | `{username,password}`; register/sign in |
 | POST | `/api/logout` | Revoke current session |
-| GET | `/api/state` | Current user, users, roles, channels, friends, online IDs, call roster, ICE config |
+| GET | `/api/state` | Current user, users, roles, channels, friends, online IDs, visible call roster, private-call invitations/membership, custom emoji metadata, ICE config |
 | GET | `/api/messages?room=...&search=...` | Latest 500 accessible messages; optional substring filter |
-| POST | `/api/messages` | `{room,body,attachment?:{name,data}}`; base64 attachment |
+| POST | `/api/messages` | `{room,body,attachments?:[{name,data}]}`; legacy singular attachment remains accepted |
 | PATCH | `/api/messages/:id` | `{body? ,pinned?}` with separate permission checks |
 | DELETE | `/api/messages/:id` | Delete owned message or manager-moderated message |
 | POST | `/api/messages/:id/reaction` | Toggle `{emoji}` from the allowed set |
-| GET | `/api/attachments/:id` | Authorized binary download with Content-Disposition attachment |
+| GET | `/api/attachments/:id` | Authorized download; `?inline=1` serves sniffed PNG/JPEG/GIF/WebP only as an inline raster |
+| POST / DELETE | `/api/profile/avatar` | Set own `{data}` resized PNG / remove own avatar |
+| GET | `/api/avatars/:id` | Authenticated PNG profile image |
+| POST | `/api/emojis` | `{name,data}` bounded PNG, send permission |
+| GET / DELETE | `/api/emojis/:id` | Authenticated image / author or manager deletion |
+| POST | `/api/calls` | `{user}` online accepted friend; returns private room `{id}` |
+| POST | `/api/calls/:id/invite` | `{user}`; caller must participate in this private call |
+| POST | `/api/calls/:id/decline` | Reject invitation or remove own inactive membership |
 | POST | `/api/friends` | `{username}`; request or accept incoming request |
 | DELETE | `/api/friends/:id` | Remove friendship or request |
 | POST | `/api/channels` | `{name,kind}`; manager only |
@@ -113,7 +122,9 @@ Server → client:
 - `message:update`: replacement message.
 - `message:delete`: `{id,room}`.
 - `typing`: `{room,user}`.
-- `calls`: full `[{socket,user,channel}]` roster.
+- `calls`: `[{socket,user,channel}]` roster, excluding private rooms the recipient is not allowed to join.
+- `call:invite`: `{id,from}` invitation hint; `/state` holds authoritative pending invitations.
+- `call:speaking`: `{user,active}`, only to other sockets in the same call.
 - `signal`: `{from,user,data}`; a peer's WebRTC description or ICE candidate.
 - `call:revoked`: local call access was revoked; stop capture and close peers.
 
@@ -121,7 +132,8 @@ Client → server:
 
 - `typing(room)`: authorized conversation only.
 - `call:join(channel, acknowledgement)`: ack `{peers}` or `{error}`; voice permission, channel kind, single device per user and eight-person cap are checked.
-- `call:leave()`: clear membership.
+- `call:leave()`: clear active membership and destroy an empty private room.
+- `call:speaking(boolean)`: microphone activity hint, checked for voice permission/current call and rate-limited.
 - `signal({to,data})`: relay only between sockets in the same active voice channel.
 
 Public channel events are broadcast. DM events target participant-specific socket rooms. Clients deduplicate message IDs. Unread badges are in-memory, not synced read receipts. Socket reconnection reloads presence/state and the currently open conversation. Other conversations refresh when opened. Add cursor reconciliation and unread synchronization before depending on offline delivery.
@@ -208,7 +220,7 @@ A Web Audio MediaStream source connects only to an AnalyserNode (2048 samples), 
 
 Closing settings, switching settings tabs, stopping the test or changing the selected input/noise preference cleans up animation callbacks, analysis nodes and its AudioContext. Late permission/capture results after cancellation have their owned tracks immediately stopped. Disconnecting a microphone stops analysis and displays guidance. Changes to input/noise automatically restart an already-enabled test; tests never start merely by opening settings.
 
-Nine meter tests verify known-wave RMS/dBFS math, silence, clipping/non-finite samples, owned versus borrowed capture cleanup, late permission responses, denied capture, suspended/muted readings and disconnect/fallback behavior. Type check and production build pass. Actual microphone UI, hardware levels and Electron rendering remain unverified in the restricted environment; manual acceptance is to start the test, speak and observe the bars, change inputs, stop/close and confirm capture release, then repeat during a call and confirm call audio continues after stopping the meter. On Windows, rebuild/re-download the portable EXE; Linux source users restart npm start. The app version remains 0.1.2.
+Nine meter tests verify known-wave RMS/dBFS math, silence, clipping/non-finite samples, owned versus borrowed capture cleanup, late permission responses, denied capture, suspended/muted readings and disconnect/fallback behavior. Type check and production build pass. Actual microphone UI, hardware levels and Electron rendering remain unverified in the restricted environment; manual acceptance is to start the test, speak and observe the bars, change inputs, stop/close and confirm capture release, then repeat during a call and confirm call audio continues after stopping the meter. On Windows, rebuild/re-download the portable EXE; Linux source users restart npm start. The app version remains 0.1.3.
 
 ## Expanded screen-share and camera viewer
 
@@ -216,7 +228,7 @@ Tiles with an active video expose an Expand video button and video double-click 
 
 Full screen uses the standard user-gesture Fullscreen API; Electron's existing trusted-origin permission handlers now also allow fullscreen. A denied/unsupported native full-screen request leaves the large app-window viewer usable. Close/Return to call returns focus to the opener. Escape exits native full screen first or closes the viewer when not in native full screen; Tab navigation is contained within viewer controls. Video loss/peer departure closes or unmounts the viewer. Cleanup pauses/detaches only the extra video element and exits full screen when appropriate; it never stops shared tracks. A separate state reference for the visible video stream keeps a local preview updated when camera/screen source changes.
 
-No signaling/schema/version changes are required; the app remains 0.1.2. Type check, production build and the existing 36 unit tests pass. Real Electron/browser fullscreen, resizing and remote media remain unverified in the restricted environment. Manual acceptance: expand a remote share and local preview, inspect aspect-ratio preservation at different window sizes, enter/exit native full screen, use Escape/keyboard navigation, change participant volume, stop the share or leave the call while expanded, and confirm voice continues without duplication after closing the viewer.
+No signaling/schema/version changes are required; the app remains 0.1.3. Type check, production build and the existing 36 unit tests pass. Real Electron/browser fullscreen, resizing and remote media remain unverified in the restricted environment. Manual acceptance: expand a remote share and local preview, inspect aspect-ratio preservation at different window sizes, enter/exit native full screen, use Escape/keyboard navigation, change participant volume, stop the share or leave the call while expanded, and confirm voice continues without duplication after closing the viewer.
 
 ## Screen-share system audio
 
@@ -226,7 +238,29 @@ src/shareAudio.ts lazily creates a Web Audio microphone source and MediaStreamAu
 
 Microphone mute/deafen/PTT still gate only the owned microphone track. Stopping sharing or the OS ending video disconnects the system source, stops all capture tracks, and restores camera video. The mixer remains attached for microphone-only audio until leaving, avoiding another sender replacement. An independently ended system audio track is disconnected with a notice while video continues. Leaving/disconnect closes the mixer, stops its generated track, and releases the original mic/camera/screen captures. Pending captures/resumes check the call generation so late results cannot attach to another call. A missing audio track produces a visible video-only notice. Capture failures clean up and restore video.
 
-Six added graph-double tests exercise summing both sources without local playback, microphone gating independent of program sound, stop/restart without duplicate sources, cleanup ownership/idempotence, absent/ended capture and suspended/cancelled startup. These verify graph wiring and lifecycle, not real PCM processing or WebRTC/OS audio. Type check, production build and all 42 unit tests pass. Live acceptance remains: rebuild Windows EXE; stream music/game sound to Linux; mute mic and test PTT while sound continues; check remote voice is not looped back; change participant volume/output and deafen; stop via app and OS picker; repeat sharing; join another participant mid-share; leave while the picker is open. Confirm all capture tracks release and microphone voice continues after sharing stops. Version remains 0.1.2.
+Six added graph-double tests exercise summing both sources without local playback, microphone gating independent of program sound, stop/restart without duplicate sources, cleanup ownership/idempotence, absent/ended capture and suspended/cancelled startup. These verify graph wiring and lifecycle, not real PCM processing or WebRTC/OS audio. Type check, production build and all 42 unit tests pass. Live acceptance remains: rebuild Windows EXE; stream music/game sound to Linux; mute mic and test PTT while sound continues; check remote voice is not looped back; change participant volume/output and deafen; stop via app and OS picker; repeat sharing; join another participant mid-share; leave while the picker is open. Confirm all capture tracks release and microphone voice continues after sharing stops. Version remains 0.1.3.
+
+## Profiles, previews, emojis, device persistence, and private calls
+
+Client image upload uses createImageBitmap and canvas to decode, fit without upscaling, and re-encode as PNG (512 px avatars, 128 px emojis). This strips original metadata and animation without adding a native image-processing dependency. The server independently checks the PNG signature/IHDR dimensions and byte cap (1.5 MB), rejecting out-of-bounds uploads; it does not decode/re-encode images itself. Source upload limit is 10 MB. Add a hardened server decoder if accepting arbitrary third-party upload clients. New idempotent avatars/emojis tables avoid altering existing schema columns. All image asset endpoints require bearer authentication; image versions change when profiles update.
+
+AuthImage fetches with an Authorization header and displays a blob URL, aborting requests and revoking URLs on cleanup. Credentials are never put in image query strings. Only raster MIME types are displayed. Attachment MIME is sniffed from bytes on storage and again on inline retrieval, allowing old binary-MIME records to preview. Unknown/SVG/HTML files retain binary download behavior. GIF attachment bytes are unchanged. ChatContent renders escaped text, safe HTTP(S) links and custom :name: tokens. Electron opens allowed external links in the system browser; it never navigates the trusted app window to message links.
+
+shared/emojis.js supplies the server/client catalog of over 200 standard emojis. Server-side reactions accept only catalog entries or existing custom shortcodes. Custom emoji uploads require send, with limits of 200 per server and 50 per author. Authors/managers may delete them; deletion removes their reactions and broadcasts updated affected messages through conversation-authorized routing. Existing text tokens for deleted emojis render literally. Both reaction buttons and counts toggle per message/user/emoji, preserving existing schema uniqueness.
+
+Device preferences now retain IDs and labels, including during temporary fallback. listenRendererServer retries the saved rendererPort, falling back to a free port only when occupied; it persists the chosen port so the app origin stays stable across ordinary restarts. Unique non-default device labels recover changed IDs; duplicate labels are deliberately not guessed. Microphone recovery probes default to obtain enumeration labels, then opens the matched saved input and stops the probe. Output routing similarly resolves a saved label before setSinkId. Missing choices remain visible in settings instead of silently displaying the default option. The first upgrade can require reselecting a device if old IDs have expired and no label was recorded. A stable URL plus label recovery is a mitigation; OS device-ID/permission behavior still needs actual relaunch checks.
+
+useSpeaking borrows the raw call microphone through createMicrophoneMonitor, samples at about 80 ms, and holds the activity outline for 250 ms after detected input. It never opens another microphone or monitors the mixed system-audio track. Small boolean activity hints are sent on changes and every second while active; the server rate-limits and relays only within the current call. Receivers expire stale hints after 2.5 seconds. Green outlines decorate call tiles and voice-channel avatars. These are user-reported activity hints for presentation, not trusted evidence or recordings. Mute/deafen/PTT gates the raw track and therefore the indicator. Analysis cleanup does not stop borrowed tracks.
+
+Private calls are in-memory invite-only rooms named private:<UUID>. Creation requires voice permission and an online accepted friend; every added invite also checks accepted friendship, target voice permission and the eight-member limit. A participant can invite their own accepted friends; outsiders cannot view the room/roster, join, invite or signal into it. The existing same-room signaling check and one-active-device rule apply. Invited users must explicitly join; no microphone is opened by receiving an invitation. Invite timestamps expire after two minutes, with 15-second housekeeping. Calls vanish when empty after starting (or expire before starting); accepted participants can rejoin while someone remains. Initial calls have a per-pair cooldown and per-creator pending-room cap. Decline removes access; changing voice permissions revokes active calls. Server restart discards calls and invitations. E2EE/peer identity properties are unchanged.
+
+Drag/drop and the file picker share validateFileSelection from shared/uploads.js. Both queue File objects for review in the composer, with individual removal, a ten-file cap and a 5 MB combined limit. Drops into read-only conversations or during an upload do not queue files. The chat area exposes a file-only overlay; root handlers prevent dropped files from navigating the app. Drag counters reset on drop/end and conversation changes. The send path reads the selected batch, targets the captured conversation, and submits attachments[]; the server still accepts legacy attachment. All payloads validate before insertion and message/attachment writes are atomic. Preview/download authorization is unchanged. Live drag/drop, including OS file-manager behavior and nested targets, still needs manual desktop testing.
+
+New files: shared/uploads.js and declarations, server/images.js, shared/emojis.js and declarations, src/images.ts, src/devices.ts, src/ChatContent.tsx, src/messageText.ts, src/useSpeaking.ts, test/features.test.js, test/app.test.js. Docker copies shared into both build and runtime stages. No additional packages were installed. The implementation still uses a single mono mixed audio sender and the existing mesh/eight-person transport.
+
+Validation: 59 passing checks in npm run test:unit, including seven in-process request-handler/private-call checks (the parent test plus six subtests), device persistence/port fallback, changed-ID microphone recovery, resize geometry, image bounds, link tokenization, channel names and emoji catalog. Request-handler tests run real Express/SQLite without TCP; fake Socket.IO endpoints verify invitation/roster/activity authorization without asserting real transport. npm run check and npm run build pass. npm test still cannot complete here because the older real-socket integration suite gets listen EPERM. Live Electron relaunch/device routing, drag-and-drop, avatar resizing/rendering, animated GIF rendering, external browser launch, speaking outlines and real private/group media calls remain manual acceptance work.
+
+Upgrade: restart the backend, update/rebuild clients, and choose devices once if necessary. Test two app sessions, profile replacement/removal, GIF preview and DM isolation, custom emoji send/react/delete, capitalized voice names, caller/callee accept/decline and a third invited participant, outsider rejection, mute/PTT indicators during system-audio sharing, and last-member cleanup. No new ports are required. Current version: 0.1.3.
 
 ## Validation record
 
@@ -234,7 +268,7 @@ Verified after application dependencies became available:
 
 - Actual `npm run check`: passes, including Vite/CSS and preload declarations.
 - Actual `npm run build`: passes with installed Vite 8.3.4/React 19.3.1.
-- `npm run test:unit`: 42 tests pass (four security, one SQLite schema, four desktop, eight microphone, sixteen voice/mixing, nine microphone-meter).
+- `npm run test:unit`: 59 checks pass (four security, one SQLite schema, six desktop, nine microphone, sixteen voice/mixing, nine microphone-meter, seven feature helpers, and seven in-process server checks including the parent test).
 - JavaScript syntax checks on server, desktop, packaging config and tests.
 - Portable build command reaches the packaging step after successful check/build, then fails with EAI_AGAIN resolving registry.npmjs.org for electron-builder. No Windows executable artifact was generated.
 

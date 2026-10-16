@@ -33,4 +33,14 @@ function createRendererServer(distDirectory) {
   });
   return server;
 }
-module.exports = { createRendererServer };
+async function listenRendererServer(server, preferredPort = 0) {
+  const listen = port => new Promise((resolve, reject) => {
+    const failed = error => { server.off('listening', ready); reject(error); };
+    const ready = () => { server.off('error', failed); resolve(); };
+    server.once('error', failed); server.once('listening', ready); server.listen(port, '127.0.0.1');
+  });
+  const port = Number.isInteger(preferredPort) && preferredPort >= 1024 && preferredPort <= 65535 ? preferredPort : 0;
+  try { await listen(port); } catch (error) { if (port && error.code === 'EADDRINUSE') await listen(0); else throw error; }
+  return server.address().port;
+}
+module.exports = { createRendererServer, listenRendererServer };

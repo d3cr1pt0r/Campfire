@@ -1,6 +1,7 @@
 export type User = {
     id: string;
     username: string;
+    avatar?: string | null;
     role: string;
 };
 export type Role = {
@@ -32,6 +33,8 @@ export type State = {
     }[];
     online: string[];
     calls: CallMember[];
+    directCalls: {id:string;creator:string;invited:string[];members:string[]}[];
+    emojis: {id:string;name:string;author:string}[];
     iceServers: RTCIceServer[];
 };
 export type Message = {
@@ -55,7 +58,9 @@ export type Message = {
 export type Preferences = {
     notifications: boolean;
     input: string;
+    inputLabel?: string;
     output: string;
+    outputLabel?: string;
     quality: string;
     noise: boolean;
     pushToTalk: boolean;

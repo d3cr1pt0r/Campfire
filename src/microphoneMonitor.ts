@@ -1,7 +1,7 @@
 import type { Preferences } from './types';
 import { openMicrophone } from './media.ts';
 
-type InputPreferences = Pick<Preferences, 'input' | 'noise'>;
+type InputPreferences = Pick<Preferences, 'input' | 'inputLabel' | 'noise'>;
 export type MicrophoneLevel = { percent: number; decibels: number | null; detected: boolean; clipping: boolean };
 export type MicrophoneReading = MicrophoneLevel & { paused: boolean; muted: boolean; device: string };
 

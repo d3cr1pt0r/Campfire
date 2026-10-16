@@ -208,7 +208,7 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
             }
             if (usedDefault) {
                 onInputFallback();
-                report('The saved microphone is unavailable. Switched to System default; you can choose another input in Settings → Voice & video.');
+                report('The saved microphone is unavailable. Using System default for this call; your saved selection is kept for next time.');
             }
             audio.current = stream;
             callChannel.current = id;
