@@ -1,13 +1,16 @@
 import { messageParts } from './messageText';
 import { createContext, useContext, useEffect, useState } from 'react';
+import { ExpandedImage } from './ExpandedImage';
 export const AssetContext = createContext({ url: '', token: '' });
-export function AuthImage({ path, alt, className = '' }: { path: string; alt: string; className?: string }) {
+export function AuthImage({ path, alt, className = '', expandable = false }: { path: string; alt: string; className?: string; expandable?: boolean }) {
     const { url, token } = useContext(AssetContext);
     const [source, setSource] = useState('');
+    const [expandedSource, setExpandedSource] = useState('');
     useEffect(() => {
         const controller = new AbortController();
         let objectUrl = '';
         setSource('');
+        setExpandedSource('');
         void fetch(`${url.replace(/\/$/, '')}/api${path}`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal })
             .then(async res => {
                 if (!res.ok || !/^image\/(png|jpeg|webp|gif)$/.test(res.headers.get('content-type')?.split(';')[0] || '')) throw new Error('Preview unavailable');
@@ -17,7 +20,12 @@ export function AuthImage({ path, alt, className = '' }: { path: string; alt: st
             }).catch(() => {});
         return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
     }, [url, token, path]);
-    return source ? <img src={source} alt={alt} className={className} loading="lazy" /> : <span className={`image-placeholder ${className}`} aria-label={alt} />;
+    if (!source) return <span className={`image-placeholder ${className}`} aria-label={alt} />;
+    const image = <img src={source} alt={alt} className={className} loading="lazy" />;
+    return expandable ? <>
+        <button type="button" className="image-preview-button" title="Click to enlarge image" aria-label={`Enlarge image: ${alt}`} aria-haspopup="dialog" onClick={() => setExpandedSource(source)}>{image}</button>
+        {expandedSource === source && <ExpandedImage source={source} name={alt} onClose={() => setExpandedSource('')} />}
+    </> : image;
 }
 export function Emoji({ value, custom }: { value: string; custom: {id: string; name: string}[] }) {
     const item = value.startsWith(':') && value.endsWith(':') ? custom.find(e => `:${e.name}:` === value) : undefined;
