@@ -165,6 +165,12 @@ VITE_DEFAULT_SERVER_URL can prefill a public server origin when building. It is 
 
 Client state is written atomically under userData/client-state.dat so sessions/preferences survive port changes, relaunch and replacement of the portable EXE. Electron uses safeStorage when available. Tests use an encryption-service stub; actual Windows DPAPI behavior is not validated here. Earlier embedded-server databases are neither migrated nor deleted; use their original standalone data directory if those accounts need to be preserved.
 
+## Chat scrolling and layout bounds
+
+The app grid uses an explicit `minmax(0,1fr)` row. The workspace, column container, and chat pane allow zero minimum height and contain overflow; message history owns vertical scrolling instead of contributing an unbounded minimum height to its ancestors. The message list uses a stable scrollbar gutter and a visible dark-theme thumb, and the composer and optional call panel do not flex-shrink. This keeps history inside the available height as messages accumulate, including while a call or attachment preview is open. Text wrapping remains responsible for long message bodies.
+
+For visual regression checks, load a long channel/DM at 1440×900 and 960×640, scroll to both ends, and verify the header, composer and footer remain visible and the outer document does not scroll. Repeat with the call panel, attachment preview, and member list shown/hidden, and after resizing the window. Also verify short/empty history. Type checking and the production build can validate the code pipeline but do not prove these visual checks. Electron layout-fixture execution was attempted here and blocked by the sandbox before renderer startup (`sandbox_host_linux.cc`, shutdown operation not permitted); real browser/Windows validation remains outstanding.
+
 ## Validation record
 
 Verified after application dependencies became available:
