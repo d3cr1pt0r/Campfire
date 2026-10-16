@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { CallMember, Preferences } from './types';
+import { openMicrophone, formatMicrophoneError } from './media';
 type Peer = {
     pc: RTCPeerConnection;
     stream: MediaStream;
@@ -9,7 +10,7 @@ type Peer = {
     ignoreOffer: boolean;
     candidates: RTCIceCandidateInit[];
 };
-export function useCall(socket: Socket | null, prefs: Preferences, iceServers: RTCIceServer[], report: (s: string) => void) {
+export function useCall(socket: Socket | null, prefs: Preferences, iceServers: RTCIceServer[], report: (s: string) => void, onInputFallback: () => void) {
     const [channel, setChannel] = useState<string | null>(null);
     const [muted, setMuted] = useState(false), [deafened, setDeafened] = useState(false), [camera, setCamera] = useState(false), [sharing, setSharing] = useState(false);
     const [local, setLocal] = useState<MediaStream | null>(null), [remote, setRemote] = useState<{
@@ -183,10 +184,14 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
         leave();
         const attempt = operation.current;
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: prefs.input ? { exact: prefs.input } : undefined, noiseSuppression: prefs.noise, echoCancellation: prefs.noise, autoGainControl: prefs.noise } });
+            const { stream, usedDefault } = await openMicrophone(prefs);
             if (attempt !== operation.current) {
                 stream.getTracks().forEach(t => t.stop());
                 return;
+            }
+            if (usedDefault) {
+                onInputFallback();
+                report('The saved microphone is unavailable. Switched to System default; you can choose another input in Settings → Voice & video.');
             }
             audio.current = stream;
             callChannel.current = id;
@@ -211,7 +216,7 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
             if (attempt !== operation.current)
                 return;
             leave();
-            report(`Cannot open microphone: ${(e as Error).message}`);
+            report(`Cannot open microphone: ${formatMicrophoneError(e)}`);
         }
     };
     const toggleCamera = async () => {

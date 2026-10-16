@@ -137,6 +137,14 @@ Search, pinned views, and history currently operate on the latest 500 messages i
 
 Private channels, moderation/ban UI, nicknames, custom server icons, saved multi-server sessions, direct-message calls, threads, bots, password recovery, mobile clients, code-signed desktop releases, auto-updates, and a large-call media server are future work. Message text is rendered as plain text, with no HTML or Markdown execution. DMs are access-controlled on the server; they are **not end-to-end encrypted** against the server owner. WebRTC encrypts media transport, and TURN can relay that media.
 
+## Microphone troubleshooting
+
+If voice join fails before connecting, select **Settings → Voice & video → Input device → System default**, then click **Allow microphone & refresh devices**. The client reports the native error name even when the browser supplies no error text. An expired/disconnected saved input is retried once with System default and the saved preference is reset only when that succeeds.
+
+On Linux, `NotReadableError` suggests checking your active audio service and input routing; `NotFoundError` means no suitable microphone was available; `NotAllowedError` means permission was denied. You can inspect your current system audio session from a normal terminal with `wpctl status` (PipeWire) or `pactl info` / `pactl list short sources` (PulseAudio-compatible server). Check the microphone in your system sound settings and avoid launching the app with sudo. These checks concern local capture, not STUN ports.
+
+For browser clients, microphone capture requires HTTPS or localhost. For the Linux Electron client, run `npm start` after updating; packaged clients need a rebuilt package to receive these client-side fixes.
+
 ## Validation
 
 ```bash
@@ -147,6 +155,6 @@ npm test
 
 The integration suite covers separate accounts/clients, live messages, DM isolation, friendship acceptance, edit/delete authorization, reactions, pin permissions, attachments, role changes, signaling, logout, and restart persistence. It uses temporary databases and ports. It does not test real microphone/camera hardware or NAT traversal.
 
-**Current environment result:** actual `npm run check` and `npm run build` now pass with installed dependencies; nine dependency-free security/schema/desktop tests pass. Server integration tests are blocked here because the sandbox denies listening on localhost (`listen EPERM`). The portable build command completes checking/building but cannot download electron-builder because npm DNS is unavailable. No `.exe` has been produced or tested here. Electron launch, Docker build, live media, and Windows portable launch still need validation. The existing package lock pins application dependencies; the packaging tool is separately pinned in the build command.
+**Current environment result:** actual `npm run check` and `npm run build` now pass with installed dependencies; 17 unit tests pass across security, SQLite schema, desktop state and microphone capture helpers. Server integration tests are blocked here because the sandbox denies listening on localhost (`listen EPERM`). The portable build command completes checking/building but cannot download electron-builder because npm DNS is unavailable. No `.exe` has been produced or tested here. Electron launch, Docker build, live media, and Windows portable launch still need validation. The existing package lock pins application dependencies; the packaging tool is separately pinned in the build command.
 
 See [IMPLEMENTATION.md](IMPLEMENTATION.md) for architecture, data model, event/API contracts, extension guidance, and remaining work.

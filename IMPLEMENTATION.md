@@ -26,6 +26,7 @@ This document describes the initial source implementation and is intended to be 
 | `server/schema.sql` | Initial SQLite schema and indexes |
 | `server/security.js` | Password/token hashing and pure permission/conversation-access helpers |
 | `src/main.tsx` | Application/auth shell, chat, friend list, settings, dialogs, REST and socket state coordination, media tiles |
+| `src/media.ts` | Shared microphone acquisition, unavailable-device recovery and capture diagnostics |
 | `src/useCall.ts` | Media stream ownership, peer connections, signaling, mute/deafen, PTT, camera and screen track lifecycle |
 | `src/types.ts`, `src/desktop.d.ts` | Client contracts, preload storage API, and Vite client/CSS declarations |
 | `src/style.css` | Responsive dark desktop layout and component styles; no third-party font requests |
@@ -171,13 +172,23 @@ The app grid uses an explicit `minmax(0,1fr)` row. The workspace, column contain
 
 For visual regression checks, load a long channel/DM at 1440×900 and 960×640, scroll to both ends, and verify the header, composer and footer remain visible and the outer document does not scroll. Repeat with the call panel, attachment preview, and member list shown/hidden, and after resizing the window. Also verify short/empty history. Type checking and the production build can validate the code pipeline but do not prove these visual checks. Electron layout-fixture execution was attempted here and blocked by the sandbox before renderer startup (`sandbox_host_linux.cc`, shutdown operation not permitted); real browser/Windows validation remains outstanding.
 
+## Microphone acquisition and diagnostics
+
+Microphone capture is centralized in `src/media.ts`, shared by call joins and the settings permission check. Native capture errors may contain an empty message; the UI now displays the exception name and actionable guidance for denied permission, absent devices, unreadable/busy audio devices, constraint failures, interrupted capture, and missing secure-context APIs. Linux audio-service failures are distinguished from STUN/ICE failures: microphone acquisition happens before joining/signaling a call.
+
+A persisted selected device ID can stop matching after a USB disconnect or a change to the temporary desktop renderer origin. Capture retries once with the system default only for a missing selected input or a device-ID constraint failure. Permission denial, unreadable hardware, and unrelated constraints are never retried against another input. On successful fallback, the caller resets the saved input to System default and tells the user. If the call was canceled while capture was pending, the acquired tracks are stopped and the saved choice is not changed. Failed fallback reports its final capture error.
+
+`test/media.test.js` exercises empty-error diagnostics, API availability, default and explicit-device constraints, missing-device recovery, and no retry on denied/busy devices. The test commands enable Node's TypeScript stripping so the tests run the same helper as the client without a separate build; this flag supports the declared Node minimum. Real Linux microphone access cannot be tested in this sandbox: Electron cannot launch and PipeWire/PulseAudio IPC is restricted. The root cause of the reported Linux failure remains unconfirmed until the updated client supplies its exception name or the user reproduces it with system audio diagnostics.
+
+Manual check: restart the Linux desktop with `npm start`, choose Settings → Voice & video → Input device → System default, and use Allow microphone & refresh devices before joining a call. Confirm successful capture, test explicit input selection across a relaunch, and verify permission denial remains denied. Browser clients need HTTPS or localhost for microphone APIs; ordinary HTTP on another machine's LAN/public IP is not a secure context.
+
 ## Validation record
 
 Verified after application dependencies became available:
 
 - Actual `npm run check`: passes, including Vite/CSS and preload declarations.
 - Actual `npm run build`: passes with installed Vite 8.3.4/React 19.3.1.
-- `npm run test:unit`: nine tests pass (four security, one SQLite schema, four desktop).
+- `npm run test:unit`: 17 tests pass (four security, one SQLite schema, four desktop, eight microphone).
 - JavaScript syntax checks on server, desktop, packaging config and tests.
 - Portable build command reaches the packaging step after successful check/build, then fails with EAI_AGAIN resolving registry.npmjs.org for electron-builder. No Windows executable artifact was generated.
 
