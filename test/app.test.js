@@ -32,6 +32,20 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
     const alice=await signup('Alice'),bob=await signup('Bob'),eve=await signup('Eve');
     const api=async(u,endpoint,method='GET',body,status=200)=>{const result=await request(service.app,endpoint,u?.token,method,body);assert.equal(result.status,status,JSON.stringify(result.data));return result;};
     const pixel='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=';
+    await t.test('nicknames default to usernames, update only the caller, and do not rename accounts',async()=>{
+        assert.equal(alice.user.nickname,'Alice');assert.equal((await api(bob,'/state')).data.me.nickname,'Bob');
+        const changed=await api(alice,'/profile','PATCH',{nickname:' Alice Display '});
+        assert.equal(changed.data.user.nickname,'Alice Display');assert.equal(changed.data.user.username,'Alice');
+        assert.equal((await api(bob,'/state')).data.users.find(u=>u.id===alice.user.id).nickname,'Alice Display');
+        assert.equal((await api(bob,'/state')).data.me.nickname,'Bob');
+        await api(alice,'/profile','PATCH',{nickname:'',username:'Renamed'},400);
+        for(const nickname of ['', '  ', 'x'.repeat(33),'bad\nname'])await api(alice,'/profile','PATCH',{nickname},400);
+        await api(null,'/profile','PATCH',{nickname:'Anonymous'},401);
+        assert.throws(()=>service.db.prepare('UPDATE users SET username=? WHERE id=?').run('Renamed',alice.user.id),/cannot be changed/);
+        const login=await request(service.app,'/auth/login',null,'POST',{username:'Alice',password:'test-password-123'});
+        assert.equal(login.status,200);assert.equal(login.data.user.nickname,'Alice Display');
+        assert.equal((await request(service.app,'/auth/login',null,'POST',{username:'Alice Display',password:'test-password-123'})).status,401);
+    });
     await t.test('avatars are authenticated, bounded, replaceable and visible in state',async()=>{
         await api(null,'/profile/avatar','POST',{data:pixel},401);
         const uploaded=(await api(alice,'/profile/avatar','POST',{data:pixel})).data;
@@ -112,6 +126,11 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
         as.emit('call:speaking',true);
         assert.deepEqual(activity,{user:alice.user.id,active:true});assert.equal(outsiderActivity,undefined);
         assert.equal((await api(eve,'/state')).data.calls.length,0);
+        let receivedWatch, leakedWatch;
+        bs.on('signal',value=>{receivedWatch=value;});es.on('signal',value=>{leakedWatch=value;});
+        const watch={version:2,watch:{shareId:'current-share',enabled:false,revision:2}};
+        as.emit('signal',{to:bs.id,data:watch});assert.deepEqual(receivedWatch.data,watch);
+        as.emit('signal',{to:es.id,data:watch});assert.equal(leakedWatch,undefined);
         await api(eve,`/calls/${room}/invite`,'POST',{user:alice.user.id},403);
         await api(alice,'/friends','POST',{username:'Eve'});await api(eve,'/friends','POST',{username:'Alice'});
         await api(alice,`/calls/${room}/invite`,'POST',{user:eve.user.id});

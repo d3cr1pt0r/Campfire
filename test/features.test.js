@@ -50,3 +50,10 @@ test('file picker and drop selection share count, per-file and combined limits',
     assert.throws(()=>validateFileSelection([{size:maxUploadBytes+1}]),/5 MB/);
     assert.throws(()=>validateFileSelection([{size:maxUploadBytes},{size:1}]),/total/);
 });
+
+test('display names prefer nicknames while preserving the permanent username as fallback',async()=>{
+    const {displayName}=await import('../src/profiles.ts');
+    assert.equal(displayName({nickname:'Display',username:'account'}),'Display');
+    assert.equal(displayName({nickname:'',username:'account'}),'account');
+    assert.equal(displayName(undefined,'Former member'),'Former member');
+});

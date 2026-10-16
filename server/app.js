@@ -43,7 +43,7 @@ export function createApp({ dataDir = 'data', origins = [], name = 'My Driskord 
     const io = new Server(http, { cors: { origin: true }, allowRequest: (req, cb) => { const origin = req.headers.origin; cb(null, allowed(origin) || origin === `http://${req.headers.host}` || origin === `https://${req.headers.host}`); }, maxHttpBufferSize: 100000 });
     const hash = tokenHash;
     const userFor = token => typeof token === 'string' && /^[a-f0-9]{64}$/.test(token) && get('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user WHERE s.token=? AND s.expires>? AND u.banned=0', hash(token), Date.now());
-    const publicUser = u => ({ id: u.id, username: u.username, role: u.role, avatar: get('SELECT id FROM avatars WHERE user=?', u.id)?.id || null });
+    const publicUser = u => ({ id: u.id, username: u.username, nickname: get('SELECT nickname FROM profiles WHERE user=?',u.id)?.nickname || u.username, role: u.role, avatar: get('SELECT id FROM avatars WHERE user=?', u.id)?.id || null });
     const roles = () => all('SELECT * FROM roles').map(r => ({ ...r, permissions: JSON.parse(r.permissions) }));
     const can = (u, permission) => hasPermission(u, JSON.parse(get('SELECT permissions FROM roles WHERE id=?', u.role).permissions), permission);
     const requirePermission = (u, p) => {
@@ -99,6 +99,7 @@ export function createApp({ dataDir = 'data', origins = [], name = 'My Driskord 
             const id = randomUUID();
             const role = get('SELECT COUNT(*) AS n FROM users').n === 0 ? 'owner' : 'member';
             run('INSERT INTO users(id,username,password,role) VALUES(?,?,?,?)', id, username, passwordHash, role);
+            run('INSERT INTO profiles(user,nickname) VALUES(?,?)',id,username);
             u = get('SELECT * FROM users WHERE id=?', id);
         }
         else {
@@ -202,6 +203,13 @@ export function createApp({ dataDir = 'data', origins = [], name = 'My Driskord 
         requirePermission(req.user, 'manage');
         let name; try { name = channelName(req.body.name, req.body.kind); } catch (e) { check(false, e.message); }
         const id = randomUUID(); run('INSERT INTO channels VALUES(?,?,?)', id, name, req.body.kind); io.emit('refresh'); res.json({ id });
+    }));
+    app.patch('/api/profile',route((req,res) => {
+        check(Object.keys(req.body).every(key=>key==='nickname'),'Only the nickname can be changed; account usernames are permanent');
+        const nickname = typeof req.body.nickname==='string' ? req.body.nickname.trim() : '';
+        check(nickname.length>0 && nickname.length<=32 && !/[\u0000-\u001f\u007f]/.test(nickname),'Nickname must contain 1–32 characters without line breaks or control characters');
+        run('INSERT INTO profiles(user,nickname) VALUES(?,?) ON CONFLICT(user) DO UPDATE SET nickname=excluded.nickname',req.user.id,nickname);
+        io.emit('refresh'); res.json({user:publicUser(req.user)});
     }));
     app.post('/api/profile/avatar', route((req, res) => {
         let data; try { data = boundedPng(req.body.data, 512); } catch (e) { check(false, e.message); }

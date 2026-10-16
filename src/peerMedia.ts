@@ -1,0 +1,69 @@
+export type MediaRole = 'voice' | 'video' | 'streamAudio';
+export type MediaState = { sharing: boolean; camera: boolean; shareId: string | null };
+export type CallSignal = {
+    version: 2;
+    description?: RTCSessionDescriptionInit;
+    candidate?: RTCIceCandidateInit;
+    media?: MediaState;
+    watch?: { shareId: string; enabled: boolean; revision: number };
+    watchAck?: { shareId: string; enabled: boolean; revision: number };
+};
+export function validMediaState(value: unknown): value is MediaState {
+    if (!value || typeof value !== 'object') return false;
+    const state = value as MediaState;
+    return typeof state.sharing === 'boolean' && typeof state.camera === 'boolean'
+        && (state.sharing ? typeof state.shareId === 'string' && state.shareId.length > 0 && state.shareId.length <= 80 : state.shareId === null);
+}
+export function acceptsWatch(request: CallSignal['watch'], shareId: string | null, previousRevision: number): boolean {
+    return !!request && !!shareId && request.shareId === shareId && typeof request.enabled === 'boolean'
+        && Number.isSafeInteger(request.revision) && request.revision > previousRevision;
+}
+export function outgoingTracks(microphone: MediaStream | null, camera: MediaStream | null, screen: MediaStream | null, subscribed: boolean): Record<MediaRole,MediaStreamTrack | null> {
+    const track = (stream: MediaStream | null, kind: string) => stream?.getTracks().find(t=>t.kind===kind && t.readyState!=='ended') || null;
+    return {
+        voice:track(microphone,'audio'),
+        video:screen?(subscribed?track(screen,'video'):null):track(camera,'video'),
+        streamAudio:screen && subscribed?track(screen,'audio'):null,
+    };
+}
+// Reserve separate voice, video, and system-audio transceivers. No screen media
+// is attached for a peer unless that peer has subscribed to the current share.
+export function createPeerMedia(pc: RTCPeerConnection, tracks: () => Record<MediaRole, MediaStreamTrack | null>) {
+    const slots: Partial<Record<MediaRole,RTCRtpTransceiver>> = {};
+    let queue = Promise.resolve(), closed = false;
+    const find = (role: MediaRole) => {
+        const kind = role === 'video' ? 'video' : 'audio';
+        return pc.getTransceivers().filter(t=>t.receiver.track.kind===kind)[role==='streamAudio'?1:0];
+    };
+    const attach = async () => {
+        const current = tracks();
+        for (const role of ['voice','video','streamAudio'] as const) {
+            if (closed) return;
+            const sender = slots[role]?.sender;
+            if (sender && sender.track !== current[role]) await sender.replaceTrack(current[role]);
+        }
+    };
+    const enqueue = (operation: () => Promise<void>) => {
+        const next = queue.then(async()=>{if(!closed)await operation();});
+        queue = next.catch(()=>{});
+        return next;
+    };
+    return {
+        prepare: () => enqueue(async()=>{
+            for (const role of ['voice','video','streamAudio'] as const) {
+                const transceiver = slots[role] ||= find(role) || pc.addTransceiver(role==='video'?'video':'audio',{direction:'sendrecv'});
+                transceiver.direction='sendrecv';
+            }
+            await attach();
+        }),
+        sync: () => enqueue(attach),
+        role(transceiver: RTCRtpTransceiver): MediaRole {
+            if (transceiver.receiver.track.kind === 'video') return 'video';
+            return transceiver === (slots.voice || find('voice')) ? 'voice' : 'streamAudio';
+        },
+        roleForMid(mid: string): MediaRole | undefined {
+            return (['voice','video','streamAudio'] as const).find(role=>(slots[role] || find(role))?.mid===mid);
+        },
+        close() { closed=true; },
+    };
+}

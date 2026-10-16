@@ -2,12 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Maximize2, Minimize2, X } from 'lucide-react';
 
-export function ExpandedVideo({ stream, name, preview, volume, onVolume, audioError, onPlayAudio, onClose }: {
+export function ExpandedVideo({ stream, name, preview, volume, onVolume, streamVolume, onStreamVolume, onStopWatching, audioError, onPlayAudio, onClose }: {
     stream: MediaStream | null;
     name: string;
     preview: boolean;
     volume: number;
     onVolume: (volume: number) => void;
+    streamVolume?: number;
+    onStreamVolume?: (volume: number) => void;
+    onStopWatching?: () => void;
     audioError: string;
     onPlayAudio: () => void;
     onClose: () => void;
@@ -68,7 +71,7 @@ export function ExpandedVideo({ stream, name, preview, volume, onVolume, audioEr
             </div></header>
             <div className="stream-viewer-stage"><video ref={video} autoPlay playsInline muted onDoubleClick={() => void toggleFullscreen()} /></div>
             {(error || audioError || fullscreenNotice) && <div className="stream-viewer-notice" role="status">{fullscreenNotice && <span>{fullscreenNotice}</span>}{error && <><span>{error}</span><button type="button" onClick={() => void video.current?.play().then(() => setError('')).catch(() => setError('Video playback is still unavailable. Return to the call and rejoin.'))}>Retry video</button></>}{audioError && <><span>{audioError}</span><button type="button" onClick={onPlayAudio}>Play audio</button></>}</div>}
-            <footer className="stream-viewer-footer"><span>Double-click video for full screen · Esc to return</span>{!preview && <label>Participant volume<input type="range" min="0" max="1" step="0.01" value={volume} aria-label={`Volume for ${name}`} onChange={event => onVolume(Number(event.target.value))} /></label>}<button type="button" onClick={() => closeAction.current()}>Return to call</button></footer>
+            <footer className="stream-viewer-footer"><span>Double-click video for full screen · Esc to return</span>{!preview && <label>Voice volume<input type="range" min="0" max="1" step="0.01" value={volume} aria-label={`Voice volume for ${name}`} onChange={event => onVolume(Number(event.target.value))} /></label>}{!preview && streamVolume!==undefined && <label>Stream volume<input type="range" min="0" max="1" step="0.01" value={streamVolume} aria-label={`Stream volume for ${name}`} onChange={event=>onStreamVolume?.(Number(event.target.value))}/></label>}{onStopWatching && <button type="button" onClick={onStopWatching}>Stop watching</button>}<button type="button" onClick={() => closeAction.current()}>Return to call</button></footer>
         </section>
     </div>, document.body);
 }

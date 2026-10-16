@@ -23,3 +23,21 @@ test('schema initializes twice and enforces identity, role and attachment integr
         db.close();
     }
 });
+
+test('profile migration backfills existing usernames and preserves changed nicknames on restart',()=>{
+    const db=new DatabaseSync(':memory:');
+    try {
+        const schema=readFileSync(new URL('../server/schema.sql',import.meta.url),'utf8');
+        db.exec(schema);
+        db.prepare('INSERT INTO roles VALUES(?,?,?,?)').run('member','Member','#112233','[]');
+        db.prepare('INSERT INTO users(id,username,password,role) VALUES(?,?,?,?)').run('legacy','Original','hash','member');
+        db.exec(schema);
+        assert.equal(db.prepare('SELECT nickname FROM profiles WHERE user=?').get('legacy').nickname,'Original');
+        db.prepare('UPDATE profiles SET nickname=? WHERE user=?').run('New Display','legacy');
+        db.exec(schema);
+        assert.equal(db.prepare('SELECT nickname FROM profiles WHERE user=?').get('legacy').nickname,'New Display');
+        assert.equal(db.prepare('SELECT username FROM users WHERE id=?').get('legacy').username,'Original');
+        assert.throws(()=>db.prepare('UPDATE users SET username=? WHERE id=?').run('Other','legacy'),/cannot be changed/);
+        assert.throws(()=>db.prepare('UPDATE users SET username=? WHERE id=?').run('original','legacy'),/cannot be changed/);
+    } finally {db.close();}
+});

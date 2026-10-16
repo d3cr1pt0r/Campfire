@@ -14,3 +14,7 @@ CREATE INDEX IF NOT EXISTS reactions_message ON reactions(message);
 CREATE INDEX IF NOT EXISTS friends_recipient ON friends(recipient);
 CREATE TABLE IF NOT EXISTS avatars(id TEXT PRIMARY KEY,user TEXT UNIQUE REFERENCES users(id) ON DELETE CASCADE,data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS emojis(id TEXT PRIMARY KEY,name TEXT UNIQUE NOT NULL,author TEXT REFERENCES users(id),data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS profiles(user TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,nickname TEXT NOT NULL);
+INSERT OR IGNORE INTO profiles(user,nickname) SELECT id,username FROM users;
+CREATE TRIGGER IF NOT EXISTS immutable_username BEFORE UPDATE OF username ON users
+WHEN NEW.username COLLATE BINARY IS NOT OLD.username COLLATE BINARY BEGIN SELECT RAISE(ABORT,'Account usernames cannot be changed'); END;

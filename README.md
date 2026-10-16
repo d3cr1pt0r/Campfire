@@ -128,14 +128,14 @@ The executable is not code-signed, so Windows may show an unknown-publisher/Smar
 - Persistent text channels and DMs, friend requests/acceptance/removal, presence, and live messages.
 - Files up to 5 MB with authenticated downloads.
 - Own-message editing/deletion, over 200 standard emojis and custom emoji reactions, typing indicators, session unread badges, search, and manager-pinned messages.
-- Voice channels with microphone mute/deafen, webcam video and local preview, screen/window sharing, and individual participant volume.
+- Voice channels with microphone mute/deafen, webcam video and local preview, screen/window sharing, per-person Watch/Stop watching controls, and separate voice/stream volume.
 - Focused-app push-to-talk with Space, browser noise suppression/echo cancellation, and call sounds.
 - Role creation/editing, colors, chat/voice/management permissions, owner-only role assignment, and server naming.
 - Settings for notifications, audio input/output, and 360p/720p/1080p requested streaming resolution.
 
 Search, pinned views, and history currently operate on the latest 500 messages in a conversation. Unread counts are session-local. Screen sharing replaces the outgoing camera track and restores it when sharing stops. Windows desktop sharing supports system audio; see below for platform limitations. Settings affecting device capture apply on the next call/video start. Output-device support and capture picker behavior depend on the OS. Push-to-talk works while the app has focus and the cursor is outside an input field; it is not a system-wide hotkey.
 
-Private channels, moderation/ban UI, nicknames, custom server icons, saved multi-server sessions, threads, bots, password recovery, mobile clients, code-signed desktop releases, auto-updates, and a large-call media server are future work. Message text supports clickable HTTP(S) links and custom emoji tokens, with no HTML or Markdown execution. DMs are access-controlled on the server; they are **not end-to-end encrypted** against the server owner. WebRTC encrypts media transport, and TURN can relay that media.
+Private channels, moderation/ban UI, custom server icons, saved multi-server sessions, threads, bots, password recovery, mobile clients, code-signed desktop releases, auto-updates, and a large-call media server are future work. Message text supports clickable HTTP(S) links and custom emoji tokens, with no HTML or Markdown execution. DMs are access-controlled on the server; they are **not end-to-end encrypted** against the server owner. WebRTC encrypts media transport, and TURN can relay that media.
 
 ## Microphone troubleshooting
 
@@ -149,7 +149,7 @@ For browser clients, microphone capture requires HTTPS or localhost. For the Lin
 
 ## One-way audio troubleshooting
 
-Update both clients before testing these client-side voice fixes. On Linux restart with `npm start`; Windows users need a new portable build from GitHub Actions. Remote audio now plays separately from the always-muted video preview. If playback is blocked, click **Play audio** on the participant tile. Ensure the participant volume slider is above zero.
+Update both clients before testing these client-side voice fixes. On Linux restart with `npm start`; Windows users need a new portable build from GitHub Actions. Remote audio now plays separately from the always-muted video preview. If playback is blocked, click **Play audio** on the participant tile. Ensure the Voice volume slider is above zero; Stream volume affects shared system sound independently.
 
 If audio remains one-way, open **Call details** on both clients and speak in turn. Note the connection/ICE state, audio direction, sent/received packet counts and input/incoming audio levels. Counts that increase with no incoming speech level can still represent silence. Increasing received packets and a visible incoming speech level with no audible sound suggest playback/output routing; no received packets or an inactive audio direction require transport/negotiation investigation. Share both sets of values rather than assuming every failure requires TURN. STUN cannot guarantee a direct path on every network.
 
@@ -157,18 +157,29 @@ If audio remains one-way, open **Call details** on both clients and speak in tur
 
 Click the **expand icon** in the top-right corner of a video tile, or double-click the tile's video, to open a large viewer. It fits the entire picture inside the app window without cropping. The viewer's **Full screen** button (or double-clicking its video) switches to native full screen. Use **Return to call**, the close button, or Escape to return; when native full screen is active, Escape exits full screen first.
 
-Participant volume and a blocked-audio Play audio control remain available in the expanded viewer. Voice continues through the original audio element, so opening/closing the viewer does not create duplicate audio or disconnect the call. This works for received screen shares, cameras and your own video preview. Update/restart the client or rebuild the Windows portable EXE to receive the feature.
+Voice and Stream volume controls and a blocked-audio Play audio control remain available in the expanded viewer. Stop watching is also available there for screen shares. Voice continues through the original audio element, so opening/closing the viewer does not create duplicate audio or disconnect the call. This works for received screen shares, cameras and your own video preview. Update/restart the client or rebuild the Windows portable EXE to receive the feature.
 
 ## Share system audio
 
 Rebuild/download the updated Windows portable EXE, join a voice channel, and start screen sharing. Leave **Share system audio** checked in the source picker. This captures audio from all applications even when sharing one window. The capture requests exclusion of Driskord's own playback to avoid sending the call back to participants; verify this on the actual Windows build. Use headphones during the first test.
 
-Microphone mute and push-to-talk affect only your voice; shared sound continues until you stop sharing. Participant volume, deafen and the selected output device apply to both voice and stream sound. This first implementation mixes both into one mono audio track, so separate voice/stream volume and stereo streaming are not yet available. Stopping sharing removes system audio and restores your camera while voice continues.
+Microphone mute and push-to-talk affect only your voice. Microphone and system sound use separate audio tracks and per-person Voice/Stream sliders, including in the large viewer. Deafen silences both; both follow the selected output device. Shared sound is delivered only to people watching your share. Stopping sharing removes system audio and restores your camera while voice continues. Stereo encoding remains browser-dependent.
 
 Linux clients can listen to a Windows friend's shared audio. Capturing system audio from Linux desktop sharing is not implemented. Browser/native picker audio depends on the platform and selected source; enable its audio option when available. If capture provides no audio track, the app reports that it is sharing video only. No server changes or additional port forwarding are needed. Live Windows-to-Linux system audio still needs testing.
 
+## Choose which screen shares to receive
+
+Joining a call does not subscribe you to screen shares. Each streamer has a **Watch stream** button. You can watch any combination of people independently. **Stop watching** unsubscribes from that person's screen video and system audio while their microphone stays connected. Closing the enlarged viewer returns to the small tile; use Stop watching to unsubscribe.
+
+Subscriptions control the sender's actual WebRTC tracks: a non-subscriber has no screen video or system-audio track attached to their outgoing connection. On unsubscribe, the sender detaches both tracks and acknowledges completion. The UI shows **Stopping stream…** until confirmed; previously sent packets can finish arriving during that transition. Small signaling/connection-maintenance traffic and voice continue. A missing confirmation closes that peer connection after ten seconds rather than leaving an unconfirmed subscription running. Other viewers remain subscribed.
+
+Every new screen share starts with zero subscribers, even after restarting a share or reconnecting. Webcam video keeps its existing automatic behavior. Voice and Stream volumes are independent and local to each participant tile; they reset when reconnecting. Stream volume does not subscribe/unsubscribe: use Watch/Stop watching to control bandwidth. Call details exposes cumulative video/system-audio bytes sent/received to help verify that stream counters stop increasing after unsubscribe.
+
+**Update all participants' clients before calling.** The new media protocol separates voice and system audio and rejects older clients that mix them. Restart the updated server for nickname support, then restart Linux clients / rebuild the Windows EXE. No new ports are required.
+
 ## Profiles, emojis, and direct calls
 
+- **Settings → My account → Nickname:** change the name shown in chat, calls, member lists, typing notices and notifications. Nicknames initially match the username, including for existing accounts. Usernames stay permanent for login and friend requests; account settings show the username read-only and identity tooltips identify it.
 - **Settings → My account → Upload profile picture:** choose an image. The client fits it within 512 × 512 pixels and uploads a PNG; the server enforces those bounds. You can replace or remove it. Profile pictures appear in chat, member/friend lists and call tiles.
 - **Settings → Custom emojis:** upload a named image, resized to fit 128 × 128 pixels. Use the emoji picker or type `:name:` in chat. Standard and custom emojis also work as reactions. Click the smile-plus below a message to react; click your reaction again to remove it. Authors and managers can delete custom emojis. Animated custom uploads become still images; chat GIF attachments remain animated.
 - Drag files onto the chat area or use the attachment picker to queue up to 10 files (5 MB combined per message). Review the filenames, remove any unwanted files, then send. Drops never send automatically.
@@ -178,7 +189,7 @@ Linux clients can listen to a Windows friend's shared audio. Capturing system au
 - Input/output selections are saved with device names. Desktop launches reuse the local UI port, and a unique matching device name can recover a changed device ID. A disconnected device uses System default temporarily without discarding the saved choice. After this upgrade, select each device once if an old selection has no saved name. Test by closing/relaunching the app.
 - Voice channel names accept capitals and spaces, such as `Test Room`; text channel names normalize to lowercase and hyphens.
 
-Restart the updated server with `npm run server` and update/restart all clients (`npm start` on Linux; rebuild/download the Windows portable EXE). New avatar/emoji tables are created automatically without changing existing messages/accounts. No new dependency or port forward is required. Keep your normal database backup before updating.
+Restart the updated server with `npm run server` and update/restart all clients (`npm start` on Linux; rebuild/download the Windows portable EXE). New profile/avatar/emoji tables are created automatically without changing existing messages/accounts. No new dependency or port forward is required. Keep your normal database backup before updating.
 
 ## Validation
 
@@ -190,6 +201,6 @@ npm test
 
 The integration suite covers separate accounts/clients, live messages, DM isolation, friendship acceptance, edit/delete authorization, reactions, pin permissions, attachments, role changes, signaling, logout, and restart persistence. It uses temporary databases and ports. It does not test real microphone/camera hardware or NAT traversal.
 
-**Current environment result:** actual `npm run check` and `npm run build` now pass with installed dependencies; 64 tests pass in `npm run test:unit` across security, SQLite schema, desktop state, microphone capture, voice signaling/playback, system-audio mixing, microphone metering, multi-file uploads, profiles, previews, custom reactions and private-call authorization. The new request-handler tests run without listening sockets; the existing real-socket integration tests are blocked here because the sandbox denies listening on localhost (`listen EPERM`). The portable build command completes checking/building but cannot download electron-builder because npm DNS is unavailable. No `.exe` has been produced or tested here. Electron launch, Docker build, live media, and Windows portable launch still need validation. The existing package lock pins application dependencies; the packaging tool is separately pinned in the build command.
+**Current environment result:** actual `npm run check` and `npm run build` now pass with installed dependencies; 70 tests pass in `npm run test:unit` across security, SQLite schema, desktop state, microphone capture, voice signaling/playback, stream subscriptions and separate audio, microphone metering, multi-file uploads, profiles, previews, custom reactions and private-call authorization. The new request-handler tests run without listening sockets; the existing real-socket integration tests are blocked here because the sandbox denies listening on localhost (`listen EPERM`). The portable build command completes checking/building but cannot download electron-builder because npm DNS is unavailable. No `.exe` has been produced or tested here. Electron launch, Docker build, live media, and Windows portable launch still need validation. The existing package lock pins application dependencies; the packaging tool is separately pinned in the build command.
 
 See [IMPLEMENTATION.md](IMPLEMENTATION.md) for architecture, data model, event/API contracts, extension guidance, and remaining work.

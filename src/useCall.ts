@@ -2,14 +2,23 @@ import { useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { CallMember, Preferences } from './types';
 import { openMicrophone, formatMicrophoneError } from './media';
-import { createPeerSignaling, type PeerSignal } from './signaling';
-import { createShareAudio } from './shareAudio';
+import { createPeerSignaling } from './signaling';
+import { createPeerMedia, outgoingTracks, validMediaState, acceptsWatch, type CallSignal, type MediaState } from './peerMedia';
 type Peer = {
     pc: RTCPeerConnection;
     stream: MediaStream;
     user: string;
     signaling: ReturnType<typeof createPeerSignaling>;
-    videoSender?: RTCRtpSender;
+    id: string;
+    routing: ReturnType<typeof createPeerMedia>;
+    streamAudio: MediaStream;
+    media: MediaState;
+    watching: boolean;
+    wantsStream: boolean;
+    watchPending: boolean;
+    watchRevision: number;
+    requestedRevision: number;
+    watchTimer?: ReturnType<typeof setTimeout>;
 };
 export function useCall(socket: Socket | null, prefs: Preferences, iceServers: RTCIceServer[], report: (s: string) => void, onInputFallback: () => void) {
     const [channel, setChannel] = useState<string | null>(null);
@@ -18,11 +27,17 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
         id: string;
         user: string;
         stream: MediaStream;
+        streamAudio: MediaStream;
+        sharing: boolean;
+        camera: boolean;
+        watching: boolean;
+        watchPending: boolean;
     }[]>([]);
     const [showDetails, setShowDetails] = useState(false);
-    const [details, setDetails] = useState<{id: string; user: string; connection: string; ice: string; direction: string; sent: number | null; received: number | null; inputLevel: number | null; receivedLevel: number | null}[]>([]);
+    const [details, setDetails] = useState<{id: string; user: string; connection: string; ice: string; direction: string; sent: number | null; received: number | null; inputLevel: number | null; receivedLevel: number | null; mediaSent:number | null; mediaReceived:number | null}[]>([]);
     const operation = useRef(0);
-    const shareAudio = useRef<ReturnType<typeof createShareAudio> | null>(null);
+    const shareId = useRef<string | null>(null);
+    const incompatible = useRef(new Set<string>());
     const captureBusy = useRef({ camera: false, share: false });
     const audioFlags = useRef({ muted, deafened });
     audioFlags.current = { muted, deafened };
@@ -48,49 +63,48 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
         }
         catch { /* optional sound */ }
     };
-    const updateRemote = () => setRemote([...peers.current].map(([id, p]) => ({ id, user: p.user, stream: p.stream })));
-    const leave = () => { const wasInCall = !!callChannel.current; operation.current++; socket?.emit('call:leave'); callChannel.current = null; setChannel(null); peers.current.forEach(p => { p.signaling.close(); p.pc.onconnectionstatechange = null; p.pc.close(); }); peers.current.clear(); shareAudio.current?.close(); shareAudio.current = null; [audio.current, video.current, screen.current].forEach(s => s?.getTracks().forEach(t => t.stop())); audio.current = null; video.current = null; screen.current = null; setLocal(null); setRemote([]); setCamera(false); setSharing(false); if (wasInCall)
+    const updateRemote = () => setRemote([...peers.current].map(([id, p]) => ({ id, user: p.user, stream: p.stream, streamAudio: p.streamAudio, sharing:p.media.sharing, camera:p.media.camera, watching:p.watching, watchPending:p.watchPending })));
+    const leave = () => { const wasInCall = !!callChannel.current; operation.current++; socket?.emit('call:leave'); callChannel.current = null; setChannel(null); peers.current.forEach(p => { p.signaling.close(); p.routing.close(); clearTimeout(p.watchTimer); p.pc.onconnectionstatechange = null; p.pc.close(); }); peers.current.clear(); shareId.current = null; incompatible.current.clear(); [audio.current, video.current, screen.current].forEach(s => s?.getTracks().forEach(t => t.stop())); audio.current = null; video.current = null; screen.current = null; setLocal(null); setRemote([]); setCamera(false); setSharing(false); if (wasInCall)
         sound(); };
     const currentVideo = () => screen.current?.getVideoTracks()[0] || video.current?.getVideoTracks()[0] || null;
-    const currentAudio = () => shareAudio.current?.track || audio.current?.getAudioTracks()[0] || null;
-    const syncAudio = () => Promise.all([...peers.current.values()].map(p =>
-        p.pc.getTransceivers().find(t => t.receiver.track.kind === 'audio')?.sender.replaceTrack(currentAudio())));
-    const stopShare = () => {
-        const capture = screen.current;
-        screen.current = null;
-        shareAudio.current?.setScreen(null);
-        capture?.getTracks().forEach(track => { track.onended = null; track.stop(); });
-        setSharing(false);
+    const localMedia = (): MediaState => ({sharing:!!screen.current,camera:!!video.current,shareId:shareId.current});
+    const send = (id: string, data: Partial<CallSignal>) => socket?.emit('signal',{to:id,data:{...data,version:2,media:localMedia()}});
+    const receivedTrackGate = (p: Peer) => {
+        p.stream.getVideoTracks().forEach(track=>track.enabled=p.media.sharing?p.watching:p.media.camera);
+        p.streamAudio.getAudioTracks().forEach(track=>track.enabled=p.media.sharing && p.watching);
     };
-    const syncVideo = async () => { const track = currentVideo(); setLocal(track ? new MediaStream([track]) : null); await Promise.all([...peers.current.values()].map(async (p) => { const sender = p.videoSender; await sender?.replaceTrack(track); })); };
+    const syncMedia = async () => {
+        const track=currentVideo(); setLocal(track?new MediaStream([track]):null);
+        await Promise.all([...peers.current.values()].map(async p=>{await p.routing.sync();send(p.id,{});}));
+    };
+    const stopShare = () => {
+        const capture=screen.current;screen.current=null;shareId.current=null;
+        peers.current.forEach(p=>{p.wantsStream=false;p.watchRevision=0;});
+        capture?.getTracks().forEach(track=>{track.onended=null;track.stop();});setSharing(false);
+    };
     const makePeer = (id: string, user: string, initialOfferer = false) => {
         const existing = peers.current.get(id);
         if (existing) return existing;
         const pc = new RTCPeerConnection({ iceServers: iceRef.current });
         let p: Peer;
         let preparing = false;
+        const routing = createPeerMedia(pc,()=>outgoingTracks(audio.current,video.current,screen.current,p.wantsStream));
         const prepareTracks = async () => {
-            preparing = true;
-            try {
-                for (const kind of ['audio', 'video'] as const) {
-                    const transceiver = pc.getTransceivers().find(t => t.receiver.track.kind === kind)
-                        || pc.addTransceiver(kind, { direction: 'sendrecv' });
-                    transceiver.direction = 'sendrecv';
-                    const track = kind === 'audio' ? currentAudio() : currentVideo();
-                    await transceiver.sender.replaceTrack(track);
-                    if (kind === 'video') p.videoSender = transceiver.sender;
-                }
-            } finally { preparing = false; }
+            preparing=true;
+            try { await routing.prepare(); } finally { preparing=false; }
         };
-        const signaling = createPeerSignaling(pc, String(socket?.id) > id,
-            data => socket?.emit('signal', { to: id, data }), prepareTracks, initialOfferer);
-        p = { pc, user, stream: new MediaStream(), signaling };
+        const signaling = createPeerSignaling(pc, String(socket?.id)>id,
+            data=>send(id,data),prepareTracks,initialOfferer);
+        p={id,pc,user,stream:new MediaStream(),streamAudio:new MediaStream(),signaling,routing,
+            media:{sharing:false,camera:false,shareId:null},watching:false,wantsStream:false,watchPending:false,watchRevision:0,requestedRevision:0};
         peers.current.set(id, p);
         pc.onicecandidate = event => {
-            if (event.candidate) socket?.emit('signal', { to: id, data: { candidate: event.candidate.toJSON() } });
+            if (event.candidate) send(id,{candidate:event.candidate.toJSON()});
         };
         pc.ontrack = event => {
-            if (!p.stream.getTracks().some(track => track.id === event.track.id)) p.stream.addTrack(event.track);
+            const target=routing.role(event.transceiver)==='streamAudio'?p.streamAudio:p.stream;
+            if (!target.getTracks().some(track=>track.id===event.track.id)) target.addTrack(event.track);
+            receivedTrackGate(p);
             updateRemote();
         };
         pc.onnegotiationneeded = () => {
@@ -104,17 +118,42 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
         if (initialOfferer) void prepareTracks().then(() => signaling.negotiate()).catch(error => {
             if (pc.signalingState !== 'closed') report(`Call setup: ${error.name || 'Error'} ${error.message || ''}`);
         });
+        send(id,{});
         return p;
     };
     useEffect(() => {
         if (!socket)
             return;
-        const signal = async ({ from, user, data }: { from: string; user: string; data: PeerSignal }) => {
-            if (!callChannel.current) return;
-            const peer = makePeer(from, user);
-            try { await peer.signaling.receive(data); }
-            catch (error) {
-                if (peer.pc.signalingState !== 'closed') report(`Media connection: ${(error as Error).name || 'Error'} ${(error as Error).message || 'Signaling failed'}`);
+        const signal = async ({from,user,data}: {from:string;user:string;data:CallSignal}) => {
+            if (!callChannel.current || incompatible.current.has(from)) return;
+            if (data?.version!==2) {
+                incompatible.current.add(from);
+                const old=peers.current.get(from);old?.routing.close();old?.signaling.close();old?.pc.close();clearTimeout(old?.watchTimer);peers.current.delete(from);updateRemote();
+                report('Call media versions differ. Update all clients to use stream subscriptions and separate audio.');return;
+            }
+            const peer=makePeer(from,user);
+            try {
+                if (validMediaState(data.media)) {
+                    if (data.media.shareId!==peer.media.shareId || !data.media.sharing) {
+                        peer.watching=false;peer.watchPending=false;clearTimeout(peer.watchTimer);
+                    }
+                    peer.media=data.media;receivedTrackGate(peer);updateRemote();
+                }
+                if (acceptsWatch(data.watch,shareId.current,peer.watchRevision)) {
+                    const request=data.watch!;
+                    peer.watchRevision=request.revision;peer.wantsStream=request.enabled;
+                    try { await peer.routing.sync(); }
+                    catch(error) { peer.routing.close();peer.signaling.close();peer.pc.close();throw error; }
+                    if (request.revision===peer.watchRevision && request.shareId===shareId.current)
+                        send(from,{watchAck:request});
+                }
+                const ack=data.watchAck;
+                if (ack && ack.shareId===peer.media.shareId && ack.revision===peer.requestedRevision && ack.enabled===peer.watching) {
+                    clearTimeout(peer.watchTimer);peer.watchPending=false;updateRemote();
+                }
+                if (data.description || data.candidate) await peer.signaling.receive(data);
+            } catch(error) {
+                report(`Media connection: ${(error as Error).name || 'Error'} ${(error as Error).message || 'Signaling failed'}`);
             }
         };
         const calls = (members: CallMember[]) => {
@@ -122,7 +161,7 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
             let changed = false;
             peers.current.forEach((p, id) => {
                 if (!ids.has(id)) {
-                    p.signaling.close();
+                    p.signaling.close();p.routing.close();clearTimeout(p.watchTimer);
                     p.pc.close();
                     peers.current.delete(id);
                     changed = true;
@@ -173,18 +212,24 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
             pending = true;
             try {
                 const rows = await Promise.all([...peers.current].map(async ([id, peer]) => {
-                    let sent: number | null = null, received: number | null = null, inputLevel: number | null = null, receivedLevel: number | null = null;
+                    let sent: number | null = null, received: number | null = null, inputLevel: number | null = null, receivedLevel: number | null = null, mediaSent:number | null=null, mediaReceived:number | null=null;
                     try {
                         const stats = await peer.pc.getStats();
                         stats.forEach(stat => {
+                            const role=peer.routing.roleForMid(stat.mid);
+                            if(role==='video' || role==='streamAudio'){
+                                if(stat.type==='outbound-rtp')mediaSent=(mediaSent || 0)+(stat.bytesSent || 0);
+                                if(stat.type==='inbound-rtp')mediaReceived=(mediaReceived || 0)+(stat.bytesReceived || 0);
+                                return;
+                            }
                             if ((stat.kind || stat.mediaType) !== 'audio') return;
                             if (stat.type === 'outbound-rtp') sent = (sent || 0) + (stat.packetsSent || 0);
                             if (stat.type === 'inbound-rtp') { received = (received || 0) + (stat.packetsReceived || 0); if (typeof stat.audioLevel === 'number') receivedLevel = stat.audioLevel; }
-                            if (stat.type === 'media-source' && typeof stat.audioLevel === 'number') inputLevel = stat.audioLevel;
+                            if (stat.type === 'media-source' && stat.trackIdentifier===audio.current?.getAudioTracks()[0]?.id && typeof stat.audioLevel === 'number') inputLevel = stat.audioLevel;
                         });
                     } catch { /* Peer may close during a sample. */ }
                     return { id, user: peer.user, connection: peer.pc.connectionState, ice: peer.pc.iceConnectionState,
-                        direction: peer.pc.getTransceivers().find(t => t.receiver.track.kind === 'audio')?.currentDirection || 'not negotiated', sent, received, inputLevel, receivedLevel };
+                        direction: peer.pc.getTransceivers().find(t => t.receiver.track.kind === 'audio')?.currentDirection || 'not negotiated', sent, received, inputLevel, receivedLevel, mediaSent, mediaReceived };
                 }));
                 if (!canceled) setDetails(rows);
             } finally { pending = false; }
@@ -256,7 +301,7 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
                 video.current = stream;
                 setCamera(true);
             }
-            await syncVideo();
+            await syncMedia();
         }
         catch (e) {
             report(`Camera: ${(e as Error).message}`);
@@ -274,7 +319,7 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
         try {
             if (screen.current) {
                 stopShare();
-                await syncVideo();
+                await syncMedia();
                 return;
             }
             const stream = captured = await navigator.mediaDevices.getDisplayMedia({
@@ -289,37 +334,30 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
             }
             const systemAudio = stream.getAudioTracks()[0];
             if (systemAudio) {
-                const mixer = shareAudio.current || createShareAudio(audio.current!);
-                try { await mixer.resume(); }
-                catch (error) { if (shareAudio.current !== mixer) mixer.close(); throw error; }
-                if (attempt !== operation.current) { mixer.close(); stream.getTracks().forEach(t => t.stop()); return; }
-                shareAudio.current = mixer;
-                await syncAudio();
-                if (attempt !== operation.current) { stream.getTracks().forEach(t => t.stop()); return; }
-                mixer.setScreen(stream);
-                systemAudio.onended = () => {
-                    if (screen.current !== stream) return;
-                    mixer.setScreen(null);
+                systemAudio.onended=()=>{
+                    if(screen.current!==stream)return;
+                    void syncMedia().catch(error=>report(`Screen audio: ${error.message}`));
                     report('Screen-share audio ended. Video sharing continues; restart sharing to capture sound again.');
                 };
             } else {
                 report('Sharing video without system audio. Enable Share system audio in the picker if available. Linux desktop capture does not currently provide system audio in this app.');
             }
             if (!stream.getVideoTracks().some(track => track.readyState === 'live')) throw new Error('Screen capture ended before sharing started.');
-            screen.current = stream;
+            screen.current = stream;shareId.current=crypto.randomUUID();
+            peers.current.forEach(p=>{p.wantsStream=false;p.watchRevision=0;});
             setSharing(true);
             stream.getVideoTracks()[0].onended = () => {
                 if (screen.current !== stream) return;
                 stopShare();
-                void syncVideo().catch(error => report(`Screen sharing: ${error.message}`));
+                void syncMedia().catch(error => report(`Screen sharing: ${error.message}`));
             };
-            await syncVideo();
+            await syncMedia();
         }
         catch (e) {
             captured?.getTracks().forEach(t => t.stop());
             if (attempt === operation.current) {
                 stopShare();
-                void syncVideo().catch(() => {});
+                void syncMedia().catch(() => {});
                 report(`Screen sharing: ${(e as Error).name || 'Error'} ${(e as Error).message || 'Capture failed'}`);
             }
         }
@@ -327,5 +365,19 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
             captureBusy.current.share = false;
         }
     };
-    return { microphone: audio.current, showDetails, setShowDetails, details, channel, join, leave, muted, setMuted, deafened, setDeafened, camera, sharing, toggleCamera, toggleShare, local, remote };
+    const watch = (id: string, enabled: boolean) => {
+        const peer=peers.current.get(id);
+        if (!peer?.media.sharing || !peer.media.shareId) return;
+        peer.watching=enabled;peer.watchPending=true;peer.requestedRevision++;
+        receivedTrackGate(peer);updateRemote();
+        const revision=peer.requestedRevision;
+        clearTimeout(peer.watchTimer);
+        peer.watchTimer=setTimeout(()=>{
+            if(!peer.watchPending || peer.requestedRevision!==revision)return;
+            peer.routing.close();peer.signaling.close();peer.pc.close();peers.current.delete(id);updateRemote();
+            report('The peer did not confirm the stream subscription. Disconnected that media connection; update both clients and rejoin the call.');
+        },10000);
+        send(id,{watch:{shareId:peer.media.shareId,enabled,revision}});
+    };
+    return { watch, microphone: audio.current, showDetails, setShowDetails, details, channel, join, leave, muted, setMuted, deafened, setDeafened, camera, sharing, toggleCamera, toggleShare, local, remote };
 }

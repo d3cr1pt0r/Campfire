@@ -2,7 +2,6 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createPeerSignaling} from '../src/signaling.ts';
 import {selectAudioOutput,playbackError,syncPlaybackTracks} from '../src/playback.ts';
-import {createShareAudio} from '../src/shareAudio.ts';
 
 function peer() {
   return {
@@ -89,48 +88,4 @@ test('camera/screen changes preserve the audible track and preview never plays l
   syncPlaybackTracks(audio,video,[mic]);assert.deepEqual(audio.getTracks(),[mic]);assert.equal(video.getTracks().length,0);
   syncPlaybackTracks(audio,video,[mic,camera],true);assert.equal(audio.getTracks().length,0);
   camera.readyState='ended';syncPlaybackTracks(audio,video,[mic,camera]);assert.deepEqual(audio.getTracks(),[mic]);assert.equal(video.getTracks().length,0);
-});
-
-// Exercise the real mixer with a small Web Audio graph double. Each source reads
-// its track's current enabled flag, like a live MediaStreamAudioSourceNode.
-function mixerFixture() {
-  const mic={enabled:true,readyState:'live',value:.2,stops:0,stop(){this.stops++;}},system={enabled:true,readyState:'live',value:.4,stops:0,stop(){this.stops++;}};
-  const stream=track=>({getAudioTracks:()=>[track],getTracks:()=>[track]});
-  const generated={stops:0,stop(){this.stops++;}},sources=[];
-  const destination={stream:stream(generated),channelCount:2};
-  const context={state:'suspended',closes:0,destination:{speakers:true},createMediaStreamDestination:()=>destination,
-    createMediaStreamSource(input){const source={input,target:null,connect(target){this.target=target;},disconnect(){this.target=null;}};sources.push(source);return source;},
-    async resume(){this.state='running';},async close(){this.closes++;this.state='closed';}};
-  const mixer=createShareAudio(stream(mic),context);
-  const sample=()=>sources.filter(s=>s.target===destination).reduce((sum,s)=>sum+s.input.getAudioTracks().reduce((n,t)=>n+(t.enabled?t.value:0),0),0);
-  return {mic,system,stream,generated,sources,destination,context,mixer,sample};
-}
-test('share audio mixes microphone and system sound into one sender without local playback',async()=>{
-  const f=mixerFixture();await f.mixer.resume();f.mixer.setScreen(f.stream(f.system));
-  assert.ok(Math.abs(f.sample()-.6)<1e-10);assert.equal(f.mixer.track,f.generated);
-  assert.equal(f.destination.channelCount,1);assert.ok(f.sources.every(s=>s.target!==f.context.destination));f.mixer.close();
-});
-test('mute and push-to-talk gate microphone without muting shared sound',()=>{
-  const f=mixerFixture();f.mixer.setScreen(f.stream(f.system));f.mic.enabled=false;
-  assert.equal(f.sample(),.4);assert.equal(f.system.enabled,true);
-  f.mic.enabled=true;assert.ok(Math.abs(f.sample()-.6)<1e-10);f.mixer.close();
-});
-test('stopping and restarting sharing disconnects old capture and preserves voice',()=>{
-  const f=mixerFixture();f.mixer.setScreen(f.stream(f.system));const old=f.sources.at(-1);
-  f.mixer.setScreen(null);assert.equal(old.target,null);assert.equal(f.sample(),.2);
-  f.mixer.setScreen(f.stream(f.system));assert.ok(Math.abs(f.sample()-.6)<1e-10);
-  assert.equal(f.mic.stops,0);assert.equal(f.system.stops,0);f.mixer.close();
-});
-test('closing the mixer stops only its generated track and is idempotent',()=>{
-  const f=mixerFixture();f.mixer.setScreen(f.stream(f.system));f.mixer.close();f.mixer.close();
-  assert.equal(f.generated.stops,1);assert.equal(f.context.closes,1);assert.equal(f.mic.stops,0);assert.equal(f.system.stops,0);
-  assert.ok(f.sources.every(s=>s.target===null));f.mixer.setScreen(f.stream(f.system));assert.equal(f.sources.length,2);
-});
-test('missing or ended system tracks do not replace the microphone source',()=>{
-  const f=mixerFixture();f.system.readyState='ended';f.mixer.setScreen(f.stream(f.system));
-  f.mixer.setScreen({getAudioTracks:()=>[]});assert.equal(f.sources.length,1);assert.equal(f.sample(),.2);f.mixer.close();
-});
-test('a suspended or cancelled mixer cannot silently report successful startup',async()=>{
-  const f=mixerFixture();f.context.resume=async()=>{};await assert.rejects(f.mixer.resume(),/paused/);
-  f.mixer.close();f.context.resume=async()=>{f.context.state='running';};await assert.rejects(f.mixer.resume(),/paused/);
 });
