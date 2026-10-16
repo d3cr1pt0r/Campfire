@@ -1,4 +1,4 @@
-// Keep installer identity stable so later versions upgrade the same app.
+// Keep app identity stable so replacing the portable EXE retains the same user profile.
 module.exports = {
   appId: 'org.driskord.desktop',
   productName: 'Driskord',
@@ -8,16 +8,7 @@ module.exports = {
   npmRebuild: false, // The desktop shell uses only Electron/Node built-ins.
   publish: null,
   win: {
-    target: [{ target: 'nsis', arch: ['x64'] }],
-    artifactName: 'Driskord-${version}-${arch}-Setup.${ext}',
-  },
-  nsis: {
-    oneClick: false,
-    perMachine: false,
-    allowElevation: false,
-    allowToChangeInstallationDirectory: true,
-    createDesktopShortcut: true,
-    createStartMenuShortcut: true,
-    deleteAppDataOnUninstall: false,
+    target: [{ target: 'portable', arch: ['x64'] }],
+    artifactName: 'Driskord-${version}-${arch}-Portable.${ext}',
   },
 };

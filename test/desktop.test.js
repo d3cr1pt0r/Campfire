@@ -61,8 +61,8 @@ test('desktop asset host serves UI with CSP and has no community API',async()=>{
     assert.equal((await request('/','127.0.0.1:40509','HEAD')).body,undefined);
   }finally{server.close();rmSync(directory,{recursive:true,force:true});}
 });
-test('Windows installer is per-user x64 and includes UI and desktop runtime',()=>{
-  assert.equal(build.appId,'org.driskord.desktop');assert.equal(build.win.target[0].target,'nsis');assert.deepEqual(build.win.target[0].arch,['x64']);
-  assert.equal(build.nsis.perMachine,false);assert.equal(build.nsis.allowElevation,false);assert.equal(build.nsis.deleteAppDataOnUninstall,false);
+test('Windows portable build is x64 and includes UI and desktop runtime',()=>{
+  assert.equal(build.appId,'org.driskord.desktop');assert.equal(build.win.target[0].target,'portable');assert.deepEqual(build.win.target[0].arch,['x64']);
+  assert.equal(build.nsis,undefined);assert.match(build.win.artifactName,/-Portable\.\$\{ext\}$/);
   assert.ok(build.files.includes('dist/**/*'));assert.ok(build.files.includes('electron/**/*'));assert.equal(build.files.some(f=>f.startsWith('data/')),false);
 });

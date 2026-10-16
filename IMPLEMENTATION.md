@@ -19,7 +19,7 @@ This document describes the initial source implementation and is intended to be 
 | `electron/renderer-server.cjs` | Local UI-only static asset server with CSP, host/path validation, and no community APIs |
 | `electron/preload.cjs` | Narrow allowlisted client-state storage bridge |
 | `electron/client-state.cjs` | Atomic client settings/session persistence independent of renderer port; OS encryption when available |
-| `electron-builder.cjs` | Per-user Windows x64 NSIS installer configuration |
+| `electron-builder.cjs` | Windows x64 portable executable configuration |
 | `.github/workflows/windows.yml` | Manually triggered Windows build/test/artifact workflow |
 | `server/index.js` | Standalone entry, environment configuration, signals |
 | `server/app.js` | App factory, REST endpoints, session/permission enforcement, live events, presence and call signaling |
@@ -32,7 +32,7 @@ This document describes the initial source implementation and is intended to be 
 | `test/security.test.js` | Dependency-free password, token, permission and DM-access tests |
 | `test/schema.test.js` | Dependency-free SQLite constraints and cascade behavior |
 | `test/server.test.js` | Temporary-server integration tests with real Socket.IO clients |
-| `test/desktop.test.js` | Desktop storage persistence, encryption integration, asset-host isolation and installer configuration |
+| `test/desktop.test.js` | Desktop storage persistence, encryption integration, asset-host isolation and portable-build configuration |
 | `Dockerfile`, `compose.yaml` | Standalone web/server deployment and persistent data volume |
 
 The UI is shared by browser and Electron. No Node.js primitives are exposed to renderer content; the preload exposes only get/set/remove of the connection and preferences keys. The Electron shell hosts only renderer assets on localhost and does not import the community server or create a community database. Remote community connections go through HTTP and Socket.IO, so the backend can later be moved to another runtime without replacing the UI. The current renderer keeps components together for initial delivery; extract `ChatView`, `FriendsView`, and `SettingsDialog` into separate modules when extending their behavior.
@@ -147,17 +147,17 @@ Mesh means N×(N−1) directional peer links: eight participants can require sev
 `npm run dist:win` runs the actual type check and Vite build, then invokes pinned `electron-builder@26.0.12` via npm exec. This tool is downloaded on demand; it does not change the app dependency lockfile. The build requires registry/Electron/NSIS downloads. The existing app lockfile should be committed and used with npm ci on CI. Configuration is in electron-builder.cjs:
 
 - Stable app ID `org.driskord.desktop` (also set as the Windows AppUserModelId).
-- Product name Driskord; x64 NSIS target; output `release/Driskord-${version}-${arch}-Setup.exe`.
-- Per-user assisted install, no elevation, directory selection and shortcuts.
+- Product name Driskord; x64 portable target; output `release/Driskord-${version}-${arch}-Portable.exe`.
+- No install wizard, elevation, Start menu registration or shortcuts. The portable launcher extracts runtime files temporarily.
 - App assets and Electron shell packaged in ASAR; server source, databases, tests, .env and release output are not selected as application source. Electron-builder also collects declared production dependencies.
 - No native app dependency rebuilding is required; the desktop shell uses Node/Electron built-ins.
-- No automatic publishing, updater or signing configuration. Keep app ID stable and increase package.json version for later releases. Manual upgrades preserve user data.
+- No automatic publishing, updater or signing configuration. Keep app ID stable and increase package.json version for later releases. Updates replace the closed EXE; client settings stay in the current Windows AppData profile, independent of the executable location. They are not moved with the EXE.
 
-The workflow `.github/workflows/windows.yml` is workflow_dispatch only, uses a Windows runner/Node 24, installs application dependencies with npm ci, runs checks/tests, and uploads the EXE as a 14-day Actions artifact. It does not create GitHub Releases. No workflow has been run from this environment.
+The workflow `.github/workflows/windows.yml` is workflow_dispatch only, uses a Windows runner/Node 24, installs application dependencies with npm ci, runs checks/tests, and uploads the EXE as the 14-day Driskord-Windows-x64-Portable Actions artifact. It does not create GitHub Releases. No workflow has been run from this environment.
 
 VITE_DEFAULT_SERVER_URL can prefill a public server origin when building. It is visible in the renderer bundle and must not contain credentials or secrets. Without this variable, Electron shows a blank required server field; browser clients default to their hosting origin (Vite development defaults to localhost:3001). Saved connections override defaults. The localhost port used by the desktop is UI infrastructure only, never the suggested community address. Friends run the shared server separately.
 
-Client state is written atomically under userData/client-state.dat so sessions/preferences survive port changes, relaunch and installer upgrades. Electron uses safeStorage when available. Tests use an encryption-service stub; actual Windows DPAPI behavior is not validated here. Earlier embedded-server databases are neither migrated nor deleted; use their original standalone data directory if those accounts need to be preserved.
+Client state is written atomically under userData/client-state.dat so sessions/preferences survive port changes, relaunch and replacement of the portable EXE. Electron uses safeStorage when available. Tests use an encryption-service stub; actual Windows DPAPI behavior is not validated here. Earlier embedded-server databases are neither migrated nor deleted; use their original standalone data directory if those accounts need to be preserved.
 
 ## Validation record
 
@@ -167,8 +167,8 @@ Verified after application dependencies became available:
 - Actual `npm run build`: passes with installed Vite 8.3.4/React 19.3.1.
 - `npm run test:unit`: nine tests pass (four security, one SQLite schema, four desktop).
 - JavaScript syntax checks on server, desktop, packaging config and tests.
-- Installer command reaches the packaging step after successful check/build, then fails with EAI_AGAIN resolving registry.npmjs.org for electron-builder. No installer artifact was generated.
+- Portable build command reaches the packaging step after successful check/build, then fails with EAI_AGAIN resolving registry.npmjs.org for electron-builder. No Windows executable artifact was generated.
 
 The integration suite is present but cannot run in this sandbox: binding its temporary HTTP server fails with listen EPERM on 127.0.0.1. Full npm test therefore does not pass here. Unlike the earlier source-only validation, the renderer's real production build/type check now pass; the old dependency-install blocker applies specifically to the newly required packaging tool.
 
-Still outstanding: installer/Windows-runner execution, Electron UI launch, Windows install/relaunch/upgrade/uninstall, actual OS encryption, real-client integration, Docker, hardware voice/video/screen capture, eight-person load, internet NAT/TURN behavior and accessibility/platform validation. These must not be reported as passed until exercised.
+Still outstanding: portable packaging/Windows-runner execution, Electron UI launch, Windows portable launch/relaunch/EXE replacement/profile retention, actual OS encryption, real-client integration, Docker, hardware voice/video/screen capture, eight-person load, internet NAT/TURN behavior and accessibility/platform validation. These must not be reported as passed until exercised.
