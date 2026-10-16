@@ -5,7 +5,7 @@ import {microphoneLevel,createMicrophoneMonitor} from '../src/microphoneMonitor.
 function fixture() {
   const frames=new Map(),readings=[],errors=[],connections=[];
   let sequence=0;
-  const track={enabled:true,muted:false,readyState:'live',label:'Test microphone',stops:0,stop(){this.stops++;this.readyState='ended';}};
+  const track={enabled:true,muted:false,readyState:'live',label:'Test microphone',getSettings:()=>({channelCount:1}),stops:0,stop(){this.stops++;this.readyState='ended';}};
   const stream={getAudioTracks:()=>[track],getTracks:()=>[track]};
   const analyser={fftSize:2048,getFloatTimeDomainData:samples=>samples.fill(.1),disconnects:0,disconnect(){this.disconnects++;}};
   const source={connect:node=>connections.push(node),disconnects:0,disconnect(){this.disconnects++;}};
@@ -58,4 +58,44 @@ test('muted call tracks and suspended analysis show zero until resumed',async()=
 test('expired input fallback is reported and disconnecting ends the test',async()=>{
   const f=fixture();const monitor=createMicrophoneMonitor({...f.options,openInput:async()=>({stream:f.stream,usedDefault:true})});await monitor.ready;
   assert.equal(f.fallbacks,1);f.track.readyState='ended';f.advance();assert.match(f.errors[0].message,/disconnected/);assert.equal(f.frames.size,0);assert.equal(f.context.closes,1);
+});
+
+test('device changes can reuse an activated context without closing it or retaining old input',async()=>{
+  const f=fixture();let opened=0;
+  const options={...f.options,context:f.context,openInput:async()=>{opened++;return {stream:f.stream,usedDefault:false};}};
+  const first=createMicrophoneMonitor(options);await first.ready;first.stop();
+  assert.equal(f.context.closes,0);assert.equal(f.track.stops,1);assert.equal(f.frames.size,0);
+  f.track.readyState='live';
+  const second=createMicrophoneMonitor({...options,preferences:{input:'new-device',noise:false}});await second.ready;f.advance();
+  assert.equal(opened,2);assert.equal(f.readings.at(-1).detected,true);second.stop();assert.equal(f.context.closes,0);
+});
+test('cancelled late input on a reused context does not close or feed the next test',async()=>{
+  const f=fixture();let complete;
+  const pending=createMicrophoneMonitor({...f.options,context:f.context,openInput:()=>new Promise(resolve=>complete=resolve)});
+  pending.stop();complete({stream:f.stream,usedDefault:false});await pending.ready;
+  assert.equal(f.track.stops,1);assert.equal(f.context.closes,0);assert.equal(f.connections.length,0);assert.equal(f.frames.size,0);
+});
+test('opposite-polarity stereo channels are measured separately instead of cancelling',async()=>{
+  const f=fixture(),edges=[];let index=0;
+  f.track.getSettings=()=>({channelCount:2});
+  const analyser=sign=>({fftSize:2048,disconnect(){},getFloatTimeDomainData:samples=>samples.fill(sign*.1)});
+  const split={disconnects:0,connect:(node,channel)=>edges.push({node,channel}),disconnect(){this.disconnects++;}};
+  f.context.createChannelSplitter=channels=>{assert.equal(channels,2);return split;};
+  f.context.createAnalyser=()=>analyser(index++===0?1:-1);
+  const monitor=createMicrophoneMonitor(f.options);await monitor.ready;f.advance();
+  assert.equal(f.readings.at(-1).detected,true);assert.ok(Math.abs(f.readings.at(-1).decibels+20)<.001);
+  assert.deepEqual(edges.map(edge=>edge.channel),[0,1]);assert.equal(f.connections[0],split);
+  monitor.stop();assert.equal(split.disconnects,1);
+});
+test('a live right input channel still lights the meter when the left channel is silent',async()=>{
+  const f=fixture();let index=0;
+  f.track.getSettings=()=>({channelCount:2});
+  f.context.createChannelSplitter=()=>({connect(){},disconnect(){}});
+  f.context.createAnalyser=()=>{const signal=index++===0?0:.05;return {fftSize:2048,disconnect(){},getFloatTimeDomainData:samples=>samples.fill(signal)};};
+  const monitor=createMicrophoneMonitor(f.options);await monitor.ready;f.advance();
+  assert.equal(f.readings.at(-1).detected,true);assert.ok(f.readings.at(-1).percent>50);monitor.stop();
+});
+test('capture failure disconnects analysis without closing a caller-owned audio context',async()=>{
+  const f=fixture();const monitor=createMicrophoneMonitor({...f.options,context:f.context,openInput:async()=>{throw new Error('capture failed');}});
+  await monitor.ready;assert.equal(f.errors.length,1);assert.equal(f.context.closes,0);assert.equal(f.frames.size,0);
 });

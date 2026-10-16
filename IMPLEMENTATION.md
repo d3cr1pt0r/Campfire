@@ -268,7 +268,7 @@ Verified after application dependencies became available:
 
 - Actual `npm run check`: passes, including Vite/CSS and preload declarations.
 - Actual `npm run build`: passes with installed Vite 8.3.4/React 19.3.1.
-- `npm run test:unit`: 59 checks pass (four security, one SQLite schema, six desktop, nine microphone, sixteen voice/mixing, nine microphone-meter, seven feature helpers, and seven in-process server checks including the parent test).
+- `npm run test:unit`: 64 checks pass (four security, one SQLite schema, six desktop, nine microphone, sixteen voice/mixing, fourteen microphone-meter, seven feature helpers, and seven in-process server checks including the parent test).
 - JavaScript syntax checks on server, desktop, packaging config and tests.
 - Portable build command reaches the packaging step after successful check/build, then fails with EAI_AGAIN resolving registry.npmjs.org for electron-builder. No Windows executable artifact was generated.
 
@@ -281,3 +281,17 @@ Still outstanding: portable packaging/Windows-runner execution, Electron UI laun
 Chat attachment AuthImage instances opt into expandable mode. Loaded previews become keyboard-accessible buttons that open ExpandedImage through a document.body portal, outside chat scroll/overflow constraints. Profile pictures and custom emoji images retain their existing behavior. The viewer reuses the already-authorized blob URL, so it needs no additional request, query-string credential or server change; GIF bytes/animation are preserved. Images fit the app window with object-fit contain and can enter native full screen via the toolbar or double-click. Escape exits full screen before closing; Close, Return to chat or the backdrop dismiss the viewer. Focus is trapped in the viewer and restored to the opener when available. Closing does not revoke the thumbnail URL; AuthImage remains its owner and revokes it on asset change/unmount, which also closes the viewer.
 
 Version remains 0.1.3. Type check and production build pass. Actual desktop image enlargement, GIF animation, focus navigation and native full screen remain unverified here. Manual acceptance: open a landscape/portrait image and GIF, resize the app, enter/exit full screen, close with the button/Escape, open with Enter, and delete the owning message or change conversations while viewing to confirm cleanup.
+
+## Microphone meter startup and channel-analysis reliability
+
+The meter previously created/resumed its AudioContext in a passive React effect. That makes startup depend on browser activation/autoplay state; it is a plausible source of intermittent paused analysis, not a confirmed reproduction of the reported hardware symptom. MicrophoneMeter now creates and resumes the context synchronously in Start microphone test's click handler, before capture/effects await. While a test is active, the component owns that context across selected-device/noise changes and each monitor owns only its graph and standalone capture. A supplied context is never closed by createMicrophoneMonitor; Stop, unmount or failure closes it from the component. Analysis startup errors are distinguished from microphone permission/capture errors. Resume meter still invokes resume from a user gesture.
+
+AnalyserNode's time-domain data is downmixed to mono; opposite-polarity stereo channels can cancel in the old measurement. Multi-channel input now passes through a ChannelSplitterNode and per-channel analysers (up to eight), using the strongest channel's RMS/dBFS and clipping across channels. Mono remains direct-source analysis. Outputs remain unconnected, which Web Audio allows for AnalyserNode; there is no audible microphone monitoring. Unknown channel count uses a two-channel splitter to cover ordinary mono/stereo capture. The same helper serves speaking indicators, so their channel measurement also improves.
+
+During calls the meter still borrows the actual call input and respects mute/deafen/PTT; changing settings does not change an active call's capture. The UI now identifies that microphone and clearly explains rejoining to apply another selection. Muted-device, gated-call, paused-analysis and silent-input states are separate. Standalone tests never enable/stop borrowed call tracks.
+
+Five added regression tests cover shared-context replacement and failure ownership, late cancellation on a reused context, opposite-polarity stereo and right-channel-only input. All 64 non-network checks, type checking and production build pass. Tests use controlled graph doubles, not real browser PCM or user-activation enforcement. Actual Linux/Windows microphone access, switching hardware and restart/Resume meter behavior need manual validation. Check the meter outside a call first (Start test, speak, switch inputs repeatedly, Stop/Start), then repeat in a call with mute/PTT states and the correct displayed device. Version remains 0.1.3.
+
+## Numeric message metadata rendering
+
+SQLite represents pinned as 0/1. Message metadata must convert numeric flags to booleans before JSX conditional rendering; otherwise React renders the false-side numeric 0 next to the timestamp. Pin and edited indicators now use Boolean guards. Version remains 0.1.3. Type check and production build pass.

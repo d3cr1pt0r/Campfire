@@ -29,6 +29,7 @@ type MonitorOptions = {
     onError: (error: unknown) => void;
     onFallback: () => void;
     createContext?: () => AudioContext;
+    context?: AudioContext;
     openInput?: typeof openMicrophone;
     schedule?: typeof requestAnimationFrame;
     cancel?: typeof cancelAnimationFrame;
@@ -37,20 +38,22 @@ type MonitorOptions = {
 export function createMicrophoneMonitor({
     preferences, activeStream, onReading, onError, onFallback,
     createContext = () => new AudioContext(), openInput = openMicrophone,
+    context: sharedContext,
     schedule = callback => globalThis.requestAnimationFrame(callback), cancel = id => globalThis.cancelAnimationFrame(id),
 }: MonitorOptions) {
-    const context = createContext();
+    const context = sharedContext || createContext();
     let stopped = false, frame: number | null = null;
     let input: MediaStream | null = activeStream || null;
-    let source: MediaStreamAudioSourceNode | null = null, analyser: AnalyserNode | null = null;
+    let source: MediaStreamAudioSourceNode | null = null, splitter: ChannelSplitterNode | null = null;
+    const analysers: AnalyserNode[] = [];
     const owned = !activeStream;
     const stop = () => {
         if (stopped) return;
         stopped = true;
         if (frame !== null) cancel(frame);
-        source?.disconnect(); analyser?.disconnect();
+        source?.disconnect(); splitter?.disconnect(); analysers.forEach(analyser => analyser.disconnect());
         if (owned) input?.getTracks().forEach(track => track.stop());
-        void context.close().catch(() => {});
+        if (!sharedContext) void context.close().catch(() => {});
     };
     const resume = async () => {
         if (stopped) return;
@@ -74,10 +77,19 @@ export function createMicrophoneMonitor({
             const track = input.getAudioTracks()[0];
             if (!track || track.readyState === 'ended') throw Object.assign(new Error(''), { name: 'NotFoundError' });
             source = context.createMediaStreamSource(input);
-            analyser = context.createAnalyser();
-            analyser.fftSize = 2048;
-            source.connect(analyser); // Never connect to speakers: no monitoring feedback.
-            const samples = new Float32Array(analyser.fftSize);
+            // AnalyserNode downmixes its input to mono. Opposite-polarity stereo
+            // channels can cancel, so measure each channel before that downmix.
+            const channels = Math.max(1, Math.min(8, track.getSettings?.().channelCount || 2));
+            if (channels > 1) { splitter = context.createChannelSplitter(channels); source.connect(splitter); }
+            for (let channel = 0; channel < channels; channel++) {
+                const analyser = context.createAnalyser();
+                analyser.fftSize = 2048;
+                analysers.push(analyser);
+                if (splitter) splitter.connect(analyser, channel); else source.connect(analyser);
+            }
+            // Analyser outputs may remain unconnected; never play mic audio.
+            const samples = new Float32Array(2048);
+            const silence = microphoneLevel(new Float32Array(0));
             let previous = -Infinity;
             const update = (time: number) => {
                 if (stopped) return;
@@ -88,8 +100,16 @@ export function createMicrophoneMonitor({
                     previous = time;
                     const paused = context.state !== 'running';
                     const muted = !track.enabled || track.muted;
-                    if (paused || muted) samples.fill(0); else analyser!.getFloatTimeDomainData(samples);
-                    onReading({ ...microphoneLevel(samples), paused, muted, device: track.label || 'Microphone' });
+                    let level = { ...silence };
+                    let clipping = false;
+                    if (!paused && !muted) for (const analyser of analysers) {
+                        analyser.getFloatTimeDomainData(samples);
+                        const measured = microphoneLevel(samples);
+                        if ((measured.decibels ?? -Infinity) > (level.decibels ?? -Infinity)) level = measured;
+                        clipping ||= measured.clipping;
+                    }
+                    level.clipping = clipping;
+                    onReading({ ...level, paused, muted, device: track.label || 'Microphone' });
                 }
                 frame = schedule(update);
             };
