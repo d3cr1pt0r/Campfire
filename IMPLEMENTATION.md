@@ -27,6 +27,8 @@ This document describes the initial source implementation and is intended to be 
 | `server/security.js` | Password/token hashing and pure permission/conversation-access helpers |
 | `src/main.tsx` | Application/auth shell, chat, friend list, settings, dialogs, REST and socket state coordination, media tiles |
 | `src/media.ts` | Shared microphone acquisition, unavailable-device recovery and capture diagnostics |
+| `src/signaling.ts` | Serialized peer signaling, offer ownership, collision handling and queued ICE |
+| `src/MediaTile.tsx`, `src/playback.ts` | Separate remote audio/video playback, explicit playback retry and output-device recovery |
 | `src/useCall.ts` | Media stream ownership, peer connections, signaling, mute/deafen, PTT, camera and screen track lifecycle |
 | `src/types.ts`, `src/desktop.d.ts` | Client contracts, preload storage API, and Vite client/CSS declarations |
 | `src/style.css` | Responsive dark desktop layout and component styles; no third-party font requests |
@@ -182,13 +184,27 @@ A persisted selected device ID can stop matching after a USB disconnect or a cha
 
 Manual check: restart the Linux desktop with `npm start`, choose Settings → Voice & video → Input device → System default, and use Allow microphone & refresh devices before joining a call. Confirm successful capture, test explicit input selection across a relaunch, and verify permission denial remains denied. Browser clients need HTTPS or localhost for microphone APIs; ordinary HTTP on another machine's LAN/public IP is not a secure context.
 
+## One-way voice investigation and client fixes
+
+The reported setup still had one-way audio with current builds, default devices and mute/deafen/PTT disabled. The changes below address identified client weaknesses; they do not establish the cause of that particular live failure.
+
+Peer signaling now assigns the initial offer to the joining peer. Responders first apply the incoming offer, reuse its audio/video transceivers, attach local tracks, and only then answer. Incoming descriptions/candidates are processed serially so an offer cannot be mistaken for glare while a previous answer is still being applied. Polite peers rely on WebRTC's implicit rollback for genuine colliding offers; impolite peers discard the colliding offer and its candidates. Candidates wait for a remote description. Closing a peer prevents queued work from emitting more signaling. The video sender is retained directly instead of selecting a potentially different transceiver later. Tests cover these state transitions with fake peers; they are not a real-browser transport test.
+
+Each participant tile now has a persistent audio element and a separate always-muted video element. Camera/screen-track changes only change video membership, and preview audio is never played back. Blocked/rejected audio playback displays a visible Play audio button, rather than requiring a click on an invisible video. Participant volume is visible without hovering. Missing saved output devices fall back to System default and reset the saved preference after success; denied routing does not bypass permission checks. Electron permits speaker-selection only for its existing trusted UI origin. Pending playback/output work is canceled or ignored after cleanup/changes.
+
+Call details is opt-in and polls local WebRTC stats once a second only while open. For each peer it shows connection/ICE state, audio transceiver direction, sent/received audio packets and input/incoming audio levels when supplied by the browser. No SDP, IP addresses, credentials, recordings or stats are uploaded. Packet counts can increase for silence, so these counters are diagnostic evidence, not a claim that speech is present. Browser-unavailable stats display unavailable. Closing the panel/call stops polling.
+
+Manual validation: update both clients (Linux npm start; rebuild/re-download the Windows portable client), join the same voice channel, speak in both directions, and test both joining orders/rejoining. Repeat camera/screen toggles without interrupting voice. If one-way audio remains, compare Call details on both peers while speaking: no received packets indicates missing transport/negotiated media; received packets with a zero incoming level may indicate a silent/muted source; received packets and speech levels with no audible output point toward playback, participant volume or system routing. A failed ICE path may still need TURN; STUN-only connectivity is not guaranteed. Confirm autoplay rejection recovery and stale output-device recovery on actual platforms.
+
+Validation: type checking/production build and 27 unit tests pass, including ten added voice tests for negotiation races, early ICE, canceled/rejected signaling, output routing and separation of audio from video changes. Hardware capture/playback and two real remote clients remain unverified because this sandbox cannot launch Electron or use audio/network services.
+
 ## Validation record
 
 Verified after application dependencies became available:
 
 - Actual `npm run check`: passes, including Vite/CSS and preload declarations.
 - Actual `npm run build`: passes with installed Vite 8.3.4/React 19.3.1.
-- `npm run test:unit`: 17 tests pass (four security, one SQLite schema, four desktop, eight microphone).
+- `npm run test:unit`: 27 tests pass (four security, one SQLite schema, four desktop, eight microphone, ten voice).
 - JavaScript syntax checks on server, desktop, packaging config and tests.
 - Portable build command reaches the packaging step after successful check/build, then fails with EAI_AGAIN resolving registry.npmjs.org for electron-builder. No Windows executable artifact was generated.
 

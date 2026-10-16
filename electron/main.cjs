@@ -21,8 +21,8 @@ else {
       try { event.returnValue = trusted(event.senderFrame?.url) && clientState.set(key, value); }
       catch { event.returnValue = false; }
     });
-    session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => callback(trusted(wc?.getURL()) && ['media', 'display-capture', 'notifications'].includes(permission)));
-    session.defaultSession.setPermissionCheckHandler((_wc, permission, requestingOrigin) => trusted(requestingOrigin) && ['media', 'display-capture', 'notifications'].includes(permission));
+    session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => callback(trusted(wc?.getURL()) && ['media', 'display-capture', 'notifications', 'speaker-selection'].includes(permission)));
+    session.defaultSession.setPermissionCheckHandler((_wc, permission, requestingOrigin) => trusted(requestingOrigin) && ['media', 'display-capture', 'notifications', 'speaker-selection'].includes(permission));
     session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
       try {
         if (!trusted(request.frame?.url)) return callback({});

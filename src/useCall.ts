@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import type { CallMember, Preferences } from './types';
 import { openMicrophone, formatMicrophoneError } from './media';
+import { createPeerSignaling, type PeerSignal } from './signaling';
 type Peer = {
     pc: RTCPeerConnection;
     stream: MediaStream;
     user: string;
-    makingOffer: boolean;
-    ignoreOffer: boolean;
-    candidates: RTCIceCandidateInit[];
+    signaling: ReturnType<typeof createPeerSignaling>;
+    videoSender?: RTCRtpSender;
 };
 export function useCall(socket: Socket | null, prefs: Preferences, iceServers: RTCIceServer[], report: (s: string) => void, onInputFallback: () => void) {
     const [channel, setChannel] = useState<string | null>(null);
@@ -18,6 +18,8 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
         user: string;
         stream: MediaStream;
     }[]>([]);
+    const [showDetails, setShowDetails] = useState(false);
+    const [details, setDetails] = useState<{id: string; user: string; connection: string; ice: string; direction: string; sent: number | null; received: number | null; inputLevel: number | null; receivedLevel: number | null}[]>([]);
     const operation = useRef(0);
     const captureBusy = useRef({ camera: false, share: false });
     const audioFlags = useRef({ muted, deafened });
@@ -45,88 +47,62 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
         catch { /* optional sound */ }
     };
     const updateRemote = () => setRemote([...peers.current].map(([id, p]) => ({ id, user: p.user, stream: p.stream })));
-    const leave = () => { const wasInCall = !!callChannel.current; operation.current++; socket?.emit('call:leave'); callChannel.current = null; setChannel(null); peers.current.forEach(p => { p.pc.onconnectionstatechange = null; p.pc.close(); }); peers.current.clear(); [audio.current, video.current, screen.current].forEach(s => s?.getTracks().forEach(t => t.stop())); audio.current = null; video.current = null; screen.current = null; setLocal(null); setRemote([]); setCamera(false); setSharing(false); if (wasInCall)
+    const leave = () => { const wasInCall = !!callChannel.current; operation.current++; socket?.emit('call:leave'); callChannel.current = null; setChannel(null); peers.current.forEach(p => { p.signaling.close(); p.pc.onconnectionstatechange = null; p.pc.close(); }); peers.current.clear(); [audio.current, video.current, screen.current].forEach(s => s?.getTracks().forEach(t => t.stop())); audio.current = null; video.current = null; screen.current = null; setLocal(null); setRemote([]); setCamera(false); setSharing(false); if (wasInCall)
         sound(); };
     const currentVideo = () => screen.current?.getVideoTracks()[0] || video.current?.getVideoTracks()[0] || null;
-    const syncVideo = async () => { const track = currentVideo(); setLocal(track ? new MediaStream([track]) : null); await Promise.all([...peers.current.values()].map(async (p) => { const sender = p.pc.getTransceivers().find(t => t.receiver.track.kind === 'video')?.sender; await sender?.replaceTrack(track); })); };
-    const makePeer = (id: string, user: string) => {
+    const syncVideo = async () => { const track = currentVideo(); setLocal(track ? new MediaStream([track]) : null); await Promise.all([...peers.current.values()].map(async (p) => { const sender = p.videoSender; await sender?.replaceTrack(track); })); };
+    const makePeer = (id: string, user: string, initialOfferer = false) => {
         const existing = peers.current.get(id);
-        if (existing)
-            return existing;
+        if (existing) return existing;
         const pc = new RTCPeerConnection({ iceServers: iceRef.current });
-        const p: Peer = { pc, user, stream: new MediaStream(), makingOffer: false, ignoreOffer: false, candidates: [] };
-        peers.current.set(id, p);
-        pc.onicecandidate = e => {
-            if (e.candidate)
-                socket?.emit('signal', { to: id, data: { candidate: e.candidate.toJSON() } });
+        let p: Peer;
+        let preparing = false;
+        const prepareTracks = async () => {
+            preparing = true;
+            try {
+                for (const kind of ['audio', 'video'] as const) {
+                    const transceiver = pc.getTransceivers().find(t => t.receiver.track.kind === kind)
+                        || pc.addTransceiver(kind, { direction: 'sendrecv' });
+                    transceiver.direction = 'sendrecv';
+                    const track = kind === 'audio' ? audio.current?.getAudioTracks()[0] || null : currentVideo();
+                    await transceiver.sender.replaceTrack(track);
+                    if (kind === 'video') p.videoSender = transceiver.sender;
+                }
+            } finally { preparing = false; }
         };
-        pc.ontrack = e => {
-            if (!p.stream.getTracks().some(t => t.id === e.track.id))
-                p.stream.addTrack(e.track);
+        const signaling = createPeerSignaling(pc, String(socket?.id) > id,
+            data => socket?.emit('signal', { to: id, data }), prepareTracks, initialOfferer);
+        p = { pc, user, stream: new MediaStream(), signaling };
+        peers.current.set(id, p);
+        pc.onicecandidate = event => {
+            if (event.candidate) socket?.emit('signal', { to: id, data: { candidate: event.candidate.toJSON() } });
+        };
+        pc.ontrack = event => {
+            if (!p.stream.getTracks().some(track => track.id === event.track.id)) p.stream.addTrack(event.track);
             updateRemote();
         };
-        pc.onnegotiationneeded = async () => {
-            try {
-                p.makingOffer = true;
-                await pc.setLocalDescription();
-                socket?.emit('signal', { to: id, data: { description: pc.localDescription } });
-            }
-            catch (e) {
-                report(`Call negotiation: ${(e as Error).message}`);
-            }
-            finally {
-                p.makingOffer = false;
-            }
+        pc.onnegotiationneeded = () => {
+            if (!preparing) void signaling.negotiate().catch(error => {
+                if (pc.signalingState !== 'closed') report(`Call negotiation: ${error.name || 'Error'} ${error.message || ''}`);
+            });
         };
         pc.onconnectionstatechange = () => {
-            if (pc.connectionState === 'failed')
-                report('A peer connection failed. Configure a TURN server for networks that block direct calls.');
+            if (pc.connectionState === 'failed') report('A peer connection failed. Check Call details; a TURN relay may be needed if direct connectivity is blocked.');
         };
-        const track = audio.current?.getAudioTracks()[0];
-        if (track)
-            pc.addTrack(track, audio.current!);
-        const transceiver = pc.addTransceiver('video', { direction: 'sendrecv' });
-        void transceiver.sender.replaceTrack(currentVideo());
+        if (initialOfferer) void prepareTracks().then(() => signaling.negotiate()).catch(error => {
+            if (pc.signalingState !== 'closed') report(`Call setup: ${error.name || 'Error'} ${error.message || ''}`);
+        });
         return p;
     };
     useEffect(() => {
         if (!socket)
             return;
-        const signal = async ({ from, user, data }: {
-            from: string;
-            user: string;
-            data: {
-                description?: RTCSessionDescriptionInit;
-                candidate?: RTCIceCandidateInit;
-            };
-        }) => {
-            if (!callChannel.current)
-                return;
-            const p = makePeer(from, user), pc = p.pc;
-            try {
-                if (data.description) {
-                    const collision = data.description.type === 'offer' && (p.makingOffer || pc.signalingState !== 'stable');
-                    p.ignoreOffer = String(socket.id) < from && collision;
-                    if (p.ignoreOffer)
-                        return;
-                    await pc.setRemoteDescription(data.description);
-                    for (const c of p.candidates)
-                        await pc.addIceCandidate(c);
-                    p.candidates = [];
-                    if (data.description.type === 'offer') {
-                        await pc.setLocalDescription();
-                        socket.emit('signal', { to: from, data: { description: pc.localDescription } });
-                    }
-                }
-                else if (data.candidate && !p.ignoreOffer) {
-                    if (pc.remoteDescription)
-                        await pc.addIceCandidate(data.candidate);
-                    else
-                        p.candidates.push(data.candidate);
-                }
-            }
-            catch (e) {
-                report(`Media connection: ${(e as Error).message}`);
+        const signal = async ({ from, user, data }: { from: string; user: string; data: PeerSignal }) => {
+            if (!callChannel.current) return;
+            const peer = makePeer(from, user);
+            try { await peer.signaling.receive(data); }
+            catch (error) {
+                if (peer.pc.signalingState !== 'closed') report(`Media connection: ${(error as Error).name || 'Error'} ${(error as Error).message || 'Signaling failed'}`);
             }
         };
         const calls = (members: CallMember[]) => {
@@ -134,6 +110,7 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
             let changed = false;
             peers.current.forEach((p, id) => {
                 if (!ids.has(id)) {
+                    p.signaling.close();
                     p.pc.close();
                     peers.current.delete(id);
                     changed = true;
@@ -176,6 +153,34 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
         window.addEventListener('blur', blur);
         return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur); };
     }, [muted, deafened, prefs.pushToTalk, channel]);
+    useEffect(() => {
+        if (!channel || !showDetails) { setDetails([]); return; }
+        let canceled = false, pending = false;
+        const sample = async () => {
+            if (pending) return;
+            pending = true;
+            try {
+                const rows = await Promise.all([...peers.current].map(async ([id, peer]) => {
+                    let sent: number | null = null, received: number | null = null, inputLevel: number | null = null, receivedLevel: number | null = null;
+                    try {
+                        const stats = await peer.pc.getStats();
+                        stats.forEach(stat => {
+                            if ((stat.kind || stat.mediaType) !== 'audio') return;
+                            if (stat.type === 'outbound-rtp') sent = (sent || 0) + (stat.packetsSent || 0);
+                            if (stat.type === 'inbound-rtp') { received = (received || 0) + (stat.packetsReceived || 0); if (typeof stat.audioLevel === 'number') receivedLevel = stat.audioLevel; }
+                            if (stat.type === 'media-source' && typeof stat.audioLevel === 'number') inputLevel = stat.audioLevel;
+                        });
+                    } catch { /* Peer may close during a sample. */ }
+                    return { id, user: peer.user, connection: peer.pc.connectionState, ice: peer.pc.iceConnectionState,
+                        direction: peer.pc.getTransceivers().find(t => t.receiver.track.kind === 'audio')?.currentDirection || 'not negotiated', sent, received, inputLevel, receivedLevel };
+                }));
+                if (!canceled) setDetails(rows);
+            } finally { pending = false; }
+        };
+        void sample();
+        const timer = setInterval(() => void sample(), 1000);
+        return () => { canceled = true; clearInterval(timer); };
+    }, [channel, showDetails]);
     const join = async (id: string) => {
         if (!socket?.connected) {
             report('Connect to the server before joining a call.');
@@ -208,7 +213,7 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
                 }
                 setChannel(id);
                 audio.current?.getTracks().forEach(t => t.enabled = !audioFlags.current.muted && !audioFlags.current.deafened && !prefsRef.current.pushToTalk);
-                result.peers.forEach(p => makePeer(p.socket, p.user));
+                result.peers.forEach(p => makePeer(p.socket, p.user, true));
                 sound();
             });
         }
@@ -278,5 +283,5 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
             captureBusy.current.share = false;
         }
     };
-    return { channel, join, leave, muted, setMuted, deafened, setDeafened, camera, sharing, toggleCamera, toggleShare, local, remote };
+    return { showDetails, setShowDetails, details, channel, join, leave, muted, setMuted, deafened, setDeafened, camera, sharing, toggleCamera, toggleShare, local, remote };
 }
