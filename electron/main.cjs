@@ -27,9 +27,13 @@ else {
       try {
         if (!trusted(request.frame?.url)) return callback({});
         const sources = await desktopCapturer.getSources({ types: ['window', 'screen'] });
-        const result = await dialog.showMessageBox({ type: 'question', title: 'Share a screen or window', message: 'Choose what to share', buttons: [...sources.map(s => s.name), 'Cancel'], cancelId: sources.length, noLink: true });
+        const systemAudio = request.audioRequested && process.platform === 'win32';
+        const result = await dialog.showMessageBox({ type: 'question', title: 'Share a screen or window', message: 'Choose what to share',
+          detail: systemAudio ? 'System audio includes sound from all applications, even when sharing a single window.' : 'System audio capture may not be available on this platform.',
+          ...(systemAudio ? { checkboxLabel: 'Share system audio', checkboxChecked: true } : {}),
+          buttons: [...sources.map(s => s.name), 'Cancel'], cancelId: sources.length, noLink: true });
         if (result.response >= sources.length) return callback({});
-        callback({ video: sources[result.response] });
+        callback({ video: sources[result.response], ...(systemAudio && result.checkboxChecked ? { audio: 'loopback' } : {}) });
       } catch { callback({}); }
     }, { useSystemPicker: true });
     const open = () => {

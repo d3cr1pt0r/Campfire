@@ -130,7 +130,7 @@ Public channel events are broadcast. DM events target participant-specific socke
 
 `useCall` owns all acquired streams and peer connections. Leaving, disconnecting, or unmounting stops microphone/camera/screen tracks. Joining acquires the selected microphone, asks the server to join, then creates connections to existing peers. Incoming peers connect via authenticated signal events. Socket-ID ordering determines the polite peer during offer collisions; candidates queue until a remote description exists.
 
-Each peer has an audio sender and a send/receive video transceiver. Screen sharing replaces that video sender's track. Stopping sharing restores the camera if active. Camera and screen are not sent simultaneously. No system audio track is captured. Resolution is a browser constraint preference, not guaranteed actual encoded resolution or bitrate. The initial sender has no explicit bitrate adaptation policy.
+Each peer has an audio sender and a send/receive video transceiver. Screen sharing replaces that video sender's track. Stopping sharing restores the camera if active. Camera and screen are not sent simultaneously. Captured system audio is mixed with the microphone into the existing audio sender as described below. Resolution is a browser constraint preference, not guaranteed actual encoded resolution or bitrate. The initial sender has no explicit bitrate adaptation policy.
 
 PTT uses focused-window keyboard events. Input fields are excluded and blur releases the key, avoiding stuck microphone transmission. Mute and deafen gate the local microphone; deafen also silences remote media elements. Remote audio output is set per dedicated audio element via `setSinkId` when supported. Volume is local to each participant tile and resets when that peer reconnects. Noise controls use browser capture constraints, not custom DSP. A short Web Audio tone provides call feedback.
 
@@ -218,13 +218,23 @@ Full screen uses the standard user-gesture Fullscreen API; Electron's existing t
 
 No signaling/schema/version changes are required; the app remains 0.1.2. Type check, production build and the existing 36 unit tests pass. Real Electron/browser fullscreen, resizing and remote media remain unverified in the restricted environment. Manual acceptance: expand a remote share and local preview, inspect aspect-ratio preservation at different window sizes, enter/exit native full screen, use Escape/keyboard navigation, change participant volume, stop the share or leave the call while expanded, and confirm voice continues without duplication after closing the viewer.
 
+## Screen-share system audio
+
+The renderer requests getDisplayMedia audio with noise suppression, echo cancellation and automatic gain disabled for program sound. Chromium's restrictOwnAudio constraint requests exclusion of the capturing app's playback to prevent feedback; this must be verified on real Windows hardware. Electron's trusted-origin fallback picker offers a checked Share system audio checkbox on Windows when audio was requested. Its disclosure explains that loopback captures all application sound, including when sharing a single window. The handler grants audio: 'loopback' only when checked. Other platforms remain video-only through this fallback; native/browser pickers can supply audio if supported. Linux desktop system capture is not implemented; receiving Windows system audio on Linux uses the existing playback path.
+
+src/shareAudio.ts lazily creates a Web Audio microphone source and MediaStreamAudioDestinationNode on the first share that supplies audio. A second source connects captured system sound to that destination. Nodes never connect to speakers. The destination is mono to match the existing microphone sender when replacing its track. After successful resume, useCall replaces existing peer audio tracks with the mix; future peer setup selects that same generated track. One incoming audio track avoids relying on multi-track HTMLAudioElement playback and preserves current output routing, participant volume and expanded-viewer playback. No SDP/signaling/server/schema changes are needed. System sound and voice have a shared receiver volume; stereo and separate controls require later transport/playback changes.
+
+Microphone mute/deafen/PTT still gate only the owned microphone track. Stopping sharing or the OS ending video disconnects the system source, stops all capture tracks, and restores camera video. The mixer remains attached for microphone-only audio until leaving, avoiding another sender replacement. An independently ended system audio track is disconnected with a notice while video continues. Leaving/disconnect closes the mixer, stops its generated track, and releases the original mic/camera/screen captures. Pending captures/resumes check the call generation so late results cannot attach to another call. A missing audio track produces a visible video-only notice. Capture failures clean up and restore video.
+
+Six added graph-double tests exercise summing both sources without local playback, microphone gating independent of program sound, stop/restart without duplicate sources, cleanup ownership/idempotence, absent/ended capture and suspended/cancelled startup. These verify graph wiring and lifecycle, not real PCM processing or WebRTC/OS audio. Type check, production build and all 42 unit tests pass. Live acceptance remains: rebuild Windows EXE; stream music/game sound to Linux; mute mic and test PTT while sound continues; check remote voice is not looped back; change participant volume/output and deafen; stop via app and OS picker; repeat sharing; join another participant mid-share; leave while the picker is open. Confirm all capture tracks release and microphone voice continues after sharing stops. Version remains 0.1.2.
+
 ## Validation record
 
 Verified after application dependencies became available:
 
 - Actual `npm run check`: passes, including Vite/CSS and preload declarations.
 - Actual `npm run build`: passes with installed Vite 8.3.4/React 19.3.1.
-- `npm run test:unit`: 36 tests pass (four security, one SQLite schema, four desktop, eight microphone, ten voice, nine microphone-meter).
+- `npm run test:unit`: 42 tests pass (four security, one SQLite schema, four desktop, eight microphone, sixteen voice/mixing, nine microphone-meter).
 - JavaScript syntax checks on server, desktop, packaging config and tests.
 - Portable build command reaches the packaging step after successful check/build, then fails with EAI_AGAIN resolving registry.npmjs.org for electron-builder. No Windows executable artifact was generated.
 

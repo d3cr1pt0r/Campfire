@@ -133,7 +133,7 @@ The executable is not code-signed, so Windows may show an unknown-publisher/Smar
 - Role creation/editing, colors, chat/voice/management permissions, owner-only role assignment, and server naming.
 - Settings for notifications, audio input/output, and 360p/720p/1080p requested streaming resolution.
 
-Search, pinned views, and history currently operate on the latest 500 messages in a conversation. Unread counts are session-local. Screen sharing replaces the outgoing camera track and restores it when sharing stops. Screen sharing is video-only; system audio capture is not implemented. Settings affecting device capture apply on the next call/video start. Output-device support and capture picker behavior depend on the OS. Push-to-talk works while the app has focus and the cursor is outside an input field; it is not a system-wide hotkey.
+Search, pinned views, and history currently operate on the latest 500 messages in a conversation. Unread counts are session-local. Screen sharing replaces the outgoing camera track and restores it when sharing stops. Windows desktop sharing supports system audio; see below for platform limitations. Settings affecting device capture apply on the next call/video start. Output-device support and capture picker behavior depend on the OS. Push-to-talk works while the app has focus and the cursor is outside an input field; it is not a system-wide hotkey.
 
 Private channels, moderation/ban UI, nicknames, custom server icons, saved multi-server sessions, direct-message calls, threads, bots, password recovery, mobile clients, code-signed desktop releases, auto-updates, and a large-call media server are future work. Message text is rendered as plain text, with no HTML or Markdown execution. DMs are access-controlled on the server; they are **not end-to-end encrypted** against the server owner. WebRTC encrypts media transport, and TURN can relay that media.
 
@@ -159,6 +159,14 @@ Click the **expand icon** in the top-right corner of a video tile, or double-cli
 
 Participant volume and a blocked-audio Play audio control remain available in the expanded viewer. Voice continues through the original audio element, so opening/closing the viewer does not create duplicate audio or disconnect the call. This works for received screen shares, cameras and your own video preview. Update/restart the client or rebuild the Windows portable EXE to receive the feature.
 
+## Share system audio
+
+Rebuild/download the updated Windows portable EXE, join a voice channel, and start screen sharing. Leave **Share system audio** checked in the source picker. This captures audio from all applications even when sharing one window. The capture requests exclusion of Driskord's own playback to avoid sending the call back to participants; verify this on the actual Windows build. Use headphones during the first test.
+
+Microphone mute and push-to-talk affect only your voice; shared sound continues until you stop sharing. Participant volume, deafen and the selected output device apply to both voice and stream sound. This first implementation mixes both into one mono audio track, so separate voice/stream volume and stereo streaming are not yet available. Stopping sharing removes system audio and restores your camera while voice continues.
+
+Linux clients can listen to a Windows friend's shared audio. Capturing system audio from Linux desktop sharing is not implemented. Browser/native picker audio depends on the platform and selected source; enable its audio option when available. If capture provides no audio track, the app reports that it is sharing video only. No server changes or additional port forwarding are needed. Live Windows-to-Linux system audio still needs testing.
+
 ## Validation
 
 ```bash
@@ -169,6 +177,6 @@ npm test
 
 The integration suite covers separate accounts/clients, live messages, DM isolation, friendship acceptance, edit/delete authorization, reactions, pin permissions, attachments, role changes, signaling, logout, and restart persistence. It uses temporary databases and ports. It does not test real microphone/camera hardware or NAT traversal.
 
-**Current environment result:** actual `npm run check` and `npm run build` now pass with installed dependencies; 36 unit tests pass across security, SQLite schema, desktop state, microphone capture, voice signaling/playback and microphone metering. Server integration tests are blocked here because the sandbox denies listening on localhost (`listen EPERM`). The portable build command completes checking/building but cannot download electron-builder because npm DNS is unavailable. No `.exe` has been produced or tested here. Electron launch, Docker build, live media, and Windows portable launch still need validation. The existing package lock pins application dependencies; the packaging tool is separately pinned in the build command.
+**Current environment result:** actual `npm run check` and `npm run build` now pass with installed dependencies; 42 unit tests pass across security, SQLite schema, desktop state, microphone capture, voice signaling/playback, system-audio mixing and microphone metering. Server integration tests are blocked here because the sandbox denies listening on localhost (`listen EPERM`). The portable build command completes checking/building but cannot download electron-builder because npm DNS is unavailable. No `.exe` has been produced or tested here. Electron launch, Docker build, live media, and Windows portable launch still need validation. The existing package lock pins application dependencies; the packaging tool is separately pinned in the build command.
 
 See [IMPLEMENTATION.md](IMPLEMENTATION.md) for architecture, data model, event/API contracts, extension guidance, and remaining work.
