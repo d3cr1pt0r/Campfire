@@ -142,6 +142,12 @@ Mesh means N×(N−1) directional peer links: eight participants can require sev
 5. Add optional community features only after confirming scope: private channels, expiring invites, moderation, nicknames, icons and saved server accounts.
 6. Validate the Windows packaging path, add signing and an update strategy, then per-platform capture/output tests and device-loss recovery.
 
+## STUN-only connectivity test configuration
+
+`npm run server` now uses Node's `--env-file-if-exists=.env` flag, supported by the declared Node minimum. The ignored local `.env` opts this checkout into `[{"urls":"stun:stun.l.google.com:19302"}]`; the example documents the opt-in while keeping the default empty. Exported shell variables override the file. No new dependency, wire format, database migration or client rebuild is involved: `/api/state` already supplies `iceServers`, and new peer connections already use it. Restart the running server, then reopen clients before testing. Other deployments must configure their own environment; local `.env` is not committed.
+
+The test uses a third-party STUN service for address discovery only. Outbound UDP 19302 must work from participants; no new inbound forward is introduced. First validate bidirectional audio between different networks for one minute, then camera and screen sharing. Gather `srflx` candidates with the WebRTC Trickle ICE sample when diagnosing failures. STUN discovery alone does not prove media connectivity; a failed call may still require signaling investigation or a TURN relay. Live internet-call validation remains a user-assisted step.
+
 ## Windows packaging and connection defaults
 
 `npm run dist:win` runs the actual type check and Vite build, then invokes pinned `electron-builder@26.0.12` via npm exec. This tool is downloaded on demand; it does not change the app dependency lockfile. The build requires registry/Electron/NSIS downloads. The existing app lockfile should be committed and used with npm ci on CI. Configuration is in electron-builder.cjs:

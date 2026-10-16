@@ -27,7 +27,7 @@ The server listens on port **3001**, serves the built browser client, and stores
 
 For renderer development, run `npm run server` and `npm run dev` in separate terminals, then open `http://localhost:5173`. Changes to server code require a server restart.
 
-Configuration is documented in [.env.example](.env.example). Node does not automatically load that file. To use a local `.env`, copy the example and run:
+Configuration is documented in [.env.example](.env.example). `npm run server` loads a local `.env` when present; exported shell variables take precedence. To load it explicitly, run:
 
 ```bash
 node --env-file=.env server/index.js
@@ -44,6 +44,28 @@ ICE_SERVERS='[{"urls":"stun:turn.example.com:3478"},{"urls":"turn:turn.example.c
 ```
 
 These are placeholders, not a working public relay. Credentials configured this way are visible to authenticated clients; use a private deployment initially and plan short-lived TURN credentials for wider distribution. Without a reachable STUN/TURN service, calls can work on a LAN but may fail across NAT/firewalls. All media is peer-to-peer, with up to eight participants per voice channel. No third-party ICE service is silently used.
+
+### STUN-only call test
+
+For this checkout, the ignored local `.env` configures Google's public STUN endpoint:
+
+```dotenv
+ICE_SERVERS='[{"urls":"stun:stun.l.google.com:19302"}]'
+```
+
+Stop the running server with Ctrl+C and restart with `npm run server`. Close and reopen every desktop client so it fetches the new ICE configuration. No client rebuild or additional inbound router port forwarding is required for STUN. Clients need outbound access to the STUN endpoint over UDP port 19302. This uses a third-party address-discovery service; it does not relay call media.
+
+For a one-process test without a `.env`, use:
+
+```bash
+ICE_SERVERS='[{"urls":"stun:stun.l.google.com:19302"}]' npm run server
+```
+
+Test two participants on different home networks in the same voice channel. Confirm audio in both directions for at least one minute, then test camera video and screen sharing separately. If a call fails, each participant can test `stun:stun.l.google.com:19302` with the [WebRTC Trickle ICE sample](https://webrtc.github.io/samples/src/content/peerconnection/trickle-ice/): an `srflx` candidate confirms STUN address discovery, but does not prove peers can connect directly. Missing `srflx` candidates suggest a STUN reachability issue; successful discovery with failed calls requires checking ICE/signaling and possibly adding TURN.
+
+The local `.env` is ignored by Git. On another server, add the setting explicitly. To disable this test, set `ICE_SERVERS=[]` and restart the server and clients. The default remains empty when no setting is supplied.
+
+### Container hosting
 
 Or build the supplied container:
 

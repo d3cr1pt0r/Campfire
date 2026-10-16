@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "server": "node server/index.js",
+    "server": "node --env-file-if-exists=.env server/index.js",
     "build": "vite build",
     "start": "npm run build && electron .",
     "test": "node --test",
