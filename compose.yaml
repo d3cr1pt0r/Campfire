@@ -1,0 +1,14 @@
+services:
+  driskord:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      SERVER_NAME: "My Driskord server"
+      CLIENT_ORIGINS: "${CLIENT_ORIGINS:-}"
+      ICE_SERVERS: "${ICE_SERVERS:-[]}"
+    volumes:
+      - driskord-data:/data
+volumes:
+  driskord-data:

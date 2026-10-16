@@ -1,0 +1,174 @@
+# Driskord implementation guide
+
+This document describes the initial source implementation and is intended to be updated with future features. See README.md for setup and exact validation status. The implementation is an early private-community prototype; outstanding runtime/media validation is not implied by a feature being listed here.
+
+## Product decisions
+
+- English-only UI.
+- Independent self-hosted servers, identified by HTTP(S) origins. Each server owns accounts, friends, roles, messages, and files.
+- The first account owns a new server. All later accounts use the Member role.
+- Up to eight peers per voice channel. Mesh WebRTC, not an SFU.
+- Text channels, DMs, attachments, all six requested messaging extras, and all six requested calling extras.
+- Community extras were not selected; the response instead requested this implementation document. The only channel visibility model in v1 is public text/voice channels; DMs are private to their participants.
+
+## File map and boundaries
+
+| File | Responsibility |
+| --- | --- |
+| `electron/main.cjs` | Single-instance desktop lifecycle, isolated renderer, permissions, storage IPC and screen/window picker |
+| `electron/renderer-server.cjs` | Local UI-only static asset server with CSP, host/path validation, and no community APIs |
+| `electron/preload.cjs` | Narrow allowlisted client-state storage bridge |
+| `electron/client-state.cjs` | Atomic client settings/session persistence independent of renderer port; OS encryption when available |
+| `electron-builder.cjs` | Per-user Windows x64 NSIS installer configuration |
+| `.github/workflows/windows.yml` | Manually triggered Windows build/test/artifact workflow |
+| `server/index.js` | Standalone entry, environment configuration, signals |
+| `server/app.js` | App factory, REST endpoints, session/permission enforcement, live events, presence and call signaling |
+| `server/schema.sql` | Initial SQLite schema and indexes |
+| `server/security.js` | Password/token hashing and pure permission/conversation-access helpers |
+| `src/main.tsx` | Application/auth shell, chat, friend list, settings, dialogs, REST and socket state coordination, media tiles |
+| `src/useCall.ts` | Media stream ownership, peer connections, signaling, mute/deafen, PTT, camera and screen track lifecycle |
+| `src/types.ts`, `src/desktop.d.ts` | Client contracts, preload storage API, and Vite client/CSS declarations |
+| `src/style.css` | Responsive dark desktop layout and component styles; no third-party font requests |
+| `test/security.test.js` | Dependency-free password, token, permission and DM-access tests |
+| `test/schema.test.js` | Dependency-free SQLite constraints and cascade behavior |
+| `test/server.test.js` | Temporary-server integration tests with real Socket.IO clients |
+| `test/desktop.test.js` | Desktop storage persistence, encryption integration, asset-host isolation and installer configuration |
+| `Dockerfile`, `compose.yaml` | Standalone web/server deployment and persistent data volume |
+
+The UI is shared by browser and Electron. No Node.js primitives are exposed to renderer content; the preload exposes only get/set/remove of the connection and preferences keys. The Electron shell hosts only renderer assets on localhost and does not import the community server or create a community database. Remote community connections go through HTTP and Socket.IO, so the backend can later be moved to another runtime without replacing the UI. The current renderer keeps components together for initial delivery; extract `ChatView`, `FriendsView`, and `SettingsDialog` into separate modules when extending their behavior.
+
+## Data model
+
+SQLite runs in WAL mode with foreign keys. All SQL inputs use bound parameters. The schema is idempotent for fresh/repeated startup; there is no versioned migration framework yet. Before changing existing tables, introduce a schema-version table and transactional migrations rather than editing only CREATE TABLE IF NOT EXISTS.
+
+- `roles`: ID, name, hex name color, JSON permission array.
+- `users`: UUID, unique case-insensitive username, salted scrypt hash, role FK, reserved banned flag.
+- `sessions`: SHA-256 hash of a random 256-bit bearer token, user FK, expiration. Tokens last 30 days. Expired rows are cleaned during authentication requests.
+- `channels`: ID, lowercase name, `text` or `voice` kind.
+- `messages`: UUID, conversation key, author FK, plain-text body, creation/edit timestamps, pinned flag.
+- `attachments`: UUID, message FK, original filename, forced binary MIME, base64 payload. Cascade deletion with the message.
+- `reactions`: message/user/emoji primary key. Cascade deletion with the message.
+- `friends`: sender/recipient primary key, accepted flag. A reverse request accepts an incoming request.
+- `settings`: key/value store (currently server name).
+
+Text conversation keys are channel IDs. DM keys are `dm:<smaller-user-UUID>:<larger-user-UUID>` using lexicographic sort in the client. The server checks exactly two existing, distinct participants and requester membership. All attachment access derives from its owning message's conversation. Account rosters are visible to server members. DMs can be initiated from any member, even before friendship acceptance.
+
+Attachments are intentionally simple and capped at 5 MB. Before larger deployments, move file bytes out of SQLite, stream uploads/downloads, enforce disk quotas, and add retention controls. Message insertion and attachment insertion are currently separate synchronous statements; use a database transaction when expanding upload processing.
+
+## Authentication and authorization
+
+Clients send `Authorization: Bearer <token>` over HTTP and `auth.token` in the Socket.IO handshake. Session tokens are hashed in the database; the browser client token lives in localStorage; the desktop client uses the narrow preload storage bridge to persist it across temporary UI-port changes. On Windows, safeStorage encrypts client-state.dat with the current OS user key. Without encryption support, the client falls back to user-filesystem-protected plaintext (matching the browser localStorage trust model). Log out revokes the token and disconnects sockets with that token. Socket middleware revalidates the session and role on every incoming event. An idle socket may remain connected after token expiration until its next event; add scheduled session expiry enforcement before broader deployments.
+
+Owner always has all permissions. Other roles have independent `send`, `voice`, and `manage` permissions:
+
+| Permission | Capabilities |
+| --- | --- |
+| `send` | New messages and attachments |
+| `voice` | Join voice channels and signal peers |
+| `manage` | Server naming, channel creation, non-management role editing/creation, pin/unpin and deletion of other users' messages |
+
+Only Owner assigns user roles or grants/edits roles containing `manage`. Owner cannot be demoted by the current API. Message authors can edit/delete their existing messages and any conversation participant can react, even if the role no longer permits new messages. Pinning requires management permission and conversation access. Clients losing voice permission receive `call:revoked`, and all other participants receive an updated call roster so their connections close.
+
+All channels are readable by all authenticated users. Do not implement private-channel UI alone: apply visibility checks consistently to state/rosters, message history, live event routing, attachments, typing, call joins, and signals. Public messages currently broadcast to all authenticated sockets; this must change when channel membership becomes private.
+
+The prototype uses synchronous scrypt and database queries. Auth attempts have a per-IP, in-memory 20/minute limit; behind a reverse proxy, clients share that proxy's IP unless a safe trusted-proxy strategy is added. Registration is open. Before public distribution, add registration controls, comprehensive route/socket throttles, asynchronous password hashing, quotas, audit logging, session management, backups, and recovery. Open registration plus first-user ownership means initial bootstrap must happen before exposure.
+
+Electron enables context isolation and sandboxing and disables Node integration. The preload storage IPC checks that requests originate from the local UI origin, restricts keys to connection/preferences and limits JSON values to 16 KB. New windows are denied and navigation is constrained to the renderer origin. Media/notification permissions are restricted to that local origin. The production server sends a CSP header that prevents remote scripts, object embeds, and inline scripts (the Vite development server uses its own development behavior); remote HTTP(S)/WebSocket connections remain enabled to support arbitrary self-hosted servers. Changing renderer-origin handling requires reviewing the permission handlers and CSP together.
+
+## REST API
+
+All `/api` routes except `/info` and `/auth/:action` require a session. Errors return `{error: string}` with an HTTP status. Auth returns `{token,user}`. State is a snapshot; state-changing endpoints broadcast `refresh` where relevant.
+
+| Method | Path | Operation |
+| --- | --- | --- |
+| GET | `/api/info` | Server name and registration availability |
+| POST | `/api/auth/register`, `/api/auth/login` | `{username,password}`; register/sign in |
+| POST | `/api/logout` | Revoke current session |
+| GET | `/api/state` | Current user, users, roles, channels, friends, online IDs, call roster, ICE config |
+| GET | `/api/messages?room=...&search=...` | Latest 500 accessible messages; optional substring filter |
+| POST | `/api/messages` | `{room,body,attachment?:{name,data}}`; base64 attachment |
+| PATCH | `/api/messages/:id` | `{body? ,pinned?}` with separate permission checks |
+| DELETE | `/api/messages/:id` | Delete owned message or manager-moderated message |
+| POST | `/api/messages/:id/reaction` | Toggle `{emoji}` from the allowed set |
+| GET | `/api/attachments/:id` | Authorized binary download with Content-Disposition attachment |
+| POST | `/api/friends` | `{username}`; request or accept incoming request |
+| DELETE | `/api/friends/:id` | Remove friendship or request |
+| POST | `/api/channels` | `{name,kind}`; manager only |
+| POST | `/api/roles` | `{name,color,permissions}` |
+| PATCH | `/api/roles/:id` | Edit name/color/permissions, preserving Owner role |
+| PATCH | `/api/users/:id/role` | `{role}`; owner only |
+| PATCH | `/api/settings` | `{name}`; manager only |
+
+## Socket contract
+
+Server → client:
+
+- `refresh`: fetch a new `/state` snapshot.
+- `message`: complete new message including attachment metadata and reactions.
+- `message:update`: replacement message.
+- `message:delete`: `{id,room}`.
+- `typing`: `{room,user}`.
+- `calls`: full `[{socket,user,channel}]` roster.
+- `signal`: `{from,user,data}`; a peer's WebRTC description or ICE candidate.
+- `call:revoked`: local call access was revoked; stop capture and close peers.
+
+Client → server:
+
+- `typing(room)`: authorized conversation only.
+- `call:join(channel, acknowledgement)`: ack `{peers}` or `{error}`; voice permission, channel kind, single device per user and eight-person cap are checked.
+- `call:leave()`: clear membership.
+- `signal({to,data})`: relay only between sockets in the same active voice channel.
+
+Public channel events are broadcast. DM events target participant-specific socket rooms. Clients deduplicate message IDs. Unread badges are in-memory, not synced read receipts. Socket reconnection reloads presence/state and the currently open conversation. Other conversations refresh when opened. Add cursor reconciliation and unread synchronization before depending on offline delivery.
+
+## Media lifecycle
+
+`useCall` owns all acquired streams and peer connections. Leaving, disconnecting, or unmounting stops microphone/camera/screen tracks. Joining acquires the selected microphone, asks the server to join, then creates connections to existing peers. Incoming peers connect via authenticated signal events. Socket-ID ordering determines the polite peer during offer collisions; candidates queue until a remote description exists.
+
+Each peer has an audio sender and a send/receive video transceiver. Screen sharing replaces that video sender's track. Stopping sharing restores the camera if active. Camera and screen are not sent simultaneously. No system audio track is captured. Resolution is a browser constraint preference, not guaranteed actual encoded resolution or bitrate. The initial sender has no explicit bitrate adaptation policy.
+
+PTT uses focused-window keyboard events. Input fields are excluded and blur releases the key, avoiding stuck microphone transmission. Mute and deafen gate the local microphone; deafen also silences remote media elements. Remote audio output is set per video element via `setSinkId` when supported. Volume is local to each participant tile and resets when that peer reconnects. Noise controls use browser capture constraints, not custom DSP. A short Web Audio tone provides call feedback.
+
+The Electron screen picker uses the native system picker where supported and a source-name choice dialog as fallback. Screen/window permissions and behavior, especially Wayland portals and macOS permissions, need platform testing. The browser uses its normal getDisplayMedia picker.
+
+Mesh means N×(N−1) directional peer links: eight participants can require seven outgoing media copies per sender, so the cap is a functional limit, not a performance guarantee. For larger calls, replace signaling/media transport with an SFU (e.g. a self-hosted media service), while keeping server-side account/channel authorization. TURN relay bandwidth also scales with media traffic.
+
+## Extension priorities
+
+1. Install dependencies, retain the generated lockfile, run strict checks/build/integration tests, and validate two real clients with microphone/camera/screen capture.
+2. Extract UI and API groups into modules and introduce versioned migrations/shared runtime request schemas.
+3. Add cursor-based message history, reconnect reconciliation, indexed full-history search, independent pin retrieval, persistent per-user read state, and server pagination.
+4. Add registration controls, reliable session expiry, upload quotas/streaming, recovery, async password hashing, structured errors and comprehensive request/event limits.
+5. Add optional community features only after confirming scope: private channels, expiring invites, moderation, nicknames, icons and saved server accounts.
+6. Validate the Windows packaging path, add signing and an update strategy, then per-platform capture/output tests and device-loss recovery.
+
+## Windows packaging and connection defaults
+
+`npm run dist:win` runs the actual type check and Vite build, then invokes pinned `electron-builder@26.0.12` via npm exec. This tool is downloaded on demand; it does not change the app dependency lockfile. The build requires registry/Electron/NSIS downloads. The existing app lockfile should be committed and used with npm ci on CI. Configuration is in electron-builder.cjs:
+
+- Stable app ID `org.driskord.desktop` (also set as the Windows AppUserModelId).
+- Product name Driskord; x64 NSIS target; output `release/Driskord-${version}-${arch}-Setup.exe`.
+- Per-user assisted install, no elevation, directory selection and shortcuts.
+- App assets and Electron shell packaged in ASAR; server source, databases, tests, .env and release output are not selected as application source. Electron-builder also collects declared production dependencies.
+- No native app dependency rebuilding is required; the desktop shell uses Node/Electron built-ins.
+- No automatic publishing, updater or signing configuration. Keep app ID stable and increase package.json version for later releases. Manual upgrades preserve user data.
+
+The workflow `.github/workflows/windows.yml` is workflow_dispatch only, uses a Windows runner/Node 24, installs application dependencies with npm ci, runs checks/tests, and uploads the EXE as a 14-day Actions artifact. It does not create GitHub Releases. No workflow has been run from this environment.
+
+VITE_DEFAULT_SERVER_URL can prefill a public server origin when building. It is visible in the renderer bundle and must not contain credentials or secrets. Without this variable, Electron shows a blank required server field; browser clients default to their hosting origin (Vite development defaults to localhost:3001). Saved connections override defaults. The localhost port used by the desktop is UI infrastructure only, never the suggested community address. Friends run the shared server separately.
+
+Client state is written atomically under userData/client-state.dat so sessions/preferences survive port changes, relaunch and installer upgrades. Electron uses safeStorage when available. Tests use an encryption-service stub; actual Windows DPAPI behavior is not validated here. Earlier embedded-server databases are neither migrated nor deleted; use their original standalone data directory if those accounts need to be preserved.
+
+## Validation record
+
+Verified after application dependencies became available:
+
+- Actual `npm run check`: passes, including Vite/CSS and preload declarations.
+- Actual `npm run build`: passes with installed Vite 8.3.4/React 19.3.1.
+- `npm run test:unit`: nine tests pass (four security, one SQLite schema, four desktop).
+- JavaScript syntax checks on server, desktop, packaging config and tests.
+- Installer command reaches the packaging step after successful check/build, then fails with EAI_AGAIN resolving registry.npmjs.org for electron-builder. No installer artifact was generated.
+
+The integration suite is present but cannot run in this sandbox: binding its temporary HTTP server fails with listen EPERM on 127.0.0.1. Full npm test therefore does not pass here. Unlike the earlier source-only validation, the renderer's real production build/type check now pass; the old dependency-install blocker applies specifically to the newly required packaging tool.
+
+Still outstanding: installer/Windows-runner execution, Electron UI launch, Windows install/relaunch/upgrade/uninstall, actual OS encryption, real-client integration, Docker, hardware voice/video/screen capture, eight-person load, internet NAT/TURN behavior and accessibility/platform validation. These must not be reported as passed until exercised.

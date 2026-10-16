@@ -1,0 +1,14 @@
+PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
+    CREATE TABLE IF NOT EXISTS roles(id TEXT PRIMARY KEY,name TEXT,color TEXT,permissions TEXT);
+    CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,username TEXT UNIQUE COLLATE NOCASE,password TEXT,role TEXT REFERENCES roles(id),banned INTEGER DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user TEXT REFERENCES users(id),expires INTEGER);
+    CREATE TABLE IF NOT EXISTS channels(id TEXT PRIMARY KEY,name TEXT,kind TEXT);
+    CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,room TEXT,author TEXT REFERENCES users(id),body TEXT,created INTEGER,edited INTEGER,pinned INTEGER DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS attachments(id TEXT PRIMARY KEY,message TEXT REFERENCES messages(id) ON DELETE CASCADE,name TEXT,mime TEXT,data TEXT);
+    CREATE TABLE IF NOT EXISTS reactions(message TEXT REFERENCES messages(id) ON DELETE CASCADE,user TEXT REFERENCES users(id),emoji TEXT,PRIMARY KEY(message,user,emoji));
+    CREATE TABLE IF NOT EXISTS friends(sender TEXT REFERENCES users(id),recipient TEXT REFERENCES users(id),accepted INTEGER DEFAULT 0,PRIMARY KEY(sender,recipient));
+    CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT);
+CREATE INDEX IF NOT EXISTS messages_room_created ON messages(room,created);
+CREATE INDEX IF NOT EXISTS attachments_message ON attachments(message);
+CREATE INDEX IF NOT EXISTS reactions_message ON reactions(message);
+CREATE INDEX IF NOT EXISTS friends_recipient ON friends(recipient);

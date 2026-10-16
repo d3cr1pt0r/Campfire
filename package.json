@@ -1,0 +1,38 @@
+{
+  "name": "driskord",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "server": "node server/index.js",
+    "build": "vite build",
+    "start": "npm run build && electron .",
+    "test": "node --test",
+    "check": "tsc --noEmit",
+    "test:unit": "node test/security.test.js && node test/schema.test.js && node test/desktop.test.js",
+    "dist:win": "npm run check && npm run build && npm exec --yes --package=electron-builder@26.0.12 -- electron-builder --config electron-builder.cjs --win nsis --x64 --publish never"
+  },
+  "dependencies": {
+    "express": "latest",
+    "socket.io": "latest",
+    "socket.io-client": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "lucide-react": "latest"
+  },
+  "devDependencies": {
+    "electron": "latest",
+    "vite": "latest",
+    "@vitejs/plugin-react": "latest",
+    "typescript": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@types/node": "latest"
+  },
+  "description": "Self-hosted community chat, voice, and video"
+}
