@@ -283,5 +283,5 @@ export function useCall(socket: Socket | null, prefs: Preferences, iceServers: R
             captureBusy.current.share = false;
         }
     };
-    return { showDetails, setShowDetails, details, channel, join, leave, muted, setMuted, deafened, setDeafened, camera, sharing, toggleCamera, toggleShare, local, remote };
+    return { microphone: audio.current, showDetails, setShowDetails, details, channel, join, leave, muted, setMuted, deafened, setDeafened, camera, sharing, toggleCamera, toggleShare, local, remote };
 }

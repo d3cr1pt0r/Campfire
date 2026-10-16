@@ -139,6 +139,8 @@ Private channels, moderation/ban UI, nicknames, custom server icons, saved multi
 
 ## Microphone troubleshooting
 
+In **Settings → Voice & video**, choose an input and click **Start microphone test**. Speak to see live level bars, a dBFS reading and input-detected/muted/clipping status. Click **Stop microphone test** when finished; closing the settings tab also stops the meter. During a call, it measures the existing call microphone without opening another device or bypassing mute/push-to-talk. The meter indicates local input, not whether a friend receives your audio.
+
 If voice join fails before connecting, select **Settings → Voice & video → Input device → System default**, then click **Allow microphone & refresh devices**. The client reports the native error name even when the browser supplies no error text. An expired/disconnected saved input is retried once with System default and the saved preference is reset only when that succeeds.
 
 On Linux, `NotReadableError` suggests checking your active audio service and input routing; `NotFoundError` means no suitable microphone was available; `NotAllowedError` means permission was denied. You can inspect your current system audio session from a normal terminal with `wpctl status` (PipeWire) or `pactl info` / `pactl list short sources` (PulseAudio-compatible server). Check the microphone in your system sound settings and avoid launching the app with sudo. These checks concern local capture, not STUN ports.
@@ -151,6 +153,12 @@ Update both clients before testing these client-side voice fixes. On Linux resta
 
 If audio remains one-way, open **Call details** on both clients and speak in turn. Note the connection/ICE state, audio direction, sent/received packet counts and input/incoming audio levels. Counts that increase with no incoming speech level can still represent silence. Increasing received packets and a visible incoming speech level with no audible sound suggest playback/output routing; no received packets or an inactive audio direction require transport/negotiation investigation. Share both sets of values rather than assuming every failure requires TURN. STUN cannot guarantee a direct path on every network.
 
+## Enlarge a screen share or camera video
+
+Click the **expand icon** in the top-right corner of a video tile, or double-click the tile's video, to open a large viewer. It fits the entire picture inside the app window without cropping. The viewer's **Full screen** button (or double-clicking its video) switches to native full screen. Use **Return to call**, the close button, or Escape to return; when native full screen is active, Escape exits full screen first.
+
+Participant volume and a blocked-audio Play audio control remain available in the expanded viewer. Voice continues through the original audio element, so opening/closing the viewer does not create duplicate audio or disconnect the call. This works for received screen shares, cameras and your own video preview. Update/restart the client or rebuild the Windows portable EXE to receive the feature.
+
 ## Validation
 
 ```bash
@@ -161,6 +169,6 @@ npm test
 
 The integration suite covers separate accounts/clients, live messages, DM isolation, friendship acceptance, edit/delete authorization, reactions, pin permissions, attachments, role changes, signaling, logout, and restart persistence. It uses temporary databases and ports. It does not test real microphone/camera hardware or NAT traversal.
 
-**Current environment result:** actual `npm run check` and `npm run build` now pass with installed dependencies; 27 unit tests pass across security, SQLite schema, desktop state, microphone capture and voice signaling/playback helpers. Server integration tests are blocked here because the sandbox denies listening on localhost (`listen EPERM`). The portable build command completes checking/building but cannot download electron-builder because npm DNS is unavailable. No `.exe` has been produced or tested here. Electron launch, Docker build, live media, and Windows portable launch still need validation. The existing package lock pins application dependencies; the packaging tool is separately pinned in the build command.
+**Current environment result:** actual `npm run check` and `npm run build` now pass with installed dependencies; 36 unit tests pass across security, SQLite schema, desktop state, microphone capture, voice signaling/playback and microphone metering. Server integration tests are blocked here because the sandbox denies listening on localhost (`listen EPERM`). The portable build command completes checking/building but cannot download electron-builder because npm DNS is unavailable. No `.exe` has been produced or tested here. Electron launch, Docker build, live media, and Windows portable launch still need validation. The existing package lock pins application dependencies; the packaging tool is separately pinned in the build command.
 
 See [IMPLEMENTATION.md](IMPLEMENTATION.md) for architecture, data model, event/API contracts, extension guidance, and remaining work.

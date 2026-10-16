@@ -27,8 +27,10 @@ This document describes the initial source implementation and is intended to be 
 | `server/security.js` | Password/token hashing and pure permission/conversation-access helpers |
 | `src/main.tsx` | Application/auth shell, chat, friend list, settings, dialogs, REST and socket state coordination, media tiles |
 | `src/media.ts` | Shared microphone acquisition, unavailable-device recovery and capture diagnostics |
+| `src/MicrophoneMeter.tsx`, `src/microphoneMonitor.ts` | On-demand settings input meter, signal measurement and capture/analysis resource lifecycle |
 | `src/signaling.ts` | Serialized peer signaling, offer ownership, collision handling and queued ICE |
 | `src/MediaTile.tsx`, `src/playback.ts` | Separate remote audio/video playback, explicit playback retry and output-device recovery |
+| `src/ExpandedVideo.tsx` | Portal-based large video viewer, full screen, keyboard focus and shared participant volume |
 | `src/useCall.ts` | Media stream ownership, peer connections, signaling, mute/deafen, PTT, camera and screen track lifecycle |
 | `src/types.ts`, `src/desktop.d.ts` | Client contracts, preload storage API, and Vite client/CSS declarations |
 | `src/style.css` | Responsive dark desktop layout and component styles; no third-party font requests |
@@ -130,7 +132,7 @@ Public channel events are broadcast. DM events target participant-specific socke
 
 Each peer has an audio sender and a send/receive video transceiver. Screen sharing replaces that video sender's track. Stopping sharing restores the camera if active. Camera and screen are not sent simultaneously. No system audio track is captured. Resolution is a browser constraint preference, not guaranteed actual encoded resolution or bitrate. The initial sender has no explicit bitrate adaptation policy.
 
-PTT uses focused-window keyboard events. Input fields are excluded and blur releases the key, avoiding stuck microphone transmission. Mute and deafen gate the local microphone; deafen also silences remote media elements. Remote audio output is set per video element via `setSinkId` when supported. Volume is local to each participant tile and resets when that peer reconnects. Noise controls use browser capture constraints, not custom DSP. A short Web Audio tone provides call feedback.
+PTT uses focused-window keyboard events. Input fields are excluded and blur releases the key, avoiding stuck microphone transmission. Mute and deafen gate the local microphone; deafen also silences remote media elements. Remote audio output is set per dedicated audio element via `setSinkId` when supported. Volume is local to each participant tile and resets when that peer reconnects. Noise controls use browser capture constraints, not custom DSP. A short Web Audio tone provides call feedback.
 
 The Electron screen picker uses the native system picker where supported and a source-name choice dialog as fallback. Screen/window permissions and behavior, especially Wayland portals and macOS permissions, need platform testing. The browser uses its normal getDisplayMedia picker.
 
@@ -198,13 +200,31 @@ Manual validation: update both clients (Linux npm start; rebuild/re-download the
 
 Validation: type checking/production build and 27 unit tests pass, including ten added voice tests for negotiation races, early ICE, canceled/rejected signaling, output routing and separation of audio from video changes. Hardware capture/playback and two real remote clients remain unverified because this sandbox cannot launch Electron or use audio/network services.
 
+## Visual microphone input meter
+
+Voice & video settings now includes a Microphone level card immediately below the input selector. Start microphone test opts into live analysis; Stop ends it. The segmented bar maps RMS input from -60 to 0 dBFS onto 0–100%, labels the current dBFS reading, and provides text for input detected, no input, muted, paused and near-full-scale/clipping. It measures sound amplitude, not speech recognition or network delivery. RMS >= 0.003 marks input activity and absolute sample peak >= 0.98 marks a potentially clipping signal. Audio processing follows the selected noise/echo/AGC preference, so this is post-browser-capture processing rather than a calibrated hardware sound-pressure measurement.
+
+A Web Audio MediaStream source connects only to an AnalyserNode (2048 samples), never speakers. Analysis samples at most every 80 ms while the settings test is active. A suspended context shows Resume meter so a user gesture can resume analysis. The monitor records/uploads nothing. Outside a call, it acquires the selected input through the shared microphone helper and owns/stops that test stream. During a call, it borrows the call's existing microphone and respects its mute/deafen/PTT track state. Stopping/closing the meter never stops or enables a borrowed call track. Input settings changed during a call still take effect on rejoin, as the card explains.
+
+Closing settings, switching settings tabs, stopping the test or changing the selected input/noise preference cleans up animation callbacks, analysis nodes and its AudioContext. Late permission/capture results after cancellation have their owned tracks immediately stopped. Disconnecting a microphone stops analysis and displays guidance. Changes to input/noise automatically restart an already-enabled test; tests never start merely by opening settings.
+
+Nine meter tests verify known-wave RMS/dBFS math, silence, clipping/non-finite samples, owned versus borrowed capture cleanup, late permission responses, denied capture, suspended/muted readings and disconnect/fallback behavior. Type check and production build pass. Actual microphone UI, hardware levels and Electron rendering remain unverified in the restricted environment; manual acceptance is to start the test, speak and observe the bars, change inputs, stop/close and confirm capture release, then repeat during a call and confirm call audio continues after stopping the meter. On Windows, rebuild/re-download the portable EXE; Linux source users restart npm start. The app version remains 0.1.2.
+
+## Expanded screen-share and camera viewer
+
+Tiles with an active video expose an Expand video button and video double-click action. The viewer is portaled to document.body so call-panel height/overflow constraints do not clip it. A muted video element displays the same existing video-only MediaStream at app-window size with object-fit contain. The underlying tile and its dedicated audio element stay mounted; the viewer never creates another peer, audio output element, capture stream or network subscription. Participant volume operates on the original tile's state, and blocked audio can be resumed from the viewer.
+
+Full screen uses the standard user-gesture Fullscreen API; Electron's existing trusted-origin permission handlers now also allow fullscreen. A denied/unsupported native full-screen request leaves the large app-window viewer usable. Close/Return to call returns focus to the opener. Escape exits native full screen first or closes the viewer when not in native full screen; Tab navigation is contained within viewer controls. Video loss/peer departure closes or unmounts the viewer. Cleanup pauses/detaches only the extra video element and exits full screen when appropriate; it never stops shared tracks. A separate state reference for the visible video stream keeps a local preview updated when camera/screen source changes.
+
+No signaling/schema/version changes are required; the app remains 0.1.2. Type check, production build and the existing 36 unit tests pass. Real Electron/browser fullscreen, resizing and remote media remain unverified in the restricted environment. Manual acceptance: expand a remote share and local preview, inspect aspect-ratio preservation at different window sizes, enter/exit native full screen, use Escape/keyboard navigation, change participant volume, stop the share or leave the call while expanded, and confirm voice continues without duplication after closing the viewer.
+
 ## Validation record
 
 Verified after application dependencies became available:
 
 - Actual `npm run check`: passes, including Vite/CSS and preload declarations.
 - Actual `npm run build`: passes with installed Vite 8.3.4/React 19.3.1.
-- `npm run test:unit`: 27 tests pass (four security, one SQLite schema, four desktop, eight microphone, ten voice).
+- `npm run test:unit`: 36 tests pass (four security, one SQLite schema, four desktop, eight microphone, ten voice, nine microphone-meter).
 - JavaScript syntax checks on server, desktop, packaging config and tests.
 - Portable build command reaches the packaging step after successful check/build, then fails with EAI_AGAIN resolving registry.npmjs.org for electron-builder. No Windows executable artifact was generated.
 

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Maximize2 } from 'lucide-react';
+import { ExpandedVideo } from './ExpandedVideo';
 import { playbackError, selectAudioOutput, syncPlaybackTracks } from './playback';
 
 export function MediaTile({ stream, name, muted = false, preview = false, output = '', onOutputFallback }: {
@@ -11,7 +13,9 @@ export function MediaTile({ stream, name, muted = false, preview = false, output
 }) {
     const audioRef = useRef<HTMLAudioElement>(null), videoRef = useRef<HTMLVideoElement>(null);
     const [volume, setVolume] = useState(1), [audioError, setAudioError] = useState(''), [outputNotice, setOutputNotice] = useState('');
-    const [hasVideo, setHasVideo] = useState(false);
+    const [hasVideo, setHasVideo] = useState(false), [expanded, setExpanded] = useState(false);
+    const [visibleStream, setVisibleStream] = useState<MediaStream | null>(null);
+    useEffect(() => { if (!hasVideo) setExpanded(false); }, [hasVideo]);
     const fallback = useRef(onOutputFallback); fallback.current = onOutputFallback;
     const outputQueue = useRef(Promise.resolve());
     const playbackVersion = useRef(0);
@@ -30,6 +34,7 @@ export function MediaTile({ stream, name, muted = false, preview = false, output
         // Video/camera track changes cannot replace or mute the audio element.
         audio.srcObject = audible;
         video.srcObject = visible;
+        setVisibleStream(visible);
         const observed = new Set<MediaStreamTrack>();
         const update = () => {
             if (!active) return;
@@ -80,7 +85,9 @@ export function MediaTile({ stream, name, muted = false, preview = false, output
     return <div className={`media-tile ${preview ? 'preview' : ''}`}>
         <div className="media-placeholder">{initials}<small>{preview ? 'Your camera preview' : 'Call participant'}</small></div>
         <audio ref={audioRef} autoPlay muted={muted || preview} />
-        <video style={{ opacity: hasVideo ? 1 : 0 }} ref={videoRef} autoPlay playsInline muted />
+        <video style={{ opacity: hasVideo ? 1 : 0 }} ref={videoRef} autoPlay playsInline muted title={hasVideo ? "Double-click to expand video" : undefined} onDoubleClick={() => { if (hasVideo) setExpanded(true); }} />
+        {hasVideo && <button type="button" className="expand-video" title="Expand video" aria-label={`Expand video from ${name}`} onClick={() => setExpanded(true)}><Maximize2 size={17} /></button>}
+        {expanded && hasVideo && <ExpandedVideo stream={visibleStream} name={name} preview={preview} volume={volume} onVolume={setVolume} audioError={audioError} onPlayAudio={() => void playAudio()} onClose={() => setExpanded(false)} />}
         <span className="media-name">{name}{muted && !preview ? ' · Deafened' : ''}</span>
         {(audioError || outputNotice) && <div className="media-notices" role="status">
             {audioError && <><span>{audioError}</span><button onClick={() => void playAudio()}>Play audio</button></>}
