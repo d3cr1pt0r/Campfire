@@ -21,7 +21,7 @@ import { registerPresence } from './presence.js';
 export function createApp({
     dataDir = 'data',
     origins = [],
-    name = 'My Driskord server',
+    name = 'My Campfire server',
     iceServers = [],
     trustProxy = false,
     maxStoredUploadBytes = 1024 * 1024 * 1024,

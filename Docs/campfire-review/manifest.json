@@ -1,0 +1,194 @@
+{
+  "baseline": "f7e55c1027027e97da01994285c0988fcc3055a4",
+  "viewport": {
+    "width": 1440,
+    "height": 960
+  },
+  "screens": [
+    {
+      "id": "chat",
+      "title": "Chat & members"
+    },
+    {
+      "id": "attachments",
+      "title": "Attachment composer"
+    },
+    {
+      "id": "friends-empty",
+      "title": "Friends · empty state"
+    },
+    {
+      "id": "account-profile",
+      "title": "Profile & avatar settings"
+    },
+    {
+      "id": "audio-advanced",
+      "title": "Advanced voice & video settings"
+    },
+    {
+      "id": "auth-open",
+      "title": "Open registration"
+    },
+    {
+      "id": "pins",
+      "title": "Pinned messages"
+    },
+    {
+      "id": "search",
+      "title": "Search messages"
+    },
+    {
+      "id": "thread",
+      "title": "Thread replies"
+    },
+    {
+      "id": "dm",
+      "title": "Direct messages"
+    },
+    {
+      "id": "friends",
+      "title": "Friends"
+    },
+    {
+      "id": "requests",
+      "title": "Friend requests"
+    },
+    {
+      "id": "settings-account",
+      "title": "Settings · account"
+    },
+    {
+      "id": "settings-audio",
+      "title": "Settings · audio"
+    },
+    {
+      "id": "settings-notifications",
+      "title": "Settings · notifications"
+    },
+    {
+      "id": "settings-server",
+      "title": "Settings · server"
+    },
+    {
+      "id": "settings-roles",
+      "title": "Settings · roles"
+    },
+    {
+      "id": "settings-channels",
+      "title": "Settings · channels"
+    },
+    {
+      "id": "settings-emojis",
+      "title": "Settings · emojis"
+    },
+    {
+      "id": "registration",
+      "title": "Registration & invitations"
+    },
+    {
+      "id": "channel-editor",
+      "title": "Channel editor"
+    },
+    {
+      "id": "channel-delete",
+      "title": "Delete channel confirmation"
+    },
+    {
+      "id": "role-delete",
+      "title": "Delete role confirmation"
+    },
+    {
+      "id": "switch",
+      "title": "Connect to another server"
+    },
+    {
+      "id": "friend",
+      "title": "Add friend"
+    },
+    {
+      "id": "channel-text",
+      "title": "Create text channel"
+    },
+    {
+      "id": "channel-voice",
+      "title": "Create voice channel"
+    },
+    {
+      "id": "edit",
+      "title": "Edit message"
+    },
+    {
+      "id": "role-new",
+      "title": "Create role"
+    },
+    {
+      "id": "role-regular",
+      "title": "Edit role"
+    },
+    {
+      "id": "emoji",
+      "title": "Emoji picker"
+    },
+    {
+      "id": "reaction-m2",
+      "title": "Reaction picker"
+    },
+    {
+      "id": "delete-m2",
+      "title": "Delete message"
+    },
+    {
+      "id": "remove-mia",
+      "title": "Remove friend"
+    },
+    {
+      "id": "remove-jo",
+      "title": "Decline friend request"
+    },
+    {
+      "id": "invite-call",
+      "title": "Invite to call"
+    },
+    {
+      "id": "role-access",
+      "title": "Role channel permissions"
+    },
+    {
+      "id": "call",
+      "title": "Voice call & stream subscription"
+    },
+    {
+      "id": "image",
+      "title": "Expanded image viewer"
+    },
+    {
+      "id": "video",
+      "title": "Expanded screen / video viewer"
+    },
+    {
+      "id": "crop",
+      "title": "Avatar cropper"
+    },
+    {
+      "id": "toast",
+      "title": "Notification / error toast"
+    },
+    {
+      "id": "auth-register",
+      "title": "Create account"
+    },
+    {
+      "id": "auth-login",
+      "title": "Sign in"
+    },
+    {
+      "id": "auth-setup",
+      "title": "First owner setup"
+    },
+    {
+      "id": "auth-error",
+      "title": "Connection error"
+    }
+  ],
+  "errors": []
+}

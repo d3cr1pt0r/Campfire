@@ -65,6 +65,7 @@ export function SettingsPanel({
     const [deleteRole, setDeleteRole] = useState<string | null>(null);
     const sections = [
         ['account', 'My account'],
+        ['appearance', 'Appearance'],
         ['audio', 'Voice & video'],
         ['notifications', 'Notifications'],
         ['server', 'Server settings'],
@@ -123,8 +124,58 @@ export function SettingsPanel({
                 </button>
             </nav>
             <div className="settings-content" key={settingsTab}>
-                {['audio', 'notifications'].includes(settingsTab) && (
+                {['appearance', 'audio', 'notifications'].includes(settingsTab) && (
                     <p className="field-help">Preferences save automatically on this device.</p>
+                )}
+                {settingsTab === 'appearance' && (
+                    <>
+                        <h3>Make yourself at home</h3>
+                        <p className="muted">
+                            Choose the light around your Campfire. System follows your device’s
+                            light or dark appearance.
+                        </p>
+                        <fieldset className="theme-options">
+                            <legend className="sr-only">Color theme</legend>
+                            {(
+                                [
+                                    ['system', 'System', 'Follow your device'],
+                                    ['dark', 'Dark', 'Ember · charcoal & amber'],
+                                    ['light', 'Light', 'Canvas · warm cream'],
+                                ] as const
+                            ).map(([value, title, description]) => (
+                                <label className="theme-choice" key={value}>
+                                    <span
+                                        className={`theme-preview theme-preview-${value}`}
+                                        aria-hidden="true"
+                                    >
+                                        <i />
+                                        <span>
+                                            <b />
+                                            <b />
+                                            <b />
+                                        </span>
+                                    </span>
+                                    <span className="theme-choice-label">
+                                        <strong>{title}</strong>
+                                        <small>{description}</small>
+                                    </span>
+                                    <input
+                                        type="radio"
+                                        name="theme"
+                                        value={value}
+                                        checked={(prefs.theme ?? 'system') === value}
+                                        onChange={() =>
+                                            setPrefs((previous) => ({ ...previous, theme: value }))
+                                        }
+                                    />
+                                </label>
+                            ))}
+                        </fieldset>
+                        <p className="field-help">
+                            This preference applies only to this client, including the sign-in
+                            screen.
+                        </p>
+                    </>
                 )}
                 {settingsTab === 'account' && (
                     <>

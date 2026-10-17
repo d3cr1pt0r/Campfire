@@ -1,4 +1,4 @@
-# Driskord
+# Campfire
 
 An English-only, self-hosted community chat app with an Electron desktop client and a reusable React browser interface. See [REWORK.md](REWORK.md) for architecture, upgrade instructions, storage quotas, and validation scope. This is an initial implementation, not Discord feature parity or a production-audited release.
 
@@ -130,10 +130,10 @@ The command type-checks and builds the interface, then downloads/runs the pinned
 Expected output (`VERSION` comes from `package.json`):
 
 ```text
-release/Driskord-VERSION-x64-Portable.exe
+release/Campfire-VERSION-x64-Portable.exe
 ```
 
-Send **that executable plus your shared server's HTTPS URL** to friends. They launch it, enter the server address, and create an account on your server. Your standalone server must remain running and reachable. To update, close Driskord and replace the old executable with the new one.
+Send **that executable plus your shared server's HTTPS URL** to friends. They launch it, enter the server address, and create an account on your server. Your standalone server must remain running and reachable. To update, close Campfire and replace the old executable with the new one.
 
 Portable means no installation: Electron's runtime is extracted to a temporary directory when launched, and settings/sign-in still live in the Windows user's AppData profile. They are not stored alongside the EXE, so copying it to another PC does not carry a signed-in session. Deleting the EXE leaves those local settings in place.
 
@@ -150,8 +150,8 @@ The address is public build configuration, not a secret, and remains editable in
 
 1. Put this project, including `package-lock.json` and `.github/workflows/windows.yml`, in your own GitHub repository.
 2. Open **Actions → Windows portable executable → Run workflow**. Optionally enter your public server URL.
-3. After a successful run, download the **Driskord-Windows-x64-Portable** artifact and unzip it.
-4. Send the contained `Driskord-…-x64-Portable.exe` to friends along with your server URL.
+3. After a successful run, download the **Campfire-Windows-x64-Portable** artifact and unzip it.
+4. Send the contained `Campfire-…-x64-Portable.exe` to friends along with your server URL.
 
 The workflow uses a Windows runner, installs locked dependencies, runs type checking and tests, builds the portable executable, and retains the artifact for 14 days. It does not publish a release or upload to an app store. No GitHub repository has been created or workflow run by this implementation.
 
@@ -171,32 +171,32 @@ This runs the type check, builds the interface, and packages two standalone clie
 Outputs (`VERSION` comes from `package.json`):
 
 ```text
-release/Driskord-VERSION-linux-x86_64.AppImage
-release/Driskord-VERSION-linux-x64.tar.gz
+release/Campfire-VERSION-linux-x86_64.AppImage
+release/Campfire-VERSION-linux-x64.tar.gz
 ```
 
 Both include Electron; users do not need Node.js or a local server. AppImage names the x64 architecture `x86_64`. Send the AppImage and your shared server URL. After downloading, make it executable and launch it:
 
 ```bash
-chmod +x Driskord-VERSION-linux-x86_64.AppImage
-./Driskord-VERSION-linux-x86_64.AppImage
+chmod +x Campfire-VERSION-linux-x86_64.AppImage
+./Campfire-VERSION-linux-x86_64.AppImage
 ```
 
 If the distribution lacks working FUSE support, use the archive instead:
 
 ```bash
-tar -xzf Driskord-VERSION-linux-x64.tar.gz
-cd Driskord-VERSION-linux-x64
+tar -xzf Campfire-VERSION-linux-x64.tar.gz
+cd Campfire-VERSION-linux-x64
 ./driskord
 ```
 
-Keep all extracted files together. Alternatively, AppImage supports `./Driskord-VERSION-linux-x86_64.AppImage --appimage-extract-and-run` without FUSE; this extracts the runtime on each launch. See the [AppImage FUSE guide](https://docs.appimage.org/user-guide/troubleshooting/fuse.html).
+Keep all extracted files together. Alternatively, AppImage supports `./Campfire-VERSION-linux-x86_64.AppImage --appimage-extract-and-run` without FUSE; this extracts the runtime on each launch. See the [AppImage FUSE guide](https://docs.appimage.org/user-guide/troubleshooting/fuse.html).
 
-Settings and sign-in remain in Electron's user-data directory (normally `~/.config/Driskord`, or under `XDG_CONFIG_HOME`). To update, close Driskord and replace the AppImage or the entire extracted archive directory. The server remains separate and must be reachable. Builds target Linux x64 with desktop libraries supported by Electron; they are not universal binaries for ARM or every Linux distribution. Screen capture and device permissions depend on the desktop session and available portals. No sandbox-disabling flags are included in the launch commands.
+Settings and sign-in remain in Electron's user-data directory (legacy profile `~/.config/Driskord`, or under `XDG_CONFIG_HOME`). To update, close Campfire and replace the AppImage or the entire extracted archive directory. The server remains separate and must be reachable. Builds target Linux x64 with desktop libraries supported by Electron; they are not universal binaries for ARM or every Linux distribution. Screen capture and device permissions depend on the desktop session and available portals. No sandbox-disabling flags are included in the launch commands.
 
 To prefill your public server URL, build with `VITE_DEFAULT_SERVER_URL=https://chat.example.com npm run dist:linux`. Saved connections take precedence, and the address remains editable.
 
-For a hosted build, open **Actions → Linux standalone builds → Run workflow**, optionally set the server URL, and download **Driskord-Linux-x64-Standalone** after it finishes. The workflow runs checks and tests and retains both packages for 14 days; it does not publish a release automatically.
+For a hosted build, open **Actions → Linux standalone builds → Run workflow**, optionally set the server URL, and download **Campfire-Linux-x64-Standalone** after it finishes. The workflow runs checks and tests and retains both packages for 14 days; it does not publish a release automatically.
 
 ## Implemented scope
 
@@ -270,7 +270,7 @@ Voice and Stream volume controls and a blocked-audio Play audio control remain a
 
 ## Share system audio
 
-Rebuild/download the updated Windows portable EXE, join a voice channel, and start screen sharing. Leave **Share system audio** checked in the source picker. This captures audio from all applications even when sharing one window. The capture requests exclusion of Driskord's own playback to avoid sending the call back to participants; verify this on the actual Windows build. Use headphones during the first test.
+Rebuild/download the updated Windows portable EXE, join a voice channel, and start screen sharing. Leave **Share system audio** checked in the source picker. This captures audio from all applications even when sharing one window. The capture requests exclusion of Campfire's own playback to avoid sending the call back to participants; verify this on the actual Windows build. Use headphones during the first test.
 
 Microphone mute and push-to-talk affect only your voice. Microphone and system sound use separate audio tracks and per-person Voice/Stream sliders, including in the large viewer. Deafen silences both; both follow the selected output device. Shared sound is delivered only to people watching your share. Stopping sharing removes system audio and restores your camera while voice continues. Stereo encoding remains browser-dependent.
 
@@ -289,7 +289,7 @@ Every new screen share starts with zero subscribers, even after restarting a sha
 ## Profiles, emojis, and direct calls
 
 - Choose **Online** (green), **Idle** (orange), or **Do not disturb** (red, with a minus) below your name or in **Settings → My account → Status**. Your manual status is saved on this server and shared across signed-in devices. Offline users have a red dot without the minus. Status appears in member and friend lists and beside your own avatar. Do not disturb silences desktop message notifications; messages and calls remain available.
-- **Settings → My account → Set Idle automatically when I’m away** enables automatic idle on this device, after 1, 5, 10, 15, or 30 minutes (default 5). It starts disabled. Activity restores Online; manual Idle and Do not disturb take priority. The desktop app queries OS idle time and lock state using Electron’s `powerMonitor` API, without reading keystrokes or mouse positions. Unsupported desktops and browsers fall back to activity within Driskord. Browser background timers can delay detection. With multiple devices connected, any active device keeps an automatically managed account Online; all devices must be idle for automatic Idle. Disconnecting every client makes the account Offline. Restart the updated server and clients to enable presence support; the preference table is created automatically.
+- **Settings → My account → Set Idle automatically when I’m away** enables automatic idle on this device, after 1, 5, 10, 15, or 30 minutes (default 5). It starts disabled. Activity restores Online; manual Idle and Do not disturb take priority. The desktop app queries OS idle time and lock state using Electron’s `powerMonitor` API, without reading keystrokes or mouse positions. Unsupported desktops and browsers fall back to activity within Campfire. Browser background timers can delay detection. With multiple devices connected, any active device keeps an automatically managed account Online; all devices must be idle for automatic Idle. Disconnecting every client makes the account Offline. Restart the updated server and clients to enable presence support; the preference table is created automatically.
 - **Settings → My account → Nickname:** change the name shown in chat, calls, member lists, typing notices and notifications. Nicknames initially match the username, including for existing accounts. Usernames stay permanent for login and friend requests; account settings show the username read-only and identity tooltips identify it.
 - **Settings → My account → Upload profile picture:** choose an image. The client fits it within 512 × 512 pixels and uploads a PNG; the server enforces those bounds. You can replace or remove it. Profile pictures appear in chat, member/friend lists and call tiles.
 - **Settings → Custom emojis:** upload a named image, resized to fit 128 × 128 pixels. Use the emoji picker or type `:name:` in chat. Standard and custom emojis also work as reactions. Use React in the message actions shown on hover or keyboard focus (always visible on touch devices); click your reaction again to remove it. Authors and managers can delete custom emojis. Animated custom uploads become still images; chat GIF originals remain animated when opened.
@@ -344,3 +344,7 @@ Type `@` followed by a permanent username in chat or a thread to see suggestions
 The green dot beside message search indicates the server connection. Microphone noise processing uses Chromium's built-in suppression, echo cancellation, and automatic gain control, controlled together by the Voice & video toggle. It does not include a dedicated RNNoise/AI denoiser. Rejoin a call after changing microphone processing settings.
 
 Restart the backend and update/rebuild clients for persistent channel ordering and the new client controls. Existing channel order is retained within each type by migration 6.
+
+### Client appearance
+
+**Settings → Appearance** offers **System** (default), **Dark · Ember**, and **Light · Canvas**. System follows the operating system and updates while the app is open. Your choice saves automatically on this client and applies to the sign-in screen as well. It is not stored on the community server.

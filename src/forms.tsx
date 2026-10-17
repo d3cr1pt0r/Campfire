@@ -135,7 +135,7 @@ export function RoleForm({
                     <input
                         name="color"
                         type="color"
-                        defaultValue={role?.color || '#8b82f6'}
+                        defaultValue={role?.color || '#d9a466'}
                         disabled={!owner || busy}
                     />
                 </label>

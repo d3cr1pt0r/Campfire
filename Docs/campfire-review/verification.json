@@ -1,0 +1,41 @@
+{
+  "gallery": "passed",
+  "layout": [
+    {
+      "width": 1440,
+      "surface": "chat",
+      "scroll": 1440,
+      "body": 1440
+    },
+    {
+      "width": 1440,
+      "surface": "settings",
+      "scroll": 1440,
+      "body": 1440
+    },
+    {
+      "width": 1440,
+      "surface": "auth",
+      "scroll": 1440,
+      "body": 1440
+    },
+    {
+      "width": 960,
+      "surface": "chat",
+      "scroll": 960,
+      "body": 960
+    },
+    {
+      "width": 960,
+      "surface": "settings",
+      "scroll": 960,
+      "body": 960
+    },
+    {
+      "width": 960,
+      "surface": "auth",
+      "scroll": 960,
+      "body": 960
+    }
+  ]
+}

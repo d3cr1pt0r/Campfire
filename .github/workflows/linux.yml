@@ -26,7 +26,7 @@ jobs:
                   VITE_DEFAULT_SERVER_URL: ${{ inputs.default_server_url }}
             - uses: actions/upload-artifact@v4
               with:
-                  name: Driskord-Linux-x64-Standalone
+                  name: Campfire-Linux-x64-Standalone
                   path: |
                       release/*.AppImage
                       release/*-linux-x64.tar.gz

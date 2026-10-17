@@ -8,7 +8,7 @@ import { displayName } from './profiles';
 import type { useConversation } from './useConversation';
 import {
     MessageCircle,
-    Hash,
+    Flame,
     Shield,
     Pin,
     Search,
@@ -167,10 +167,10 @@ export function ChatMessages({
                             {!thread && !search && !pins && !conversation.next && (
                                 <div className="channel-welcome">
                                     <div className="welcome-hash">
-                                        {dmUser ? <MessageCircle size={40} /> : <Hash size={43} />}
+                                        {dmUser ? <MessageCircle size={40} /> : <Flame size={43} />}
                                     </div>
                                     <span className="mini-label">
-                                        {dmUser ? 'DIRECT MESSAGE' : 'TEXT CHANNEL'}
+                                        {dmUser ? 'DIRECT MESSAGE' : 'A PLACE FOR YOUR PEOPLE'}
                                     </span>
                                     <h1>
                                         {dmUser
@@ -180,7 +180,7 @@ export function ChatMessages({
                                     <p>
                                         {dmUser
                                             ? 'Your direct conversation starts here.'
-                                            : 'This is your space to share ideas, catch up, and make things happen.'}
+                                            : 'Settle in. Swap stories. Stay for one more.'}
                                     </p>
                                     <div className="welcome-line">
                                         <span>

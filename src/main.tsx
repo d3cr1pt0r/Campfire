@@ -15,7 +15,7 @@ import { useModalNavigation } from './modalNavigation';
 import { createApiClient } from './api';
 import { useConversation } from './useConversation';
 import { canonicalRoom } from '../shared/rooms.js';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { io } from 'socket.io-client';
 import type { AppSocket } from './types';
@@ -58,7 +58,14 @@ import { rememberedDevice } from './devices';
 import { useSpeaking } from './useSpeaking';
 import { validateFileSelection } from '../shared/uploads.js';
 import { emojis as standardEmojis } from '../shared/emojis.js';
+import campfireIcon from './assets/campfire-icon.png';
 import './style.css';
+import './campfire-theme.css';
+import { applyTheme, themePreference, watchTheme } from './theme';
+import { CampfireScene } from './CampfireScene';
+function CampfireMark() {
+    return <img className="campfire-mark" src={campfireIcon} alt="" />;
+}
 const storage = window.driskord?.storage ?? localStorage;
 const defaultServerUrl =
     import.meta.env.VITE_DEFAULT_SERVER_URL?.trim() ||
@@ -68,6 +75,7 @@ const defaultServerUrl =
           ? 'http://localhost:3001'
           : window.location.origin);
 const defaultPrefs: Preferences = {
+    theme: 'system',
     autoIdle: false,
     idleMinutes: 5,
     notifications: false,
@@ -85,6 +93,16 @@ function stored<T>(key: string, fallback: T): T {
         return fallback;
     }
 }
+const initialPreferences: Preferences = {
+    ...defaultPrefs,
+    ...stored<Partial<Preferences>>('preferences', {}),
+};
+initialPreferences.theme = themePreference(initialPreferences.theme);
+applyTheme(
+    initialPreferences.theme,
+    document.documentElement,
+    window.matchMedia('(prefers-color-scheme: dark)').matches,
+);
 const initial = stored<{
     url: string;
     token: string;
@@ -160,10 +178,16 @@ function App() {
         [members, setMembers] = useState(() => window.innerWidth > 1100),
         [typing, setTyping] = useState<Record<string, number>>({}),
         [unread, setUnread] = useState<Record<string, number>>({});
-    const [prefs, setPrefs] = useState<Preferences>(() => ({
-        ...defaultPrefs,
-        ...stored('preferences', {}),
-    }));
+    const [prefs, setPrefs] = useState<Preferences>(initialPreferences);
+    useLayoutEffect(
+        () =>
+            watchTheme(
+                prefs.theme,
+                document.documentElement,
+                window.matchMedia('(prefers-color-scheme: dark)'),
+            ),
+        [prefs.theme],
+    );
     usePresence(socket, prefs);
     const [navigationOpen, setNavigationOpen] = useState(false);
     const [compact, setCompact] = useState(() => window.innerWidth <= 800);
@@ -317,7 +341,7 @@ function App() {
                         stateRef.current?.users.find((u) => u.id === m.author),
                         'Someone',
                     );
-                    new Notification(stateRef.current?.name || 'Driskord', {
+                    new Notification(stateRef.current?.name || 'Campfire', {
                         body: m.room.startsWith('dm:')
                             ? `${sender} sent you a direct message`
                             : `${sender} mentioned you`,
@@ -664,25 +688,20 @@ function App() {
             <div className="auth-shell">
                 <div className="auth-art">
                     <div className="wordmark">
-                        <MessageCircle fill="currentColor" /> driskord<span>BETA</span>
+                        <CampfireMark /> Campfire<span>BETA</span>
                     </div>
                     <div className="auth-orbit">
-                        <div className="orbit-icon">
-                            <Headphones size={70} />
-                        </div>
-                        <i />
-                        <i />
-                        <i />
+                        <CampfireScene />
                     </div>
                     <h1>
-                        Your people.
+                        Pull up a chair.
                         <br />
-                        <em>Your place.</em>
+                        <em>Stay a while.</em>
                     </h1>
                     <p>
-                        A little less noise. A lot more connection.
+                        Good friends. Cold beers. Long conversations.
                         <br />
-                        Chat, call, and hang out on a server you own.
+                        Your own little corner of the internet, warmed by good company.
                     </p>
                     <div className="auth-features">
                         <span>
@@ -879,7 +898,7 @@ function App() {
                             title="Friends"
                             onClick={() => setView('friends')}
                         >
-                            <MessageCircle size={28} />
+                            <CampfireMark />
                         </button>
                         <div className="rail-divider" />
                         <button
@@ -920,7 +939,7 @@ function App() {
                                 {state.name}
                                 <small>
                                     <i className={connected ? 'online-dot' : 'offline-dot'} />
-                                    {connected ? 'Your community, connected' : 'Reconnecting…'}
+                                    {connected ? 'Good company, always.' : 'Reconnecting…'}
                                 </small>
                             </span>
                             <ChevronDown size={18} />
@@ -1576,7 +1595,7 @@ function App() {
                     </div>
                     <footer className="status-bar">
                         <span>
-                            Driskord <i /> Early access
+                            Campfire <i /> Keep the conversation glowing
                         </span>
                     </footer>
                 </main>

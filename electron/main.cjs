@@ -134,13 +134,13 @@ else {
                     height: 940,
                     minWidth: 960,
                     minHeight: 640,
-                    title: 'Driskord',
+                    title: 'Campfire',
                     icon: path.join(
                         __dirname,
                         'icons',
-                        process.platform === 'win32' ? 'icon.ico' : 'icon.png',
+                        process.platform === 'win32' ? 'campfire.ico' : 'campfire.png',
                     ),
-                    backgroundColor: '#18191f',
+                    backgroundColor: '#211b18',
                     webPreferences: {
                         preload: path.join(__dirname, 'preload.cjs'),
                         contextIsolation: true,
@@ -172,7 +172,7 @@ else {
             });
         })
         .catch((error) => {
-            dialog.showErrorBox('Driskord could not start', error.message);
+            dialog.showErrorBox('Campfire could not start', error.message);
             app.quit();
         });
 }

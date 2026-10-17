@@ -17,7 +17,7 @@ export function Avatar({
         <span
             title={user ? `${displayName(user)} (@${user.username})` : undefined}
             className={`avatar ${small ? 'small' : ''} ${speaking ? 'speaking' : ''}`}
-            style={{ background: color || '#7972e8' }}
+            style={{ background: color || '#d9a466' }}
         >
             {user?.avatar ? (
                 <AuthImage path={`/avatars/${user.avatar}`} alt={displayName(user)} />

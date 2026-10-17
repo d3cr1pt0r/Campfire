@@ -49,7 +49,7 @@ async function fixture(t) {
 test('fresh servers require a setup code and default to invite only', async (t) => {
     const f = await fixture(t);
     assert.deepEqual((await f.api(null, '/info')).data, {
-        name: 'My Driskord server',
+        name: 'My Campfire server',
         registration: false,
         registrationMode: 'invite',
         setupRequired: true,

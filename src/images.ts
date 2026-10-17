@@ -49,7 +49,7 @@ export function drawAvatar(
     const context = canvas.getContext('2d');
     if (!context) throw new Error('Image positioning is unavailable');
     const scale = canvas.width / crop.side;
-    context.fillStyle = '#18191f';
+    context.fillStyle = '#211b18';
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(
         bitmap,

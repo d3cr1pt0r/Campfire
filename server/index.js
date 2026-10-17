@@ -2,7 +2,7 @@ import { createApp } from './app.js';
 const port = Number(process.env.PORT || 3001);
 const service = createApp({
     dataDir: process.env.DATA_DIR || 'data',
-    name: process.env.SERVER_NAME || 'My Driskord server',
+    name: process.env.SERVER_NAME || 'My Campfire server',
     origins: (process.env.CLIENT_ORIGINS || '')
         .split(',')
         .map((origin) => origin.trim())
@@ -18,7 +18,7 @@ const service = createApp({
 if (service.setupCode)
     console.log(`Owner setup code (required for the first account): ${service.setupCode}`);
 service.http.listen(port, process.env.HOST || '0.0.0.0', () =>
-    console.log(`Driskord server listening on port ${port}`),
+    console.log(`Campfire server listening on port ${port}`),
 );
 let stopping = false;
 const shutdown = () => {

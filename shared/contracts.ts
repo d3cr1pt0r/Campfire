@@ -72,6 +72,7 @@ export type Message = {
     }[];
 };
 export type Preferences = {
+    theme?: 'system' | 'dark' | 'light';
     autoIdle?: boolean;
     idleMinutes?: number;
     notifications: boolean;
