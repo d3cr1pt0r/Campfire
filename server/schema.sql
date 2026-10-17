@@ -6,6 +6,7 @@ PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
     CREATE TABLE IF NOT EXISTS channels(id TEXT PRIMARY KEY,name TEXT,kind TEXT);
     CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,room TEXT,author TEXT REFERENCES users(id),body TEXT,created INTEGER,edited INTEGER,pinned INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS attachments(id TEXT PRIMARY KEY,message TEXT REFERENCES messages(id) ON DELETE CASCADE,name TEXT,mime TEXT,data TEXT);
+    CREATE TABLE IF NOT EXISTS attachment_previews(attachment TEXT PRIMARY KEY REFERENCES attachments(id) ON DELETE CASCADE,data BLOB,bytes INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS reactions(message TEXT REFERENCES messages(id) ON DELETE CASCADE,user TEXT REFERENCES users(id),emoji TEXT,PRIMARY KEY(message,user,emoji));
     CREATE TABLE IF NOT EXISTS friends(sender TEXT REFERENCES users(id),recipient TEXT REFERENCES users(id),accepted INTEGER DEFAULT 0,PRIMARY KEY(sender,recipient));
     CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT);

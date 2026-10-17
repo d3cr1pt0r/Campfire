@@ -3,7 +3,13 @@ module.exports = {
     appId: 'org.driskord.desktop',
     productName: 'Driskord',
     directories: { output: 'release' },
-    files: ['dist/**/*', 'electron/**/*', 'package.json'],
+    files: [
+        'dist/**/*',
+        'electron/**/*',
+        'package.json',
+        '!node_modules/sharp/**/*',
+        '!node_modules/@img/**/*',
+    ],
     asar: true,
     npmRebuild: false, // The desktop shell uses only Electron/Node built-ins.
     publish: null,

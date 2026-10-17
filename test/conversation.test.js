@@ -163,3 +163,42 @@ test('shared API handles JSON/blob responses, cancellation and non-JSON failures
         (error) => error.status === 502 && error.message.includes('502'),
     );
 });
+
+test('automatic history requests coalesce while pending and stop at the end', async () => {
+    const older = deferred();
+    let calls = 0;
+    const store = createConversation('general', () =>
+        ++calls === 1
+            ? Promise.resolve({ messages: [message('latest')], next: 'older' })
+            : older.promise,
+    );
+    await store.reload();
+    const first = store.loadOlder();
+    await store.loadOlder();
+    await store.loadOlder();
+    assert.equal(calls, 2);
+    older.resolve({ messages: [message('before')], next: null });
+    await first;
+    await store.loadOlder();
+    assert.equal(calls, 2);
+    assert.equal(store.getSnapshot().messages.length, 2);
+});
+
+test('history failures preserve the reading data and cursor so retry can recover', async () => {
+    let calls = 0;
+    const store = createConversation('general', async (before) => {
+        calls++;
+        if (calls === 1) return { messages: [message('latest')], next: 'older' };
+        assert.equal(before, 'older');
+        if (calls === 2) throw new Error('Temporary failure');
+        return { messages: [message('before')], next: null };
+    });
+    await store.reload();
+    await store.loadOlder();
+    assert.equal(store.getSnapshot().error, 'Temporary failure');
+    assert.equal(store.getSnapshot().next, 'older');
+    assert.equal(store.getSnapshot().messages[0].id, 'latest');
+    await store.loadOlder();
+    assert.equal(store.getSnapshot().error, '');
+    assert.equal(store.getSnapshot().messages.length, 2);
+});

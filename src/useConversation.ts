@@ -58,5 +58,6 @@ export function useConversation(
         ...snapshot,
         messages: enabled ? snapshot.messages : [],
         loadOlder: conversation.loadOlder,
+        reload: conversation.reload,
     };
 }

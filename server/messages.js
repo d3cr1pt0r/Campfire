@@ -5,6 +5,7 @@ import { canonicalRoom } from '../shared/rooms.js';
 import { emojis } from '../shared/emojis.js';
 import { check, route } from './policies.js';
 import { transaction, messageViews } from './database.js';
+import { createThumbnails } from './thumbnails.js';
 export function registerMessages({
     app,
     db,
@@ -19,6 +20,7 @@ export function registerMessages({
     emitRoom,
     maxStoredUploadBytes,
 }) {
+    const thumbnails = createThumbnails({ get, all, run });
     const requireWrite = (user, room) =>
         check(canWrite(user, room), 'This conversation is read-only', 403);
     app.get(
@@ -228,6 +230,35 @@ export function registerMessages({
         }),
     );
     app.get(
+        '/api/attachments/:id/preview',
+        route(async (req, res) => {
+            // Check access before consulting the cache or touching image data.
+            const attachment = get(
+                'SELECT a.id,a.mime,m.room FROM attachments a JOIN messages m ON m.id=a.message WHERE a.id=?',
+                req.params.id,
+            );
+            check(attachment && hasRoom(req.user, attachment.room), 'Attachment not found', 404);
+            check(/^image\/(png|jpeg|gif|webp)$/.test(attachment.mime), 'Preview unavailable', 404);
+            const data = await thumbnails.get(attachment.id, () => {
+                const row = get('SELECT data FROM attachments WHERE id=?', attachment.id);
+                return row ? Buffer.from(row.data, 'base64') : null;
+            });
+            // Access may have changed while the image was processed.
+            const user = get('SELECT * FROM users WHERE id=? AND banned=0', req.user.id);
+            check(
+                user &&
+                    hasRoom(user, attachment.room) &&
+                    get('SELECT id FROM attachments WHERE id=?', attachment.id),
+                'Attachment not found',
+                404,
+            );
+            check(data, 'Preview unavailable', 404);
+            res.setHeader('Cache-Control', 'private, no-cache');
+            res.vary('Authorization');
+            res.type('image/webp').send(data);
+        }),
+    );
+    app.get(
         '/api/attachments/:id',
         route((req, res) => {
             const a = get(
@@ -248,4 +279,5 @@ export function registerMessages({
             res.send(data);
         }),
     );
+    return thumbnails;
 }

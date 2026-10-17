@@ -130,7 +130,7 @@ export function createApp({
             });
         }),
     );
-    registerMessages(context);
+    const messages = registerMessages(context);
     registerProfiles(context);
     registerFriends(context);
     registerAdministration({ ...context, enforceCalls: calls.enforceCalls });
@@ -150,14 +150,16 @@ export function createApp({
         http,
         io,
         db,
-        close: () =>
-            new Promise((resolve) => {
+        close: async () => {
+            await messages.close();
+            return new Promise((resolve) => {
                 calls.close();
                 sessions.close();
                 io.close(() => {
                     db.close();
                     resolve();
                 });
-            }),
+            });
+        },
     };
 }

@@ -131,7 +131,6 @@ function App() {
         [devices, setDevices] = useState<MediaDeviceInfo[]>([]),
         [settingsTab, setSettingsTab] = useState('account');
     const fileInput = useRef<HTMLInputElement>(null),
-        bottom = useRef<HTMLDivElement>(null),
         roomRef = useRef(room),
         stateRef = useRef(state),
         prefsRef = useRef(prefs),
@@ -280,9 +279,6 @@ function App() {
     useEffect(() => {
         if (view === 'chat') setUnread((prev) => ({ ...prev, [room]: 0 }));
     }, [view, room]);
-    useEffect(() => {
-        bottom.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages.at(-1)?.id, room]);
     useEffect(() => {
         if (modal !== 'settings') return;
         const refreshDevices = () =>
@@ -1174,6 +1170,7 @@ function App() {
                                     </div>
                                 )}
                                 <ChatMessages
+                                    key={`${url}:${state.me.id}:${room}:${search}:${pins}`}
                                     permission={conversationPermission}
                                     conversation={conversation}
                                     search={search}
@@ -1190,7 +1187,6 @@ function App() {
                                     api={api}
                                     setModal={setModal}
                                     setEdit={setEdit}
-                                    bottom={bottom}
                                     clearFilters={() => {
                                         setSearch('');
                                         setPins(false);

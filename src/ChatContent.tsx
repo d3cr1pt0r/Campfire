@@ -1,62 +1,83 @@
-import { createApiClient } from './api';
 import { messageParts } from './messageText';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { ExpandedImage } from './ExpandedImage';
+import { useImage } from './useImage';
 export const AssetContext = createContext({ url: '', token: '' });
 export function AuthImage({
     path,
     alt,
     className = '',
     expandable = false,
+    originalPath,
 }: {
     path: string;
     alt: string;
     className?: string;
     expandable?: boolean;
+    originalPath?: string;
 }) {
     const { url, token } = useContext(AssetContext);
-    const [source, setSource] = useState('');
-    const [expandedSource, setExpandedSource] = useState('');
+    const container = useRef<HTMLSpanElement>(null);
+    const [near, setNear] = useState(false);
+    const [expanded, setExpanded] = useState(false);
     useEffect(() => {
-        const controller = new AbortController();
-        let objectUrl = '';
-        setSource('');
-        setExpandedSource('');
-        void createApiClient(url, token)
-            .blob(path, controller.signal)
-            .then((blob) => {
-                if (!/^image\/(png|jpeg|webp|gif)$/.test(blob.type))
-                    throw new Error('Preview unavailable');
-                if (controller.signal.aborted) return;
-                objectUrl = URL.createObjectURL(blob);
-                setSource(objectUrl);
-            })
-            .catch(() => {});
-        return () => {
-            controller.abort();
-            if (objectUrl) URL.revokeObjectURL(objectUrl);
-        };
-    }, [url, token, path]);
-    if (!source) return <span className={`image-placeholder ${className}`} aria-label={alt} />;
-    const image = <img src={source} alt={alt} className={className} loading="lazy" />;
-    return expandable ? (
-        <>
-            <button
-                type="button"
-                className="image-preview-button"
-                title="Click to enlarge image"
-                aria-label={`Enlarge image: ${alt}`}
-                aria-haspopup="dialog"
-                onClick={() => setExpandedSource(source)}
-            >
-                {image}
-            </button>
-            {expandedSource === source && (
-                <ExpandedImage source={source} name={alt} onClose={() => setExpandedSource('')} />
-            )}
-        </>
+        const element = container.current;
+        if (!element) return;
+        if (!('IntersectionObserver' in window)) {
+            setNear(true);
+            return;
+        }
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries.some((entry) => entry.isIntersecting)) {
+                    setNear(true);
+                    observer.disconnect();
+                }
+            },
+            { root: element.closest('.messages'), rootMargin: '240px' },
+        );
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, []);
+    const preview = useImage(url, token, near ? path : null);
+    const original = useImage(url, token, expanded && originalPath ? originalPath : null);
+    const image = preview.source ? (
+        <img src={preview.source} alt={alt} className={className} decoding="async" />
     ) : (
-        image
+        <span className={`image-placeholder ${className}`} aria-label={alt}>
+            {expandable
+                ? preview.error
+                    ? 'Preview unavailable — open original'
+                    : 'Image preview'
+                : ''}
+        </span>
+    );
+    return (
+        <span ref={container} className={expandable ? 'auth-image attachment-image' : 'auth-image'}>
+            {expandable ? (
+                <button
+                    type="button"
+                    className="image-preview-button"
+                    title="Click to enlarge image"
+                    aria-label={`Enlarge image: ${alt}`}
+                    aria-haspopup="dialog"
+                    onClick={() => setExpanded(true)}
+                >
+                    {image}
+                </button>
+            ) : (
+                image
+            )}
+            {expanded && (
+                <ExpandedImage
+                    source={originalPath ? original.source : preview.source}
+                    name={alt}
+                    loading={!!originalPath && !original.source && !original.error}
+                    error={original.error}
+                    onClose={() => setExpanded(false)}
+                />
+            )}
+        </span>
     );
 }
 export function Emoji({
