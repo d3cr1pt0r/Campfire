@@ -18,8 +18,16 @@ const service = createApp({
 service.http.listen(port, process.env.HOST || '0.0.0.0', () =>
     console.log(`Driskord server listening on port ${port}`),
 );
-for (const signal of ['SIGINT', 'SIGTERM'])
-    process.on(signal, async () => {
-        await service.close();
-        process.exit(0);
-    });
+let stopping = false;
+const shutdown = () => {
+    if (stopping) return;
+    stopping = true;
+    void service.close().then(
+        () => process.exit(0),
+        (error) => {
+            console.error('Server shutdown failed:', error);
+            process.exit(1);
+        },
+    );
+};
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, shutdown);

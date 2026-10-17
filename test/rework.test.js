@@ -11,6 +11,28 @@ import { createRateLimit, originPolicy } from '../server/policies.js';
 import { createApp } from '../server/app.js';
 import { request } from '../test-support/http.js';
 
+test('overlapping and repeated shutdown calls close SQLite only once', async (t) => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'driskord-shutdown-'));
+    const service = createApp({ dataDir: dir });
+    t.after(async () => {
+        await service.close();
+        rmSync(dir, { recursive: true, force: true });
+    });
+    const closeDatabase = service.db.close.bind(service.db);
+    let databaseCloses = 0;
+    service.db.close = () => {
+        databaseCloses++;
+        closeDatabase();
+    };
+    const first = service.close();
+    const second = service.close();
+    assert.equal(first, second);
+    await Promise.all([first, second, service.close()]);
+    await service.close();
+    assert.equal(databaseCloses, 1);
+    assert.equal(service.db.isOpen, false);
+});
+
 test('legacy migration merges DM histories and accounts for attachment bytes once', () => {
     const db = new DatabaseSync(':memory:');
     try {

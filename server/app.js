@@ -145,21 +145,21 @@ export function createApp({
             error: error.status ? error.message : 'Internal server error',
         });
     });
+    let closing;
     return {
         app,
         http,
         io,
         db,
-        close: async () => {
-            await messages.close();
-            return new Promise((resolve) => {
+        close: () => {
+            closing ??= (async () => {
+                await messages.close();
                 calls.close();
                 sessions.close();
-                io.close(() => {
-                    db.close();
-                    resolve();
-                });
-            });
+                await io.close();
+                db.close();
+            })();
+            return closing;
         },
     };
 }
