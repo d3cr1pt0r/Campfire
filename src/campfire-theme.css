@@ -355,6 +355,127 @@ label,
     background: radial-gradient(ellipse at 0 0, #edaa6015, transparent), var(--panel);
     border-color: var(--line);
 }
+.call-dock {
+    flex: 0 0 auto;
+    min-height: 0;
+    overflow: hidden;
+    opacity: 1;
+    transition:
+        height 240ms ease,
+        opacity 240ms ease;
+}
+@starting-style {
+    .call-dock {
+        height: 0 !important;
+        opacity: 0;
+    }
+}
+.call-dock.resizing {
+    transition: none;
+}
+.call-dock .call-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    overflow: hidden;
+}
+.call-dock .call-heading {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    min-height: 64px;
+    margin: 0;
+    padding: 10px 24px;
+    gap: 12px;
+    color: var(--ink);
+}
+.call-heading > svg,
+.call-heading > .live-badge,
+.call-heading > button {
+    flex-shrink: 0;
+}
+.call-summary-copy {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    gap: 3px;
+}
+.call-summary-copy strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+}
+.call-summary-copy small {
+    font-size: 11px;
+    color: var(--muted);
+}
+.call-panel-body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    padding: 8px 24px 16px;
+}
+.call-panel-body[hidden] {
+    display: none;
+}
+.call-splitter {
+    flex: 0 0 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    cursor: ns-resize;
+    touch-action: none;
+    user-select: none;
+    background: var(--panel);
+    border-block: 1px solid var(--line);
+    transition: background 120ms ease;
+}
+.call-splitter > span {
+    width: 40px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--muted);
+    opacity: 0.55;
+}
+.call-splitter:hover,
+.call-splitter:focus-visible,
+.call-splitter.resizing {
+    background: var(--field);
+}
+.call-splitter:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+.call-splitter:hover > span,
+.call-splitter:focus-visible > span,
+.call-splitter.resizing > span {
+    background: var(--accent);
+    opacity: 1;
+}
+@media (max-width: 800px) {
+    .call-dock .call-heading {
+        padding-inline: 16px;
+        gap: 8px;
+    }
+    .call-panel-body {
+        padding-inline: 16px;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .call-dock,
+    .call-splitter {
+        transition: none;
+    }
+}
 .media-placeholder,
 .tile-media-controls {
     background: var(--field);

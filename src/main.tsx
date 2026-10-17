@@ -275,7 +275,6 @@ function App() {
     );
     const refresh = stateRefresh.refresh;
     useEffect(() => () => stateRefresh.cancel(), [stateRefresh]);
-    const callPanelToggle = useRef<HTMLButtonElement>(null);
     const call = useCall(
         socket,
         prefs,
@@ -1307,6 +1306,22 @@ function App() {
                     </aside>
                 </div>
                 <main className="workspace" inert={compact && navigationOpen}>
+                    {call.channel && (
+                        <CallPanel
+                            onHide={() => {
+                                call.setPanelOpen(false);
+                                call.setShowDetails(false);
+                            }}
+                            state={state}
+                            call={call}
+                            prefs={prefs}
+                            speaking={speaking}
+                            callName={callName}
+                            setModal={setModal}
+                            notify={notify}
+                            user={user}
+                        />
+                    )}
                     <header className="topbar">
                         <button
                             className="navigation-toggle"
@@ -1353,7 +1368,6 @@ function App() {
                         <div className="top-actions">
                             {call.channel && (
                                 <button
-                                    ref={callPanelToggle}
                                     title={
                                         call.panelOpen ? 'Hide call details' : 'Show call details'
                                     }
@@ -1470,23 +1484,6 @@ function App() {
                             Connection lost. Reconnecting… Messages will be available when the
                             server returns.
                         </div>
-                    )}
-                    {call.channel && (
-                        <CallPanel
-                            onHide={() => {
-                                call.setPanelOpen(false);
-                                call.setShowDetails(false);
-                                callPanelToggle.current?.focus();
-                            }}
-                            state={state}
-                            call={call}
-                            prefs={prefs}
-                            speaking={speaking}
-                            callName={callName}
-                            setModal={setModal}
-                            notify={notify}
-                            user={user}
-                        />
                     )}
                     <div className="call-invitations">
                         {(state.directCalls || [])
