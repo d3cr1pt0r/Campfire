@@ -27,3 +27,9 @@ The draft covers commits after v0.1.4 through `9286959` (the current checkout wh
 [Prepared description](v0.1.6.md). Based on the channel-management/mentions/notifications commit `12ab3a2`, the shutdown fix `78ab0e0`, and the version bump `2103793`, following the v0.1.5 notes commit `0f534d1`.
 
 The local checkout has no v0.1.5 or v0.1.6 tag. No live release lookup was performed for this draft, and no publication date is assumed. The changelog link uses the source commits; reconcile it with the final release tags before publication. This draft has not been published to GitHub.
+
+## v0.1.7 draft
+
+[Prepared description](v0.1.7.md). Covers changes after the v0.1.6 source cutoff `2103793` through `2236428`: owner-controlled registration and invitations (`00ac065`), channel descriptions and interface alignment/cleanup (`d84bdaa`), and granular role permissions with role-first channel access (`2236428`).
+
+The working `package.json` declares version 0.1.7. The local checkout has no v0.1.6 or v0.1.7 tag. No live release lookup was performed, and no publication date or uploaded assets are assumed. The changelog link uses the source commits; reconcile it with the final release tags before publication. This draft has not been published to GitHub.
