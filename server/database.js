@@ -78,6 +78,15 @@ export function migrate(db) {
                 UPDATE channels SET position=rowid;
                 CREATE INDEX channels_kind_position ON channels(kind,position);`);
         },
+        () => {
+            db.exec(`INSERT OR IGNORE INTO settings(key,value)
+                SELECT 'registrationMode', CASE WHEN EXISTS(SELECT 1 FROM users) THEN 'open' ELSE 'invite' END;
+                CREATE TABLE invitations(
+                    id TEXT PRIMARY KEY, tokenHash TEXT UNIQUE NOT NULL,
+                    label TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL,
+                    usedBy TEXT REFERENCES users(id), revoked INTEGER NOT NULL DEFAULT 0
+                );`);
+        },
     ];
     migrations.forEach((apply, index) => {
         const version = index + 1;

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import { io as client } from 'socket.io-client';
-import { createApp } from '../server/app.js';
+import { createApp } from '../test-support/open-server.js';
 
 test(
     'live channel access filters events and rosters, revokes calls, and handles deletion',
@@ -36,7 +36,11 @@ test(
             return data;
         };
         const signup = (username) =>
-            api(null, '/auth/register', 'POST', { username, password: 'test-password-123' });
+            api(null, '/auth/register', 'POST', {
+                username,
+                password: 'test-password-123',
+                setupCode: 'test-owner-setup',
+            });
         const owner = await signup('Owner'),
             bob = await signup('Bob'),
             eve = await signup('Eve');

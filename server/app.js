@@ -1,4 +1,5 @@
 import express from 'express';
+import { createRegistration } from './registration.js';
 import { createServer } from 'node:http';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -24,6 +25,7 @@ export function createApp({
     iceServers = [],
     trustProxy = false,
     maxStoredUploadBytes = 1024 * 1024 * 1024,
+    setupCode,
     sessionLifetimeMs = 30 * 86400000,
 } = {}) {
     if (!Number.isSafeInteger(maxStoredUploadBytes) || maxStoredUploadBytes < 0)
@@ -81,9 +83,12 @@ export function createApp({
         maxStoredUploadBytes,
         sessionLifetimeMs,
     };
+    const registration = createRegistration({ ...context, setupCode });
+    context.registration = registration;
     // Public registration/login must precede the authenticated feature routes.
     registerAccounts(context);
     app.use('/api', sessions.auth);
+    registration.mount();
     app.post(
         '/api/logout',
         route((req, res) => {
@@ -147,6 +152,7 @@ export function createApp({
     });
     let closing;
     return {
+        setupCode: registration.setupCode,
         app,
         http,
         io,

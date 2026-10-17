@@ -3449,3 +3449,21 @@ button:disabled {
     cursor: pointer;
     padding: 8px 0;
 }
+
+.registration-settings {
+    margin-block: 24px;
+    padding-block: 20px;
+    border-block: 1px solid var(--border);
+}
+.registration-settings .settings-card {
+    margin-block: 12px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+.registration-settings .settings-card button {
+    margin: 4px 8px 4px 0;
+}
+.registration-settings input[readonly] {
+    font-family: monospace;
+}

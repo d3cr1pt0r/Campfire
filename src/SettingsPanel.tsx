@@ -1,3 +1,4 @@
+import { RegistrationSettings } from './RegistrationSettings';
 import { notificationKey } from './notifications';
 import { canonicalRoom } from '../shared/rooms.js';
 import { useState, type Dispatch, type SetStateAction } from 'react';
@@ -638,6 +639,7 @@ export function SettingsPanel({
                                 Save changes
                             </button>
                         </form>
+                        {state.me.role === 'owner' && <RegistrationSettings api={api} url={url} />}
                         <label>
                             Server address
                             <input readOnly value={url} />

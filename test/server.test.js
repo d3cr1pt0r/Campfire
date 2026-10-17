@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
 import { io as client } from 'socket.io-client';
-import { createApp } from '../server/app.js';
+import { createApp } from '../test-support/open-server.js';
 test(
     'an idle authenticated transport disconnects when its session expires',
     { timeout: 5000 },
@@ -23,7 +23,11 @@ test(
         const response = await fetch(`${base}/api/auth/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: 'Expiry', password: 'test-password-123' }),
+            body: JSON.stringify({
+                username: 'Expiry',
+                password: 'test-password-123',
+                setupCode: 'test-owner-setup',
+            }),
         });
         const { token } = await response.json();
         socket = client(base, { auth: { token }, forceNew: true, reconnection: false });
@@ -67,7 +71,7 @@ test(
         const signup = (username) =>
             request('/auth/register', {
                 method: 'POST',
-                body: { username, password: 'test-password-123' },
+                body: { username, password: 'test-password-123', setupCode: 'test-owner-setup' },
             });
         const alice = await signup('Alice');
         const bob = await signup('Bob');
@@ -98,17 +102,29 @@ test(
                 await request('/state', { status: 401 });
                 await request('/auth/register', {
                     method: 'POST',
-                    body: { username: 'Alice', password: 'test-password-123' },
+                    body: {
+                        username: 'Alice',
+                        password: 'test-password-123',
+                        setupCode: 'test-owner-setup',
+                    },
                     status: 409,
                 });
                 await request('/auth/login', {
                     method: 'POST',
-                    body: { username: 'Alice', password: 'wrong-password' },
+                    body: {
+                        username: 'Alice',
+                        password: 'wrong-password',
+                        setupCode: 'test-owner-setup',
+                    },
                     status: 401,
                 });
                 const login = await request('/auth/login', {
                     method: 'POST',
-                    body: { username: 'Alice', password: 'test-password-123' },
+                    body: {
+                        username: 'Alice',
+                        password: 'test-password-123',
+                        setupCode: 'test-owner-setup',
+                    },
                 });
                 await api(login, '/logout', 'POST');
                 await api(login, '/state', 'GET', undefined, 401);

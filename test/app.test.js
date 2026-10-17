@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createApp } from '../server/app.js';
+import { createApp } from '../test-support/open-server.js';
 
 // Run the real Express middleware/routes without a listening socket. Socket.IO
 // transport/NAT are covered separately by the existing live integration suite.
@@ -26,6 +26,7 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
             await request(service.app, '/auth/register', null, 'POST', {
                 username,
                 password: 'test-password-123',
+                setupCode: 'test-owner-setup',
             })
         ).data;
     const alice = await signup('Alice'),
@@ -65,6 +66,7 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
             const login = await request(service.app, '/auth/login', null, 'POST', {
                 username: 'Alice',
                 password: 'test-password-123',
+                setupCode: 'test-owner-setup',
             });
             assert.equal(login.status, 200);
             assert.equal(login.data.user.nickname, 'Alice Display');
@@ -73,6 +75,7 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
                     await request(service.app, '/auth/login', null, 'POST', {
                         username: 'Alice Display',
                         password: 'test-password-123',
+                        setupCode: 'test-owner-setup',
                     })
                 ).status,
                 401,

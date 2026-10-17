@@ -15,6 +15,8 @@ const service = createApp({
         : false,
     maxStoredUploadBytes: Number(process.env.MAX_STORED_UPLOAD_BYTES || 1073741824),
 });
+if (service.setupCode)
+    console.log(`Owner setup code (required for the first account): ${service.setupCode}`);
 service.http.listen(port, process.env.HOST || '0.0.0.0', () =>
     console.log(`Driskord server listening on port ${port}`),
 );

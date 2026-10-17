@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createApp } from '../server/app.js';
+import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
 
 test('thread events broadcast reply counts and typing only to authorized room participants', async (t) => {
@@ -25,7 +25,11 @@ test('thread events broadcast reply counts and typing only to authorized room pa
         return result.data;
     };
     const signup = (username) =>
-        api(null, '/auth/register', 'POST', { username, password: 'test-password-123' });
+        api(null, '/auth/register', 'POST', {
+            username,
+            password: 'test-password-123',
+            setupCode: 'test-owner-setup',
+        });
     const alice = await signup('Alice'),
         bob = await signup('Bob'),
         eve = await signup('Eve');

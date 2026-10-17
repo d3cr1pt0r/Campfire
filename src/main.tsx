@@ -89,6 +89,9 @@ const initial = stored<{
     url: string;
     token: string;
 }>('connection', { url: defaultServerUrl, token: '' });
+const invitationFromLink = new URLSearchParams(window.location.hash.slice(1)).get('invite') || '';
+if (invitationFromLink)
+    history.replaceState(null, '', window.location.pathname + window.location.search);
 function App() {
     const [url, setUrl] = useState(initial.url),
         [token, setToken] = useState(initial.token),
@@ -98,6 +101,54 @@ function App() {
         [error, setError] = useState(''),
         [busy, setBusy] = useState(false),
         [register, setRegister] = useState(true);
+    const [authUrl, setAuthUrl] = useState(
+        invitationFromLink ? window.location.origin : initial.url,
+    );
+    const [inviteCode, setInviteCode] = useState(invitationFromLink);
+    const [serverInfo, setServerInfo] = useState<{
+        registrationMode: 'open' | 'invite';
+        setupRequired: boolean;
+    } | null>(null);
+    const [infoError, setInfoError] = useState('');
+    useEffect(() => {
+        if (token) return;
+        setServerInfo(null);
+        setInfoError('');
+        const controller = new AbortController();
+        const timer = setTimeout(() => {
+            try {
+                const parsed = new URL(authUrl.trim());
+                if (
+                    !['http:', 'https:'].includes(parsed.protocol) ||
+                    parsed.username ||
+                    parsed.password ||
+                    parsed.pathname !== '/' ||
+                    parsed.search ||
+                    parsed.hash
+                )
+                    return;
+                void createApiClient(parsed.origin, '')
+                    .json<{ registrationMode: 'open' | 'invite'; setupRequired: boolean }>(
+                        '/info',
+                        'GET',
+                        undefined,
+                        controller.signal,
+                    )
+                    .then((info) => {
+                        if (!controller.signal.aborted) setServerInfo(info);
+                    })
+                    .catch((e) => {
+                        if (!controller.signal.aborted) setInfoError(e.message);
+                    });
+            } catch {
+                /* The submit handler explains invalid addresses. */
+            }
+        }, 350);
+        return () => {
+            clearTimeout(timer);
+            controller.abort();
+        };
+    }, [authUrl, token]);
     const [room, setRoom] = useState('general'),
         [view, setView] = useState<'chat' | 'friends'>('chat'),
         [draft, setDraft] = useState(''),
@@ -416,7 +467,13 @@ function App() {
             const data = await createApiClient(target, '').json<{ token: string }>(
                 `/auth/${register ? 'register' : 'login'}`,
                 'POST',
-                { username: f.get('username'), password: f.get('password') },
+                {
+                    username: f.get('username'),
+                    password: f.get('password'),
+                    ...(register
+                        ? { inviteCode: inviteCode.trim(), setupCode: f.get('setupCode') }
+                        : {}),
+                },
             );
             setUrl(target);
             setToken(data.token);
@@ -654,7 +711,8 @@ function App() {
                                 <input
                                     name="url"
                                     type="url"
-                                    defaultValue={url}
+                                    value={authUrl}
+                                    onChange={(e) => setAuthUrl(e.target.value)}
                                     required
                                     placeholder="https://chat.example.com"
                                 />
@@ -694,6 +752,46 @@ function App() {
                                     placeholder="At least 10 characters"
                                 />
                             </label>
+                            {register && serverInfo?.setupRequired && (
+                                <label>
+                                    Owner setup code
+                                    <input
+                                        name="setupCode"
+                                        required
+                                        autoComplete="off"
+                                        maxLength={256}
+                                    />
+                                    <span className="field-help">
+                                        Find this one-time code in your server console. This account
+                                        becomes the owner.
+                                    </span>
+                                </label>
+                            )}
+                            {register &&
+                                !serverInfo?.setupRequired &&
+                                serverInfo?.registrationMode !== 'open' && (
+                                    <label>
+                                        Invitation code
+                                        <input
+                                            value={inviteCode}
+                                            onChange={(e) => setInviteCode(e.target.value)}
+                                            required={serverInfo?.registrationMode === 'invite'}
+                                            autoComplete="off"
+                                            maxLength={64}
+                                            spellCheck={false}
+                                        />
+                                        <span className="field-help">
+                                            {serverInfo?.registrationMode === 'invite'
+                                                ? 'This server is invite only. Ask its owner for an invitation.'
+                                                : 'Enter an invitation if required by this server.'}
+                                        </span>
+                                    </label>
+                                )}
+                            {infoError && (
+                                <p className="field-help">
+                                    Could not check registration: {infoError}
+                                </p>
+                            )}
                             <button className="primary" disabled={busy}>
                                 {busy ? 'Just a moment…' : register ? 'Create account' : 'Sign in'}
                                 <ArrowRight size={18} />
@@ -709,7 +807,7 @@ function App() {
                     <div className="self-host-note">
                         <Server size={20} />
                         <p>
-                            The first account on a new server becomes its owner.
+                            New servers require an owner setup code from the server console.
                             <br />
                             Your account and conversations stay on that server.
                         </p>

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { io as client } from 'socket.io-client';
-import { createApp } from '../server/app.js';
+import { createApp } from '../test-support/open-server.js';
 
 test(
     'stream roster reaches viewers outside the call, respects channel access, and clears stale shares',
@@ -37,10 +37,12 @@ test(
         const owner = await api(null, '/auth/register', 'POST', {
             username: 'Owner',
             password: 'test-password-123',
+            setupCode: 'test-owner-setup',
         });
         const viewer = await api(null, '/auth/register', 'POST', {
             username: 'Viewer',
             password: 'test-password-123',
+            setupCode: 'test-owner-setup',
         });
         const connect = async (account) => {
             const s = client(base, {

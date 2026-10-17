@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
-import { createApp } from '../server/app.js';
+import { createApp } from '../test-support/open-server.js';
 import { migrate } from '../server/database.js';
 import { request } from '../test-support/http.js';
 
@@ -20,6 +20,7 @@ async function fixture(t) {
         const response = await request(service.app, '/auth/register', null, 'POST', {
             username,
             password: 'test-password-123',
+            setupCode: 'test-owner-setup',
         });
         assert.equal(response.status, 200);
         return response.data;

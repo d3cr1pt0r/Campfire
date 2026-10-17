@@ -8,7 +8,7 @@ import { createSessions } from '../server/sessions.js';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRateLimit, originPolicy } from '../server/policies.js';
-import { createApp } from '../server/app.js';
+import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
 
 test('overlapping and repeated shutdown calls close SQLite only once', async (t) => {
@@ -49,7 +49,7 @@ test('legacy migration merges DM histories and accounts for attachment bytes onc
         db.exec("INSERT INTO attachments VALUES('unpadded','first','hi','text/plain','aGk')");
         migrate(db);
         migrate(db);
-        assert.equal(db.prepare('SELECT COUNT(*) n FROM migrations').get().n, 6);
+        assert.equal(db.prepare('SELECT COUNT(*) n FROM migrations').get().n, 7);
         assert.equal(db.prepare("SELECT COUNT(*) n FROM messages WHERE room='dm:a:b'").get().n, 2);
         assert.equal(db.prepare('SELECT bytes FROM storage_usage').get().bytes, 7);
         assert.equal(db.prepare('SELECT COUNT(*) n FROM reactions').get().n, 1);
@@ -75,7 +75,7 @@ test('failed migrations roll back schema changes and can resume after the cause 
         assert.equal(db.prepare('SELECT MAX(version) version FROM migrations').get().version, 1);
         db.exec('DROP TABLE storage_usage');
         migrate(db);
-        assert.equal(db.prepare('SELECT MAX(version) version FROM migrations').get().version, 6);
+        assert.equal(db.prepare('SELECT MAX(version) version FROM migrations').get().version, 7);
     } finally {
         db.close();
     }
@@ -129,7 +129,7 @@ test('forwarded client addresses affect rate limiting only behind a trusted prox
                     '/auth/login',
                     null,
                     'POST',
-                    { username: '', password: '' },
+                    { username: '', password: '', setupCode: 'test-owner-setup' },
                     { 'x-forwarded-for': ip },
                 );
             for (let i = 0; i < 20; i++) assert.equal((await attempt('192.0.2.1')).status, 400);
@@ -186,6 +186,7 @@ test('canonical conversations, stable pagination, full search, permissions and s
             await request(service.app, '/auth/register', null, 'POST', {
                 username,
                 password: 'test-password-123',
+                setupCode: 'test-owner-setup',
             })
         ).data;
     const alice = await signup('Alice'),
@@ -256,6 +257,7 @@ test('concurrent first registrations produce one owner and duplicate registratio
         request(service.app, '/auth/register', null, 'POST', {
             username,
             password: 'test-password-123',
+            setupCode: 'test-owner-setup',
         });
     const accounts = await Promise.all([signup('Alice'), signup('Bob')]);
     assert.deepEqual(

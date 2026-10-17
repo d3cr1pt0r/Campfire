@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
-import { createApp } from '../server/app.js';
+import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
 import { canonicalRoom } from '../shared/rooms.js';
 
@@ -20,6 +20,7 @@ async function fixture(t) {
             await request(service.app, '/auth/register', null, 'POST', {
                 username,
                 password: 'test-password-123',
+                setupCode: 'test-owner-setup',
             })
         ).data;
     const owner = await signup('Owner'),

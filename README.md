@@ -11,7 +11,7 @@ npm install
 npm start
 ```
 
-`npm start` builds the renderer and opens Electron. Enter your shared community server's address on the sign-up/sign-in screen (for a server running on the same PC, use `http://localhost:3001`). Desktop clients do not start community servers or create local community accounts. Each shared server has separate accounts. **The first registered account becomes the owner**, so register yours before making a new server public.
+`npm start` builds the renderer and opens Electron. Enter your shared community server's address on the sign-up/sign-in screen (for a server running on the same PC, use `http://localhost:3001`). Desktop clients do not start community servers or create local community accounts. Each shared server has separate accounts. **The first account becomes the owner** and requires the owner setup code printed in the server console. New servers start in Invite only mode.
 
 Electron uses a temporary localhost port solely to serve its interface. That port is not a community server address and should not be shared. Desktop sessions and preferences persist independently of that port, under Electron's user-data directory. On Windows they use Electron safeStorage/DPAPI encryption; platforms without OS encryption support fall back to a file protected by user filesystem permissions.
 
@@ -23,7 +23,7 @@ npm run build
 npm run server
 ```
 
-The server listens on port **3001**, serves the built browser client, and stores its SQLite database in `data/`. Open `http://localhost:3001` or connect from Electron using the server's address. Other users register accounts on that same address. The copy-address button in the member sidebar shares this address; there are no expiring invite codes.
+The server listens on port **3001**, serves the built browser client, and stores its SQLite database in `data/`. Open `http://localhost:3001` or connect from Electron using the server's address. Other users register accounts on that same address. The copy-address button in the member sidebar shares this address. In Invite only mode, new members also need an invitation code from the owner.
 
 For renderer development, run `npm run server` and `npm run dev` in separate terminals, then open `http://localhost:5173`. Changes to server code require a server restart.
 
@@ -32,6 +32,23 @@ Configuration is documented in [.env.example](.env.example). `npm run server` lo
 ```bash
 node --env-file=.env server/index.js
 ```
+
+### Who can join
+
+The owner controls **Settings → Server settings → Who can join**:
+
+- **Free for all:** anyone with the server address can create an account and access Member-visible history.
+- **Invite only:** registration requires a valid invitation. Existing accounts can always sign in.
+
+Only the owner can change this setting or manage invitations, including when another role has server-management permission. Changes apply immediately and persist across restarts. Upgrading an existing server with accounts preserves open registration; new servers default to Invite only.
+
+On a new server, startup prints an **Owner setup code** in the server console (`docker compose logs driskord` for Compose). Enter that code when creating the first account. Treat it as a secret: anyone holding it can claim the server before the owner account exists. Restarting before setup generates a new code; after setup the code no longer grants access. No code is exposed through the public API.
+
+In Invite only mode the owner can create labelled invitations, copy a code or browser link, and revoke unused invitations. Codes are displayed once, stored only as hashes, expire after seven days, and allow one successful account creation. Up to 100 unexpired unused invitations may exist at once; creation is limited to 20 per minute. The list shows the latest 200 records. Anyone with a code can redeem it first, so share it privately. New accounts receive the Member role. These registration invitations are separate from invitations to calls.
+
+Desktop users enter the server address and paste the invitation code at sign-up. Browser links prefill the code; the fragment is removed from the address bar when the client starts. Links must point at the externally reachable server address. Switching to Free for all asks for confirmation and revokes all unused invitations. Switching back requires fresh invitations.
+
+Use HTTPS for remote sign-up: invitation and setup codes, passwords, and sessions still need transport protection. Registration controls do not add end-to-end encryption.
 
 ### Internet hosting
 

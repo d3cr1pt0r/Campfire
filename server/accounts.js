@@ -2,12 +2,23 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { createPassword, verifyPassword, tokenHash } from './security.js';
 import { check, route, createRateLimit } from './policies.js';
 import { transaction } from './database.js';
-export function registerAccounts({ app, io, db, get, run, publicUser, sessionLifetimeMs }) {
+export function registerAccounts({
+    app,
+    io,
+    db,
+    get,
+    run,
+    publicUser,
+    sessionLifetimeMs,
+    registration,
+}) {
     const limit = createRateLimit();
     app.get('/api/info', (_req, res) =>
-        res.json({
+        res.set('Cache-Control', 'no-store').json({
             name: get('SELECT value FROM settings WHERE key=?', 'name').value,
-            registration: true,
+            registration: registration.mode() === 'open',
+            registrationMode: registration.mode(),
+            setupRequired: registration.needsSetup(),
         }),
     );
     app.post(
@@ -26,6 +37,7 @@ export function registerAccounts({ app, io, db, get, run, publicUser, sessionLif
             );
             let u = get('SELECT * FROM users WHERE username=?', username);
             if (req.params.action === 'register') {
+                registration.authorize(req.body);
                 check(!u, 'That username is already taken', 409);
                 const passwordHash = await createPassword(password);
                 const id = randomUUID();
@@ -35,8 +47,7 @@ export function registerAccounts({ app, io, db, get, run, publicUser, sessionLif
                         'That username is already taken',
                         409,
                     );
-                    const role =
-                        get('SELECT COUNT(*) AS n FROM users').n === 0 ? 'owner' : 'member';
+                    const role = registration.authorize(req.body);
                     run(
                         'INSERT INTO users(id,username,password,role) VALUES(?,?,?,?)',
                         id,
@@ -45,6 +56,9 @@ export function registerAccounts({ app, io, db, get, run, publicUser, sessionLif
                         role,
                     );
                     run('INSERT INTO profiles(user,nickname) VALUES(?,?)', id, username);
+                    // Check/consume within the same transaction as account creation.
+                    // The owner insert changes needsSetup(), so only members redeem invitations.
+                    if (role === 'member') registration.authorize(req.body, true, id);
                 });
                 u = get('SELECT * FROM users WHERE id=?', id);
             } else {

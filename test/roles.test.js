@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createApp } from '../server/app.js';
+import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
 
 async function fixture(t) {
@@ -19,7 +19,11 @@ async function fixture(t) {
         return response.data;
     };
     const signup = (username) =>
-        api(null, '/auth/register', 'POST', { username, password: 'test-password-123' });
+        api(null, '/auth/register', 'POST', {
+            username,
+            password: 'test-password-123',
+            setupCode: 'test-owner-setup',
+        });
     return {
         owner: await signup('Owner'),
         member: await signup('Member'),

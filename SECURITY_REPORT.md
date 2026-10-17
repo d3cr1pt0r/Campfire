@@ -108,3 +108,7 @@ End-to-end chat encryption would be a separate architectural project if confiden
 - [RFC 8827, section 9.1: WebRTC communications security](https://www.rfc-editor.org/rfc/rfc8827.html#section-9.1)
 
 Primary code references: `server/app.js`, `server/index.js`, `server/accounts.js`, `server/sessions.js`, `server/security.js`, `server/channel-access.js`, `server/messages.js`, `server/calls.js`, `server/database.js`, `src/main.tsx`, `src/api.ts`, `src/useCall.ts`, `electron/main.cjs`, `compose.yaml`, and `.env.example`.
+
+## Registration-control implementation update
+
+Owner-controlled Free for all / Invite only registration is now implemented. New databases default to Invite only; existing databases with accounts retain open registration. First-owner registration requires a random setup code printed to the server console. Owner-created invitations expire after seven days, are single use, can be revoked, and are stored as hashes. Account insertion and invitation redemption share one transaction. Switching to open registration revokes unused invitations. These changes supersede finding 3 and the first-account claim warning above; the transport, stored-content privacy, and wider availability findings remain applicable. See README for operation and limits.
