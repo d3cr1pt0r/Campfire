@@ -14,6 +14,7 @@ import { createRoot } from 'react-dom/client';
 import { io } from 'socket.io-client';
 import type { AppSocket } from './types';
 import {
+    Menu,
     Hash,
     Volume2,
     Plus,
@@ -94,13 +95,26 @@ function App() {
         [attachments, setAttachments] = useState<File[]>([]);
     const [search, setSearch] = useState(''),
         [pins, setPins] = useState(false),
-        [members, setMembers] = useState(true),
+        [members, setMembers] = useState(() => window.innerWidth > 1100),
         [typing, setTyping] = useState<Record<string, number>>({}),
         [unread, setUnread] = useState<Record<string, number>>({});
     const [prefs, setPrefs] = useState<Preferences>(() => ({
         ...defaultPrefs,
         ...stored('preferences', {}),
     }));
+    const [navigationOpen, setNavigationOpen] = useState(false);
+    const [compact, setCompact] = useState(() => window.innerWidth <= 800);
+    const navigation = useRef<HTMLDivElement>(null);
+    useDialog(navigation, () => setNavigationOpen(false), compact && navigationOpen);
+    useEffect(() => {
+        const query = window.matchMedia('(max-width: 800px)');
+        const update = () => {
+            setCompact(query.matches);
+            setNavigationOpen(false);
+        };
+        query.addEventListener('change', update);
+        return () => query.removeEventListener('change', update);
+    }, []);
     const [draggingFiles, setDraggingFiles] = useState(false);
     const dragDepth = useRef(0);
     const viewRef = useRef(view);
@@ -292,8 +306,19 @@ function App() {
         navigator.mediaDevices?.addEventListener('devicechange', refreshDevices);
         return () => navigator.mediaDevices?.removeEventListener('devicechange', refreshDevices);
     }, [modal]);
+    useEffect(() => {
+        if (modal) setNavigationOpen(false);
+    }, [modal]);
     const modalContainer = useRef<HTMLElement>(null);
-    useDialog(modalContainer, () => setModal(null), !!modal);
+    useDialog(
+        modalContainer,
+        () => {
+            if (!busy) setModal(null);
+        },
+        !!modal,
+        undefined,
+        modal || undefined,
+    );
     const act = async (fn: () => Promise<unknown>) => {
         try {
             setBusy(true);
@@ -330,12 +355,14 @@ function App() {
         if (!state) return;
         setRoom(canonicalRoom(`dm:${state.me.id}:${id}`));
         setView('chat');
+        setNavigationOpen(false);
         setSearch('');
         setPins(false);
     };
     const selectRoom = (id: string) => {
         setRoom(id);
         setView('chat');
+        setNavigationOpen(false);
         setSearch('');
         setPins(false);
     };
@@ -472,10 +499,18 @@ function App() {
         setSettingsTab(tab);
         setModal('settings');
     };
+    const removingFriend = state?.friends.find((friend) =>
+        [friend.sender, friend.recipient].includes(modal?.split(':')[1] || ''),
+    );
+    const friendAction = removingFriend?.accepted
+        ? 'Remove friend'
+        : removingFriend?.sender === state?.me.id
+          ? 'Cancel request'
+          : 'Decline request';
     const showError = error && (
         <div className="toast" role="alert">
             <span>{error}</span>
-            <button onClick={() => setError('')} aria-label="Dismiss error">
+            <button onClick={() => setError('')} aria-label="Dismiss notification">
                 <X size={17} />
             </button>
         </div>
@@ -564,9 +599,21 @@ function App() {
                                     minLength={2}
                                     maxLength={32}
                                     required
-                                    placeholder="What should we call you?"
+                                    placeholder={
+                                        register
+                                            ? 'Choose a permanent username'
+                                            : 'Enter your username'
+                                    }
+                                    autoCapitalize="none"
+                                    spellCheck={false}
                                 />
                             </label>
+                            {register && (
+                                <p className="field-help">
+                                    Your username is permanent. You can change your display nickname
+                                    later.
+                                </p>
+                            )}
                             <label>
                                 Password
                                 <input
@@ -618,235 +665,290 @@ function App() {
                 }}
                 onDragEnd={resetDrop}
             >
-                <nav className="server-rail" aria-label="Servers">
-                    <button
-                        className="brand-icon"
-                        title="Friends"
-                        onClick={() => setView('friends')}
-                    >
-                        <MessageCircle size={28} />
-                    </button>
-                    <div className="rail-divider" />
-                    <button
-                        className="server-icon active"
-                        title={state.name}
-                        onClick={() =>
-                            selectRoom(
-                                state.channels.find((channel) => channel.kind === 'text')?.id || '',
+                {compact && navigationOpen && (
+                    <div
+                        className="navigation-backdrop"
+                        onClick={() => setNavigationOpen(false)}
+                        aria-hidden="true"
+                    />
+                )}
+                <div
+                    className={`navigation-shell ${navigationOpen ? 'is-open' : ''}`}
+                    ref={navigation}
+                    tabIndex={-1}
+                    role={compact ? 'dialog' : undefined}
+                    aria-modal={compact && navigationOpen ? true : undefined}
+                    aria-label="Server navigation"
+                    onClick={(event) => {
+                        if (
+                            (event.target as HTMLElement).closest(
+                                '.nav-item, .brand-icon, .server-icon',
                             )
-                        }
-                    >
-                        {initials(state.name)}
-                    </button>
-                    <button
-                        className="rail-add"
-                        title="Connect to another server"
-                        onClick={() => setModal('switch')}
-                    >
-                        <Plus />
-                    </button>
-                    <div className="rail-spacer" />
-                    <button title="Settings" onClick={() => openSettings()}>
-                        <Settings size={23} />
-                    </button>
-                    <span className="rail-version">v0.1.3</span>
-                </nav>
-                <aside className="sidebar">
-                    <button className="server-heading" onClick={() => openSettings('server')}>
-                        <span>
-                            {state.name}
-                            <small>
-                                <i className={connected ? 'online-dot' : 'offline-dot'} />
-                                {connected ? 'Your community, connected' : 'Reconnecting…'}
-                            </small>
-                        </span>
-                        <ChevronDown size={18} />
-                    </button>
-                    <div className="sidebar-content">
+                        )
+                            setNavigationOpen(false);
+                    }}
+                >
+                    <nav className="server-rail" aria-label="Servers">
                         <button
-                            className={`nav-item ${view === 'friends' ? 'selected' : ''}`}
+                            className="brand-icon"
+                            title="Friends"
                             onClick={() => setView('friends')}
                         >
-                            <Users size={19} /> Friends{' '}
-                            {state.friends.some(
-                                (f) => !f.accepted && f.recipient === state.me.id,
-                            ) && <span className="count">!</span>}
+                            <MessageCircle size={28} />
                         </button>
-                        <div className="category">
-                            <span>TEXT CHANNELS</span>
-                            {permission('manage') && (
-                                <button
-                                    title="Manage channels and access"
-                                    onClick={() => openSettings('channels')}
-                                >
-                                    <Settings size={15} />
-                                </button>
-                            )}
-                            {permission('manage') && (
-                                <button
-                                    title="Create text channel"
-                                    onClick={() => setModal('channel:text')}
-                                >
-                                    <Plus size={16} />
-                                </button>
-                            )}
-                        </div>
-                        {state.channels
-                            .filter((c) => c.kind === 'text')
-                            .map((c) => (
-                                <button
-                                    key={c.id}
-                                    className={`nav-item channel ${room === c.id && view === 'chat' ? 'selected' : ''}`}
-                                    onClick={() => selectRoom(c.id)}
-                                >
-                                    <Hash size={20} />
-                                    {c.name}
-                                    {unread[c.id] > 0 && (
-                                        <span className="count">{unread[c.id]}</span>
-                                    )}
-                                </button>
-                            ))}
-                        <div className="category">
-                            <span>VOICE CHANNELS</span>
-                            {permission('manage') && (
-                                <button
-                                    title="Manage voice channels and access"
-                                    onClick={() => openSettings('channels')}
-                                >
-                                    <Settings size={15} />
-                                </button>
-                            )}
-                            {permission('manage') && (
-                                <button
-                                    title="Create voice channel"
-                                    onClick={() => setModal('channel:voice')}
-                                >
-                                    <Plus size={16} />
-                                </button>
-                            )}
-                        </div>
-                        {state.channels
-                            .filter((c) => c.kind === 'voice')
-                            .map((c) => (
-                                <React.Fragment key={c.id}>
+                        <div className="rail-divider" />
+                        <button
+                            className="server-icon active"
+                            title={state.name}
+                            onClick={() =>
+                                selectRoom(
+                                    state.channels.find((channel) => channel.kind === 'text')?.id ||
+                                        '',
+                                )
+                            }
+                        >
+                            {initials(state.name)}
+                        </button>
+                        <button
+                            className="rail-add"
+                            title="Connect to another server"
+                            onClick={() => setModal('switch')}
+                        >
+                            <Plus />
+                        </button>
+                        <div className="rail-spacer" />
+                        <button title="Settings" onClick={() => openSettings()}>
+                            <Settings size={23} />
+                        </button>
+                        <span className="rail-version">v0.1.3</span>
+                    </nav>
+                    <aside className="sidebar">
+                        <button
+                            className="navigation-close"
+                            aria-label="Close navigation"
+                            onClick={() => setNavigationOpen(false)}
+                        >
+                            <X size={20} />
+                        </button>
+                        <button className="server-heading" onClick={() => openSettings('server')}>
+                            <span>
+                                {state.name}
+                                <small>
+                                    <i className={connected ? 'online-dot' : 'offline-dot'} />
+                                    {connected ? 'Your community, connected' : 'Reconnecting…'}
+                                </small>
+                            </span>
+                            <ChevronDown size={18} />
+                        </button>
+                        <div className="sidebar-content">
+                            <button
+                                className={`nav-item ${view === 'friends' ? 'selected' : ''}`}
+                                aria-current={view === 'friends' ? 'page' : undefined}
+                                onClick={() => setView('friends')}
+                            >
+                                <Users size={19} /> Friends{' '}
+                                {state.friends.some(
+                                    (f) => !f.accepted && f.recipient === state.me.id,
+                                ) && <span className="count">!</span>}
+                            </button>
+                            <div className="category">
+                                <span>TEXT CHANNELS</span>
+                                {permission('manage') && (
                                     <button
-                                        className={`nav-item channel ${call.channel === c.id ? 'in-call' : ''}`}
+                                        title="Manage channels and access"
+                                        onClick={() => openSettings('channels')}
+                                    >
+                                        <Settings size={15} />
+                                    </button>
+                                )}
+                                {permission('manage') && (
+                                    <button
+                                        title="Create text channel"
+                                        onClick={() => setModal('channel:text')}
+                                    >
+                                        <Plus size={16} />
+                                    </button>
+                                )}
+                            </div>
+                            {state.channels
+                                .filter((c) => c.kind === 'text')
+                                .map((c) => (
+                                    <button
+                                        key={c.id}
+                                        className={`nav-item channel ${room === c.id && view === 'chat' ? 'selected' : ''}`}
+                                        aria-current={
+                                            room === c.id && view === 'chat' ? 'page' : undefined
+                                        }
+                                        onClick={() => selectRoom(c.id)}
+                                    >
+                                        <Hash size={20} />
+                                        {c.name}
+                                        {unread[c.id] > 0 && (
+                                            <span className="count">{unread[c.id]}</span>
+                                        )}
+                                    </button>
+                                ))}
+                            <div className="category">
+                                <span>VOICE CHANNELS</span>
+                                {permission('manage') && (
+                                    <button
+                                        title="Manage voice channels and access"
+                                        onClick={() => openSettings('channels')}
+                                    >
+                                        <Settings size={15} />
+                                    </button>
+                                )}
+                                {permission('manage') && (
+                                    <button
+                                        title="Create voice channel"
+                                        onClick={() => setModal('channel:voice')}
+                                    >
+                                        <Plus size={16} />
+                                    </button>
+                                )}
+                            </div>
+                            {state.channels
+                                .filter((c) => c.kind === 'voice')
+                                .map((c) => (
+                                    <React.Fragment key={c.id}>
+                                        <button
+                                            className={`nav-item channel ${call.channel === c.id ? 'in-call' : ''}`}
+                                            onClick={() => {
+                                                if (call.channel !== c.id) void call.join(c.id);
+                                            }}
+                                        >
+                                            <Volume2 size={20} />
+                                            {c.name}
+                                            {call.channel === c.id && <Radio size={15} />}
+                                        </button>
+                                        {state.calls
+                                            .filter((p) => p.channel === c.id)
+                                            .map((p) => (
+                                                <div className="voice-member" key={p.socket}>
+                                                    <Avatar
+                                                        user={user(p.user)}
+                                                        color={color(user(p.user))}
+                                                        small
+                                                        speaking={speaking.has(p.user)}
+                                                    />
+                                                    {displayName(user(p.user))}
+                                                </div>
+                                            ))}
+                                    </React.Fragment>
+                                ))}
+                            {(state.directCalls || [])
+                                .filter((c) => c.members.includes(state.me.id))
+                                .map((c) => (
+                                    <button
+                                        className={`nav-item ${call.channel === c.id ? 'in-call' : ''}`}
+                                        key={c.id}
+                                        disabled={!!call.channel && call.channel !== c.id}
                                         onClick={() => {
                                             if (call.channel !== c.id) void call.join(c.id);
                                         }}
                                     >
-                                        <Volume2 size={20} />
-                                        {c.name}
-                                        {call.channel === c.id && <Radio size={15} />}
+                                        <Phone size={18} />
+                                        Private call ·{' '}
+                                        {state.calls.filter((p) => p.channel === c.id).length}{' '}
+                                        connected
                                     </button>
-                                    {state.calls
-                                        .filter((p) => p.channel === c.id)
-                                        .map((p) => (
-                                            <div className="voice-member" key={p.socket}>
-                                                <Avatar
-                                                    user={user(p.user)}
-                                                    color={color(user(p.user))}
-                                                    small
-                                                    speaking={speaking.has(p.user)}
-                                                />
-                                                {displayName(user(p.user))}
-                                            </div>
-                                        ))}
-                                </React.Fragment>
-                            ))}
-                        {(state.directCalls || [])
-                            .filter((c) => c.members.includes(state.me.id))
-                            .map((c) => (
+                                ))}
+                            <div className="category">
+                                <span>DIRECT MESSAGES</span>
                                 <button
-                                    className={`nav-item ${call.channel === c.id ? 'in-call' : ''}`}
-                                    key={c.id}
-                                    disabled={!!call.channel && call.channel !== c.id}
-                                    onClick={() => {
-                                        if (call.channel !== c.id) void call.join(c.id);
-                                    }}
+                                    title="Start a direct message"
+                                    onClick={() => setView('friends')}
                                 >
-                                    <Phone size={18} />
-                                    Private call ·{' '}
-                                    {state.calls.filter((p) => p.channel === c.id).length} connected
-                                </button>
-                            ))}
-                        <div className="category">
-                            <span>DIRECT MESSAGES</span>
-                            <button
-                                title="Start a direct message"
-                                onClick={() => setView('friends')}
-                            >
-                                <Plus size={16} />
-                            </button>
-                        </div>
-                        {state.friends
-                            .filter((f) => f.accepted)
-                            .map((f) => {
-                                const id = f.sender === state.me.id ? f.recipient : f.sender;
-                                const u = user(id);
-                                const dmRoom = canonicalRoom(`dm:${state.me.id}:${id}`);
-                                return (
-                                    <button
-                                        className={`nav-item ${room === dmRoom && view === 'chat' ? 'selected' : ''}`}
-                                        key={id}
-                                        onClick={() => dm(id)}
-                                    >
-                                        <Avatar user={u} color={color(u)} small />
-                                        {displayName(u)}
-                                        {unread[dmRoom] > 0 && (
-                                            <span className="count">{unread[dmRoom]}</span>
-                                        )}
-                                    </button>
-                                );
-                            })}
-                        {!state.friends.some((f) => f.accepted) && (
-                            <p className="sidebar-hint">
-                                Good conversations start
-                                <br />
-                                with a hello. Add a friend.
-                            </p>
-                        )}
-                    </div>
-                    <div className="server-owned">
-                        <Shield size={15} />
-                        <span>Self-hosted. Yours to keep.</span>
-                    </div>
-                    {call.channel && (
-                        <div className="voice-connected">
-                            <div>
-                                <Radio size={17} />
-                                <strong>Voice connected</strong>
-                                <button title="Disconnect call" onClick={call.leave}>
-                                    <PhoneOff size={17} />
+                                    <Plus size={16} />
                                 </button>
                             </div>
-                            <small>
-                                {callName} / {state.name}
-                            </small>
+                            {state.friends
+                                .filter((f) => f.accepted)
+                                .map((f) => {
+                                    const id = f.sender === state.me.id ? f.recipient : f.sender;
+                                    const u = user(id);
+                                    const dmRoom = canonicalRoom(`dm:${state.me.id}:${id}`);
+                                    return (
+                                        <button
+                                            className={`nav-item ${room === dmRoom && view === 'chat' ? 'selected' : ''}`}
+                                            key={id}
+                                            onClick={() => dm(id)}
+                                        >
+                                            <Avatar user={u} color={color(u)} small />
+                                            {displayName(u)}
+                                            {unread[dmRoom] > 0 && (
+                                                <span className="count">{unread[dmRoom]}</span>
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            {!state.friends.some((f) => f.accepted) && (
+                                <p className="sidebar-hint">
+                                    Good conversations start
+                                    <br />
+                                    with a hello. Add a friend.
+                                </p>
+                            )}
                         </div>
-                    )}
-                    <div className="user-bar">
-                        <Avatar user={state.me} color={color(state.me)} />
-                        <button className="user-name" onClick={() => openSettings()}>
-                            <strong>{displayName(state.me)}</strong>
-                            <small>Online</small>
-                        </button>
-                        <button
-                            title={call.muted ? 'Unmute' : 'Mute microphone'}
-                            onClick={() => call.setMuted(!call.muted)}
-                        >
-                            {call.muted ? <MicOff size={18} /> : <Mic size={18} />}
-                        </button>
-                        <button title="Deafen" onClick={() => call.setDeafened(!call.deafened)}>
-                            {call.deafened ? <HeadphoneOff size={18} /> : <Headphones size={18} />}
-                        </button>
-                        <button title="Settings" onClick={() => openSettings()}>
-                            <Settings size={18} />
-                        </button>
-                    </div>
-                </aside>
-                <main className="workspace">
+                        <div className="server-owned">
+                            <Shield size={15} />
+                            <span>Self-hosted. Yours to keep.</span>
+                        </div>
+                        {call.channel && (
+                            <div className="voice-connected">
+                                <div>
+                                    <Radio size={17} />
+                                    <strong>Voice connected</strong>
+                                    <button title="Disconnect call" onClick={call.leave}>
+                                        <PhoneOff size={17} />
+                                    </button>
+                                </div>
+                                <small>
+                                    {callName} / {state.name}
+                                </small>
+                            </div>
+                        )}
+                        <div className="user-bar">
+                            <Avatar user={state.me} color={color(state.me)} />
+                            <button className="user-name" onClick={() => openSettings()}>
+                                <strong>{displayName(state.me)}</strong>
+                                <small>{connected ? 'Online' : 'Reconnecting…'}</small>
+                            </button>
+                            <button
+                                title={call.muted ? 'Unmute' : 'Mute microphone'}
+                                aria-pressed={call.muted}
+                                onClick={() => call.setMuted(!call.muted)}
+                            >
+                                {call.muted ? <MicOff size={18} /> : <Mic size={18} />}
+                            </button>
+                            <button
+                                title={call.deafened ? 'Undeafen' : 'Deafen'}
+                                aria-pressed={call.deafened}
+                                onClick={() => call.setDeafened(!call.deafened)}
+                            >
+                                {call.deafened ? (
+                                    <HeadphoneOff size={18} />
+                                ) : (
+                                    <Headphones size={18} />
+                                )}
+                            </button>
+                            <button title="Settings" onClick={() => openSettings()}>
+                                <Settings size={18} />
+                            </button>
+                        </div>
+                    </aside>
+                </div>
+                <main className="workspace" inert={compact && navigationOpen}>
                     <header className="topbar">
+                        <button
+                            className="navigation-toggle"
+                            title="Channels and friends"
+                            aria-label="Open navigation"
+                            aria-expanded={navigationOpen}
+                            onClick={() => setNavigationOpen(true)}
+                        >
+                            <Menu size={22} />
+                        </button>
                         <div className="channel-title">
                             {view === 'friends' ? (
                                 <Users size={23} />
@@ -885,6 +987,8 @@ function App() {
                                     )}
                                     <button
                                         title="Pinned messages"
+                                        aria-label="Pinned messages"
+                                        aria-pressed={pins}
                                         className={pins ? 'highlight' : ''}
                                         onClick={() => setPins(!pins)}
                                     >
@@ -892,12 +996,17 @@ function App() {
                                     </button>
                                     <button
                                         title="Toggle member list"
+                                        aria-label="Members"
+                                        aria-expanded={members}
+                                        aria-controls="community-members"
                                         onClick={() => setMembers(!members)}
                                     >
                                         <Users size={21} />
                                     </button>
                                     <label className="search">
+                                        <span className="sr-only">Search this conversation</span>
                                         <input
+                                            type="search"
                                             placeholder="Search messages"
                                             value={search}
                                             onChange={(e) => setSearch(e.target.value)}
@@ -911,9 +1020,18 @@ function App() {
                                 title={connected ? 'Connected' : 'Disconnected'}
                             >
                                 <i />
+                                <span className="sr-only">
+                                    {connected ? 'Connected' : 'Disconnected; reconnecting'}
+                                </span>
                             </span>
                         </div>
                     </header>
+                    {!connected && (
+                        <div className="connection-banner" role="status">
+                            Connection lost. Reconnecting… Messages will be available when the
+                            server returns.
+                        </div>
+                    )}
                     {call.channel && (
                         <CallPanel
                             state={state}
@@ -1027,6 +1145,10 @@ function App() {
                                     setModal={setModal}
                                     setEdit={setEdit}
                                     bottom={bottom}
+                                    clearFilters={() => {
+                                        setSearch('');
+                                        setPins(false);
+                                    }}
                                 />
                                 <div className="composer-wrap">
                                     {attachments.map((file, index) => (
@@ -1080,23 +1202,32 @@ function App() {
                                             disabled={!canPost}
                                             maxLength={4000}
                                             rows={1}
+                                            style={!draft ? { height: 'auto' } : undefined}
                                             onChange={(e) => {
                                                 setDraft(e.target.value);
+                                                e.target.style.height = 'auto';
+                                                e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
                                                 if (Date.now() - lastTyping.current > 2000) {
                                                     socket?.emit('typing', room);
                                                     lastTyping.current = Date.now();
                                                 }
                                             }}
                                             onKeyDown={(e) => {
-                                                if (e.key === 'Enter' && !e.shiftKey) {
+                                                if (
+                                                    e.key === 'Enter' &&
+                                                    !e.shiftKey &&
+                                                    !e.nativeEvent.isComposing
+                                                ) {
                                                     e.preventDefault();
-                                                    if (!busy) void send(e);
+                                                    if (!busy && !e.nativeEvent.isComposing)
+                                                        void send(e);
                                                 }
                                             }}
                                         />
                                         <button
                                             type="button"
                                             title="Add emoji"
+                                            disabled={!canPost || busy}
                                             onClick={() => setModal('emoji')}
                                         >
                                             <Smile size={21} />
@@ -1139,9 +1270,20 @@ function App() {
                             </section>
                         )}
                         {members && (
-                            <aside className="member-list">
+                            <aside
+                                className="member-list"
+                                id="community-members"
+                                aria-label="Community members"
+                            >
                                 <div className="member-list-heading">
-                                    YOUR COMMUNITY <span>{state.users.length}</span>
+                                    <span>Members · {state.users.length}</span>
+                                    <button
+                                        aria-label="Close member list"
+                                        title="Close member list"
+                                        onClick={() => setMembers(false)}
+                                    >
+                                        <X size={18} />
+                                    </button>
                                 </div>
                                 {['Online', 'Offline'].map((status) => {
                                     const group = state.users.filter(
@@ -1234,7 +1376,7 @@ function App() {
                     <div
                         className="modal-backdrop"
                         onMouseDown={(e) => {
-                            if (e.target === e.currentTarget) setModal(null);
+                            if (e.target === e.currentTarget && !busy) setModal(null);
                         }}
                     >
                         <section
@@ -1243,11 +1385,15 @@ function App() {
                             className={`modal ${modal === 'settings' ? 'settings-modal' : ''}`}
                             role="dialog"
                             aria-modal="true"
-                            aria-label={modal === 'settings' ? 'Settings' : 'Action'}
+                            aria-label={modal === 'settings' ? 'Settings' : undefined}
+                            aria-labelledby={
+                                modal !== 'settings' ? 'action-dialog-title' : undefined
+                            }
                         >
                             <button
                                 className="modal-close"
                                 aria-label="Close dialog"
+                                disabled={busy}
                                 onClick={() => setModal(null)}
                             >
                                 <X size={21} />
@@ -1278,7 +1424,7 @@ function App() {
                                 />
                             ) : modal === 'invite-call' ? (
                                 <>
-                                    <h2>Invite a friend to this call</h2>
+                                    <h2 id="action-dialog-title">Invite a friend to this call</h2>
                                     <p>Your friend can accept or decline the invitation.</p>
                                     {state.friends
                                         .filter((f) => f.accepted)
@@ -1310,9 +1456,13 @@ function App() {
                                                     }
                                                 >
                                                     {displayName(user(id))} ·{' '}
-                                                    {state.online.includes(id)
-                                                        ? 'Invite'
-                                                        : 'Offline'}
+                                                    {room?.members.includes(id)
+                                                        ? 'In this call'
+                                                        : room?.invited.includes(id)
+                                                          ? 'Invited'
+                                                          : state.online.includes(id)
+                                                            ? 'Invite'
+                                                            : 'Offline'}
                                                 </button>
                                             );
                                         })}
@@ -1320,7 +1470,7 @@ function App() {
                             ) : modal === 'switch' ? (
                                 <>
                                     <Server size={35} className="settings-hero" />
-                                    <h2>Connect to another server</h2>
+                                    <h2 id="action-dialog-title">Connect to another server</h2>
                                     <p className="muted">
                                         Sign out to enter another server address. You’ll need an
                                         account on that server. Your current messages stay on this
@@ -1347,7 +1497,7 @@ function App() {
                             ) : modal === 'friend' ? (
                                 <>
                                     <Users size={35} className="settings-hero" />
-                                    <h2>Find your people.</h2>
+                                    <h2 id="action-dialog-title">Find your people.</h2>
                                     <p className="muted">
                                         Enter their exact username on this server.
                                     </p>
@@ -1365,7 +1515,9 @@ function App() {
                                 </>
                             ) : modal.startsWith('channel:') ? (
                                 <>
-                                    <h2>Create a {modal.split(':')[1]} channel</h2>
+                                    <h2 id="action-dialog-title">
+                                        Create a {modal.split(':')[1]} channel
+                                    </h2>
                                     <p className="muted">
                                         Voice names can include capitals and spaces. Text names
                                         convert to lowercase with hyphens.
@@ -1387,7 +1539,7 @@ function App() {
                                 </>
                             ) : modal === 'edit' ? (
                                 <>
-                                    <h2>Edit message</h2>
+                                    <h2 id="action-dialog-title">Edit message</h2>
                                     <SimpleForm
                                         label="Message"
                                         initialValue={edit?.body}
@@ -1423,7 +1575,7 @@ function App() {
                                 />
                             ) : modal === 'emoji' || modal.startsWith('reaction:') ? (
                                 <>
-                                    <h2>
+                                    <h2 id="action-dialog-title">
                                         {modal === 'emoji'
                                             ? 'Say it with an emoji.'
                                             : 'Add a reaction'}
@@ -1464,34 +1616,47 @@ function App() {
                                 </>
                             ) : (
                                 <>
-                                    <h2>
+                                    <h2 id="action-dialog-title">
                                         {modal.startsWith('delete:')
                                             ? 'Delete this message?'
-                                            : 'Remove this friend?'}
+                                            : `${friendAction}?`}
                                     </h2>
                                     <p className="muted">
                                         {modal.startsWith('delete:')
                                             ? 'This will permanently delete the message and any attachment.'
                                             : 'You can send another friend request later.'}
                                     </p>
-                                    <button
-                                        className="primary danger-bg"
-                                        disabled={busy}
-                                        onClick={() =>
-                                            void act(async () => {
-                                                const [action, id] = modal.split(':');
-                                                await api(
-                                                    action === 'delete'
-                                                        ? `/messages/${id}`
-                                                        : `/friends/${id}`,
-                                                    'DELETE',
-                                                );
-                                                setModal(null);
-                                            })
-                                        }
-                                    >
-                                        Confirm
-                                    </button>
+                                    <div className="dialog-actions">
+                                        <button
+                                            className="secondary"
+                                            disabled={busy}
+                                            onClick={() => setModal(null)}
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            className="primary danger-bg"
+                                            disabled={busy}
+                                            onClick={() =>
+                                                void act(async () => {
+                                                    const [action, id] = modal.split(':');
+                                                    await api(
+                                                        action === 'delete'
+                                                            ? `/messages/${id}`
+                                                            : `/friends/${id}`,
+                                                        'DELETE',
+                                                    );
+                                                    setModal(null);
+                                                })
+                                            }
+                                        >
+                                            {busy
+                                                ? 'Working…'
+                                                : modal.startsWith('delete:')
+                                                  ? 'Delete message'
+                                                  : friendAction}
+                                        </button>
+                                    </div>
                                 </>
                             )}
                         </section>

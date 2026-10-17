@@ -9,6 +9,7 @@ export function useDialog(
     onClose: () => void,
     enabled = true,
     initialFocus?: RefObject<HTMLElement | null>,
+    context?: string,
 ) {
     const close = useRef(onClose);
     close.current = onClose;
@@ -17,9 +18,14 @@ export function useDialog(
         if (!enabled || !element) return;
         const previous = document.activeElement as HTMLElement | null;
         dialogs.push(element);
-        (initialFocus?.current || element.querySelector<HTMLElement>(selector) || element).focus({
-            preventScroll: true,
-        });
+        const target =
+            initialFocus?.current ||
+            (element.contains(document.activeElement)
+                ? (document.activeElement as HTMLElement)
+                : null) ||
+            element.querySelector<HTMLElement>(selector) ||
+            element;
+        target.focus({ preventScroll: true });
         const key = (event: KeyboardEvent) => {
             if (dialogs.at(-1) !== element) return;
             if (event.key === 'Escape') {
@@ -60,7 +66,8 @@ export function useDialog(
             if (index >= 0) dialogs.splice(index, 1);
             if (document.fullscreenElement === element)
                 void document.exitFullscreen().catch(() => {});
-            if (previous?.isConnected) previous.focus({ preventScroll: true });
+            if (previous?.isConnected && (!dialogs.length || dialogs.at(-1)?.contains(previous)))
+                previous.focus({ preventScroll: true });
         };
-    }, [container, enabled, initialFocus]);
+    }, [container, enabled, initialFocus, context]);
 }

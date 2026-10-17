@@ -57,21 +57,40 @@ export function SettingsPanel({
     permission: (permission: string) => boolean;
 }) {
     const [avatarFile, setAvatarFile] = useState<File | null>(null);
+    const [deleteEmoji, setDeleteEmoji] = useState<string | null>(null);
+    const sections = [
+        ['account', 'My account'],
+        ['audio', 'Voice & video'],
+        ['notifications', 'Notifications'],
+        ['server', 'Server settings'],
+        ['roles', 'Roles & permissions'],
+        ...(permission('manage') ? [['channels', 'Channels & access']] : []),
+        ['emojis', 'Custom emojis'],
+    ];
     return (
         <>
-            <nav className="settings-nav">
+            <div className="settings-mobile-header">
+                <label className="sr-only" htmlFor="settings-section">
+                    Settings section
+                </label>
+                <select
+                    id="settings-section"
+                    value={settingsTab}
+                    onChange={(event) => setSettingsTab(event.target.value)}
+                >
+                    {sections.map(([id, label]) => (
+                        <option key={id} value={id}>
+                            {label}
+                        </option>
+                    ))}
+                </select>
+            </div>
+            <nav className="settings-nav" aria-label="Settings sections">
                 <span className="mini-label">SETTINGS</span>
-                {[
-                    ['account', 'My account'],
-                    ['audio', 'Voice & video'],
-                    ['notifications', 'Notifications'],
-                    ['server', 'Server settings'],
-                    ['roles', 'Roles & permissions'],
-                    ...(permission('manage') ? [['channels', 'Channels & access']] : []),
-                    ['emojis', 'Custom emojis'],
-                ].map(([id, label]) => (
+                {sections.map(([id, label]) => (
                     <button
                         className={settingsTab === id ? 'selected' : ''}
+                        aria-current={settingsTab === id ? 'page' : undefined}
                         key={id}
                         onClick={() => setSettingsTab(id)}
                     >
@@ -83,7 +102,7 @@ export function SettingsPanel({
                     Sign out
                 </button>
             </nav>
-            <div className="settings-content">
+            <div className="settings-content" key={settingsTab}>
                 <h2>
                     {
                         (
@@ -99,6 +118,9 @@ export function SettingsPanel({
                         )[settingsTab]
                     }
                 </h2>
+                {['audio', 'notifications'].includes(settingsTab) && (
+                    <p className="field-help">Preferences save automatically on this device.</p>
+                )}
                 {settingsTab === 'account' && (
                     <>
                         <div className="profile-card">
@@ -163,6 +185,7 @@ export function SettingsPanel({
                         </p>
                         {state.me.avatar && (
                             <button
+                                className="secondary"
                                 disabled={busy}
                                 onClick={() =>
                                     void act(async () => setAvatarFile(await loadAvatar()))
@@ -173,6 +196,7 @@ export function SettingsPanel({
                         )}
                         {state.me.avatar && (
                             <button
+                                className="secondary danger-text"
                                 disabled={busy}
                                 onClick={() =>
                                     void act(async () => {
@@ -374,19 +398,40 @@ export function SettingsPanel({
                                 <div key={e.id}>
                                     <Emoji value={`:${e.name}:`} custom={state.emojis} />
                                     <span>:{e.name}:</span>
-                                    {(e.author === state.me.id || permission('manage')) && (
-                                        <button
-                                            title={`Delete ${e.name}`}
-                                            onClick={() =>
-                                                void act(async () => {
-                                                    await api(`/emojis/${e.id}`, 'DELETE');
-                                                    await refresh();
-                                                })
-                                            }
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    )}
+                                    {(e.author === state.me.id || permission('manage')) &&
+                                        (deleteEmoji === e.id ? (
+                                            <div className="emoji-delete-actions">
+                                                <span>Delete :{e.name}:?</span>
+                                                <button
+                                                    className="secondary"
+                                                    disabled={busy}
+                                                    onClick={() => setDeleteEmoji(null)}
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    className="secondary danger-text"
+                                                    disabled={busy}
+                                                    onClick={() =>
+                                                        void act(async () => {
+                                                            await api(`/emojis/${e.id}`, 'DELETE');
+                                                            setDeleteEmoji(null);
+                                                            await refresh();
+                                                        })
+                                                    }
+                                                >
+                                                    Delete emoji
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                title={`Delete ${e.name}`}
+                                                disabled={busy}
+                                                onClick={() => setDeleteEmoji(e.id)}
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        ))}
                                 </div>
                             ))}
                         </div>
@@ -456,8 +501,8 @@ export function SettingsPanel({
                             <input readOnly value={url} />
                         </label>
                         <p className="muted">
-                            For internet calls, configure ICE_SERVERS with your own STUN/TURN
-                            service. See the hosting guide.
+                            For calls over the internet, your server may need a relay service. See
+                            the hosting guide.
                         </p>
                     </>
                 )}
@@ -480,9 +525,21 @@ export function SettingsPanel({
                             <div className="role-row" key={r.id}>
                                 <i style={{ background: r.color }} />
                                 <strong>{r.name}</strong>
-                                <small>{r.permissions.join(' · ')}</small>
+                                <small>
+                                    {r.permissions
+                                        .map(
+                                            (permission) =>
+                                                ({
+                                                    send: 'Messages',
+                                                    voice: 'Voice & video',
+                                                    manage: 'Server management',
+                                                })[permission as 'send' | 'voice' | 'manage'] ||
+                                                permission,
+                                        )
+                                        .join(' · ') || 'No permissions'}
+                                </small>
                                 <button
-                                    title="Edit role"
+                                    title={`Edit ${r.name} role`}
                                     disabled={!permission('manage') || r.id === 'owner'}
                                     onClick={() => setModal(`role:${r.id}`)}
                                 >
@@ -500,8 +557,11 @@ export function SettingsPanel({
                             <div className="role-member" key={u.id}>
                                 <span>{displayName(u)}</span>
                                 <select
+                                    aria-label={`Role for ${displayName(u)}`}
                                     value={u.role}
-                                    disabled={state.me.role !== 'owner' || u.role === 'owner'}
+                                    disabled={
+                                        busy || state.me.role !== 'owner' || u.role === 'owner'
+                                    }
                                     onChange={(e) =>
                                         void act(() =>
                                             api(`/users/${u.id}/role`, 'PATCH', {
@@ -522,6 +582,12 @@ export function SettingsPanel({
                         ))}
                     </>
                 )}
+                <button
+                    className="settings-mobile-signout secondary danger-text"
+                    onClick={() => void logout()}
+                >
+                    <LogOut size={16} /> Sign out
+                </button>
             </div>
             {avatarFile && (
                 <AvatarCropper

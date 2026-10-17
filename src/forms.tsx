@@ -46,16 +46,27 @@ export function SimpleForm({
         >
             <label>
                 {label}
-                <input
-                    name="value"
-                    autoFocus
-                    defaultValue={initialValue}
-                    required
-                    maxLength={label === 'Message' ? 4000 : 32}
-                />
+                {label === 'Message' ? (
+                    <textarea
+                        name="value"
+                        autoFocus
+                        defaultValue={initialValue}
+                        required
+                        maxLength={4000}
+                        rows={5}
+                    />
+                ) : (
+                    <input
+                        name="value"
+                        autoFocus
+                        defaultValue={initialValue}
+                        required
+                        maxLength={32}
+                    />
+                )}
             </label>
             <button className="primary" disabled={busy}>
-                {submit}
+                {busy ? 'Working…' : submit}
             </button>
         </form>
     );
@@ -73,7 +84,7 @@ export function RoleForm({
 }) {
     return (
         <>
-            <h2>{role ? 'Edit role' : 'Create a role'}</h2>
+            <h2 id="action-dialog-title">{role ? 'Edit role' : 'Create a role'}</h2>
             <form
                 onSubmit={(e) => {
                     e.preventDefault();
@@ -110,7 +121,7 @@ export function RoleForm({
                     </label>
                 ))}
                 <button className="primary" disabled={busy}>
-                    Save role
+                    {busy ? 'Saving…' : 'Save role'}
                 </button>
             </form>
         </>

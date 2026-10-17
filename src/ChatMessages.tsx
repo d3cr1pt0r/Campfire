@@ -38,6 +38,7 @@ export function ChatMessages({
     setModal,
     setEdit,
     bottom,
+    clearFilters,
 }: {
     permission: (permission: string) => boolean;
     conversation: ReturnType<typeof useConversation>;
@@ -55,6 +56,7 @@ export function ChatMessages({
     api: ApiClient;
     setModal: (modal: string | null) => void;
     setEdit: (message: Message | null) => void;
+    clearFilters: () => void;
     bottom: React.RefObject<HTMLDivElement | null>;
 }) {
     if (!currentChannel && !dmUser)
@@ -65,22 +67,31 @@ export function ChatMessages({
         );
     return (
         <div className="messages">
-            {conversation.error && <div role="alert">{conversation.error}</div>}
+            {conversation.error && (
+                <div className="inline-notice" role="alert">
+                    {conversation.error}
+                </div>
+            )}
             {conversation.next && (
                 <button
-                    className="secondary"
+                    className="secondary load-older"
                     disabled={conversation.loading}
                     onClick={() => void conversation.loadOlder()}
                 >
                     {conversation.loading ? 'Loading…' : 'Load older messages'}
                 </button>
             )}
+            {conversation.loading && !visibleMessages.length && (
+                <p className="inline-notice" role="status">
+                    Loading messages…
+                </p>
+            )}
             {!search && !pins && (
                 <div className="channel-welcome">
                     <div className="welcome-hash">
                         {dmUser ? <MessageCircle size={40} /> : <Hash size={43} />}
                     </div>
-                    <span className="mini-label">THIS IS THE BEGINNING OF SOMETHING GOOD</span>
+                    <span className="mini-label">{dmUser ? 'DIRECT MESSAGE' : 'TEXT CHANNEL'}</span>
                     <h1>
                         {dmUser
                             ? `Say hello to ${displayName(dmUser)}.`
@@ -102,13 +113,21 @@ export function ChatMessages({
             {pins && (
                 <div className="filter-heading">
                     <Pin size={18} />
-                    Pinned messages
+                    <span>Pinned messages{search ? ` matching “${search}”` : ''}</span>
+                    <button className="secondary" onClick={clearFilters}>
+                        Clear filters
+                    </button>
                 </div>
             )}
-            {search && (
+            {search && !pins && (
                 <div className="filter-heading">
                     <Search size={18} />
-                    Results for “{search}” <small>in this conversation</small>
+                    <span>
+                        Results for “{search}” <small>in this conversation</small>
+                    </span>
+                    <button className="secondary" onClick={clearFilters}>
+                        Clear search
+                    </button>
                 </div>
             )}
             {visibleMessages.map((m, i) => {
@@ -193,6 +212,10 @@ export function ChatMessages({
                                                     : ''
                                             }
                                             key={emoji}
+                                            aria-label={`${emoji}: ${m.reactions.filter((r) => r.emoji === emoji).length} reactions`}
+                                            aria-pressed={m.reactions.some(
+                                                (r) => r.emoji === emoji && r.user === state.me.id,
+                                            )}
                                             disabled={!permission('send')}
                                             onClick={() =>
                                                 void act(() =>
@@ -269,12 +292,15 @@ export function ChatMessages({
                     </React.Fragment>
                 );
             })}
-            {(search || pins) && !visibleMessages.length && (
-                <div className="empty-state compact">
-                    <Search size={30} />
-                    <h3>{pins ? 'No pinned messages yet.' : 'No matching messages.'}</h3>
-                </div>
-            )}
+            {(search || pins) &&
+                !conversation.loading &&
+                !conversation.error &&
+                !visibleMessages.length && (
+                    <div className="empty-state compact">
+                        <Search size={30} />
+                        <h3>{pins ? 'No pinned messages yet.' : 'No matching messages.'}</h3>
+                    </div>
+                )}
             <div ref={bottom} />
         </div>
     );

@@ -76,21 +76,27 @@ export function CallPanel({
                 )}
                 <button
                     className={call.muted ? 'danger-bg' : ''}
-                    title="Toggle microphone"
+                    title={call.muted ? 'Unmute microphone' : 'Mute microphone'}
+                    aria-label={call.muted ? 'Unmute microphone' : 'Mute microphone'}
+                    aria-pressed={!call.muted}
                     onClick={() => call.setMuted(!call.muted)}
                 >
                     {call.muted ? <MicOff /> : <Mic />}
                 </button>
                 <button
                     className={call.camera ? 'enabled' : ''}
-                    title="Toggle camera / preview"
+                    title={call.camera ? 'Turn off camera' : 'Turn on camera'}
+                    aria-label={call.camera ? 'Turn off camera' : 'Turn on camera'}
+                    aria-pressed={call.camera}
                     onClick={() => void call.toggleCamera()}
                 >
                     {call.camera ? <Video /> : <VideoOff />}
                 </button>
                 <button
                     className={call.sharing ? 'enabled' : ''}
-                    title="Share screen or window"
+                    title={call.sharing ? 'Stop screen sharing' : 'Share screen or window'}
+                    aria-label={call.sharing ? 'Stop screen sharing' : 'Share screen or window'}
+                    aria-pressed={call.sharing}
                     onClick={() => void call.toggleShare()}
                 >
                     <MonitorUp />

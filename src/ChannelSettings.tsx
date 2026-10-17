@@ -70,7 +70,9 @@ function ChannelEditor({ state, channel, api, refresh, busy, act }: Props & { ch
                         maxLength={32}
                     />
                 </label>
-                <button disabled={busy}>Rename channel</button>
+                <button className="secondary" disabled={busy}>
+                    Rename channel
+                </button>
             </form>
             <form
                 onSubmit={(event) => {

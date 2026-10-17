@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { State, User } from './types';
 import type { ApiClient } from './api';
 import type { useCall } from './useCall';
@@ -28,12 +29,21 @@ export function FriendsPanel({
     act: (fn: () => Promise<unknown>) => Promise<void>;
     api: ApiClient;
 }) {
+    const [filter, setFilter] = useState<'all' | 'online' | 'requests'>('all');
+    const accepted = state.friends.filter((friend) => friend.accepted);
+    const requests = state.friends.filter((friend) => !friend.accepted);
+    const incoming = requests.filter((friend) => friend.recipient === state.me.id).length;
+    const visible = (filter === 'requests' ? requests : accepted).filter(
+        (friend) =>
+            filter !== 'online' ||
+            state.online.includes(friend.sender === state.me.id ? friend.recipient : friend.sender),
+    );
     return (
         <section className="friends-view">
             <div className="friends-header">
                 <div>
                     <span className="mini-label">YOUR PEOPLE</span>
-                    <h1>Life’s better in good company.</h1>
+                    <h1>Friends</h1>
                     <p className="muted">Find your friends and keep the conversation going.</p>
                 </div>
                 <button className="primary" onClick={() => setModal('friend')}>
@@ -41,9 +51,36 @@ export function FriendsPanel({
                     Add friend
                 </button>
             </div>
-            <div className="section-label">
-                FRIENDS — {state.friends.filter((f) => f.accepted).length}
+            <div className="friend-filters" role="group" aria-label="Filter friends">
+                <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
+                    All friends · {accepted.length}
+                </button>
+                <button aria-pressed={filter === 'online'} onClick={() => setFilter('online')}>
+                    Online
+                </button>
+                <button aria-pressed={filter === 'requests'} onClick={() => setFilter('requests')}>
+                    Requests · {requests.length}
+                    {incoming > 0 ? ` (${incoming} incoming)` : ''}
+                </button>
             </div>
+            {state.friends.length > 0 && visible.length === 0 && (
+                <div className="empty-state compact">
+                    <h3>
+                        {filter === 'requests'
+                            ? 'No pending requests'
+                            : filter === 'online'
+                              ? 'No friends online'
+                              : 'No friends yet'}
+                    </h3>
+                    <p>
+                        {filter === 'requests'
+                            ? 'New friend requests will appear here.'
+                            : filter === 'online'
+                              ? 'You can still send an offline friend a message from All friends.'
+                              : 'Add a friend to start a conversation.'}
+                    </p>
+                </div>
+            )}
             {state.friends.length === 0 && (
                 <div className="empty-state">
                     <div className="empty-icon">
@@ -56,7 +93,7 @@ export function FriendsPanel({
                     </button>
                 </div>
             )}
-            {state.friends.map((f) => {
+            {visible.map((f) => {
                 const id = f.sender === state.me.id ? f.recipient : f.sender;
                 const u = user(id);
                 return (
@@ -78,7 +115,16 @@ export function FriendsPanel({
                         {f.accepted ? (
                             <>
                                 <button
-                                    title="Call friend"
+                                    aria-label={`Call ${displayName(u)}`}
+                                    title={
+                                        call.channel
+                                            ? 'Leave your current call to start another'
+                                            : !permission('voice')
+                                              ? 'Your role cannot make calls'
+                                              : !state.online.includes(id)
+                                                ? 'This friend is offline'
+                                                : 'Call friend'
+                                    }
                                     disabled={
                                         !!call.channel ||
                                         !permission('voice') ||
@@ -88,13 +134,18 @@ export function FriendsPanel({
                                 >
                                     <Phone size={21} />
                                 </button>
-                                <button title="Message" onClick={() => dm(id)}>
+                                <button
+                                    title="Message"
+                                    aria-label={`Message ${displayName(u)}`}
+                                    onClick={() => dm(id)}
+                                >
                                     <MessageCircle size={21} />
                                 </button>
                             </>
                         ) : f.recipient === state.me.id ? (
                             <button
                                 title="Accept friend request"
+                                aria-label={`Accept request from ${displayName(u)}`}
                                 onClick={() =>
                                     void act(() =>
                                         api('/friends', 'POST', {
@@ -107,7 +158,14 @@ export function FriendsPanel({
                             </button>
                         ) : null}
                         <button
-                            title="Remove / decline friend"
+                            title={
+                                f.accepted
+                                    ? 'Remove friend'
+                                    : f.sender === state.me.id
+                                      ? 'Cancel request'
+                                      : 'Decline request'
+                            }
+                            aria-label={`${f.accepted ? 'Remove' : f.sender === state.me.id ? 'Cancel request to' : 'Decline request from'} ${displayName(u)}`}
                             onClick={() => setModal(`remove-friend:${id}`)}
                         >
                             <X size={20} />
