@@ -45,6 +45,9 @@ import {
 import type { State, Message, Preferences, User } from './types';
 import { useCall } from './useCall';
 import { displayName } from './profiles';
+import { PresenceDot } from './PresenceDot';
+import { statusLabels, userStatus } from './presence';
+import { usePresence } from './usePresence';
 
 import { AssetContext, Emoji } from './ChatContent';
 import { resizeImage } from './images';
@@ -62,6 +65,8 @@ const defaultServerUrl =
           ? 'http://localhost:3001'
           : window.location.origin);
 const defaultPrefs: Preferences = {
+    autoIdle: false,
+    idleMinutes: 5,
     notifications: false,
     input: '',
     output: '',
@@ -103,6 +108,7 @@ function App() {
         ...defaultPrefs,
         ...stored('preferences', {}),
     }));
+    usePresence(socket, prefs);
     const [navigationOpen, setNavigationOpen] = useState(false);
     const [compact, setCompact] = useState(() => window.innerWidth <= 800);
     const navigation = useRef<HTMLDivElement>(null);
@@ -202,6 +208,11 @@ function App() {
             setError(`Connection: ${e.message}`);
         });
         s.on('refresh', refresh);
+        s.on('presence', (presence) => {
+            setState((previous) =>
+                previous ? { ...previous, presence, online: Object.keys(presence) } : previous,
+            );
+        });
         s.on('channels', (channels) => {
             setState((previous) => (previous ? { ...previous, channels } : previous));
             void refresh();
@@ -221,6 +232,7 @@ function App() {
             if (
                 m.author !== stateRef.current?.me.id &&
                 prefsRef.current.notifications &&
+                stateRef.current?.me.status !== 'dnd' &&
                 document.visibilityState === 'hidden' &&
                 Notification.permission === 'granted'
             )
@@ -910,11 +922,44 @@ function App() {
                             </div>
                         )}
                         <div className="user-bar">
-                            <Avatar user={state.me} color={color(state.me)} />
-                            <button className="user-name" onClick={() => openSettings()}>
-                                <strong>{displayName(state.me)}</strong>
-                                <small>{connected ? 'Online' : 'Reconnecting…'}</small>
-                            </button>
+                            <div className="avatar-status self-avatar">
+                                <Avatar user={state.me} color={color(state.me)} />
+                                <PresenceDot
+                                    status={connected ? userStatus(state, state.me.id) : 'offline'}
+                                />
+                            </div>
+                            <div className="user-name">
+                                <button onClick={() => openSettings()}>
+                                    <strong>{displayName(state.me)}</strong>
+                                </button>
+                                <label className="sr-only" htmlFor="user-status">
+                                    Your status
+                                </label>
+                                <select
+                                    id="user-status"
+                                    aria-label="Your status"
+                                    value={state.me.status || 'online'}
+                                    disabled={busy || !connected}
+                                    onChange={(event) => {
+                                        const status = event.target.value;
+                                        void act(async () => {
+                                            await api('/presence', 'PATCH', { status });
+                                            await refresh();
+                                        });
+                                    }}
+                                >
+                                    <option value="online">
+                                        {connected
+                                            ? userStatus(state, state.me.id) === 'idle' &&
+                                              (state.me.status || 'online') === 'online'
+                                                ? 'Idle (automatic)'
+                                                : 'Online'
+                                            : 'Reconnecting…'}
+                                    </option>
+                                    <option value="idle">Idle</option>
+                                    <option value="dnd">Do not disturb</option>
+                                </select>
+                            </div>
                             <button
                                 title={call.muted ? 'Unmute' : 'Mute microphone'}
                                 aria-pressed={call.muted}
@@ -1286,15 +1331,15 @@ function App() {
                                         <X size={18} />
                                     </button>
                                 </div>
-                                {['Online', 'Offline'].map((status) => {
+                                {(['online', 'idle', 'dnd', 'offline'] as const).map((status) => {
                                     const group = state.users.filter(
-                                        (u) =>
-                                            state.online.includes(u.id) === (status === 'Online'),
+                                        (u) => userStatus(state, u.id) === status,
                                     );
                                     return group.length ? (
                                         <React.Fragment key={status}>
                                             <div className="member-category">
-                                                {status.toUpperCase()} — {group.length}
+                                                {statusLabels[status].toUpperCase()} —{' '}
+                                                {group.length}
                                             </div>
                                             {group.map((u) => (
                                                 <button
@@ -1307,13 +1352,7 @@ function App() {
                                                 >
                                                     <div className="avatar-status">
                                                         <Avatar user={u} color={color(u)} />
-                                                        <i
-                                                            className={
-                                                                status === 'Online'
-                                                                    ? 'online-dot'
-                                                                    : 'offline-dot'
-                                                            }
-                                                        />
+                                                        <PresenceDot status={status} />
                                                     </div>
                                                     <span>
                                                         <strong style={{ color: color(u) }}>

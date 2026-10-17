@@ -120,6 +120,59 @@ export function SettingsPanel({
                 )}
                 {settingsTab === 'account' && (
                     <>
+                        <label>
+                            Status
+                            <select
+                                value={state.me.status || 'online'}
+                                disabled={busy}
+                                onChange={(event) => {
+                                    const status = event.target.value;
+                                    void act(async () => {
+                                        await api('/presence', 'PATCH', { status });
+                                        await refresh();
+                                    });
+                                }}
+                            >
+                                <option value="online">Online</option>
+                                <option value="idle">Idle</option>
+                                <option value="dnd">Do not disturb</option>
+                            </select>
+                        </label>
+                        <p className="field-help">
+                            Do not disturb silences desktop message notifications. You can still
+                            receive messages and join calls.
+                        </p>
+                        <Toggle
+                            title="Set Idle automatically when I’m away"
+                            value={!!prefs.autoIdle}
+                            set={(autoIdle) => setPrefs({ ...prefs, autoIdle })}
+                        />
+                        {prefs.autoIdle && (
+                            <label>
+                                Idle after
+                                <select
+                                    value={prefs.idleMinutes || 5}
+                                    onChange={(event) =>
+                                        setPrefs({
+                                            ...prefs,
+                                            idleMinutes: Number(event.target.value),
+                                        })
+                                    }
+                                >
+                                    {[1, 5, 10, 15, 30].map((minutes) => (
+                                        <option key={minutes} value={minutes}>
+                                            {minutes} {minutes === 1 ? 'minute' : 'minutes'}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                        )}
+                        <p className="field-help">
+                            Automatically returns to Online when activity resumes. Manual Idle and
+                            Do not disturb stay selected. The desktop app uses computer activity
+                            where supported; the browser and unsupported desktops use activity in
+                            this app. This preference saves on this device.
+                        </p>
                         <div className="profile-card">
                             <Avatar user={state.me} color={color(state.me)} />
                             <div>

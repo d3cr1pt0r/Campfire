@@ -16,6 +16,8 @@ export function createSessions({ get, all, run, io }) {
         username: u.username,
         nickname: get('SELECT nickname FROM profiles WHERE user=?', u.id)?.nickname || u.username,
         role: u.role,
+        status:
+            get('SELECT status FROM presence_preferences WHERE user=?', u.id)?.status || 'online',
         avatar: get('SELECT id FROM avatars WHERE user=?', u.id)?.id || null,
     });
     const users = () =>

@@ -1,9 +1,11 @@
+export type PresenceStatus = 'online' | 'idle' | 'dnd';
 export type User = {
     id: string;
     username: string;
     nickname: string;
     avatar?: string | null;
     role: string;
+    status?: PresenceStatus;
 };
 export type Role = {
     id: string;
@@ -41,6 +43,7 @@ export type State = {
         accepted: number;
     }[];
     online: string[];
+    presence: Record<string, PresenceStatus>;
     calls: CallMember[];
     directCalls: { id: string; creator: string; invited: string[]; members: string[] }[];
     emojis: { id: string; name: string; author: string }[];
@@ -65,6 +68,8 @@ export type Message = {
     }[];
 };
 export type Preferences = {
+    autoIdle?: boolean;
+    idleMinutes?: number;
     notifications: boolean;
     input: string;
     inputLabel?: string;
@@ -89,6 +94,7 @@ export type CallSignal = {
 
 export type JoinResult = { peers: CallMember[]; error?: never } | { error: string; peers?: never };
 export interface ServerEvents {
+    presence: (statuses: Record<string, PresenceStatus>) => void;
     refresh: () => void;
     message: (message: Message) => void;
     'message:update': (message: Message) => void;
@@ -102,6 +108,7 @@ export interface ServerEvents {
     signal: (event: { from: string; user: string; data: CallSignal }) => void;
 }
 export interface ClientEvents {
+    'presence:idle': (idle: boolean) => void;
     typing: (room: string) => void;
     'call:join': (channel: string, ack: (result: JoinResult) => void) => void;
     'call:leave': () => void;

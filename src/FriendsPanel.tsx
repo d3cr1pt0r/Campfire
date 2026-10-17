@@ -1,3 +1,5 @@
+import { PresenceDot } from './PresenceDot';
+import { statusLabels, userStatus } from './presence';
 import { useState } from 'react';
 import type { State, User } from './types';
 import type { ApiClient } from './api';
@@ -98,15 +100,16 @@ export function FriendsPanel({
                 const u = user(id);
                 return (
                     <div className="friend-row" key={id}>
-                        <Avatar user={u} color={color(u)} />
+                        <div className="avatar-status friend-avatar">
+                            <Avatar user={u} color={color(u)} />
+                            <PresenceDot status={userStatus(state, id)} />
+                        </div>
                         <div>
                             <strong title={`@${u?.username}`}>{displayName(u)}</strong>
                             <small>
                                 @{u?.username} ·{' '}
                                 {f.accepted
-                                    ? state.online.includes(id)
-                                        ? 'Online'
-                                        : 'Offline'
+                                    ? statusLabels[userStatus(state, id)]
                                     : f.sender === state.me.id
                                       ? 'Friend request sent'
                                       : 'Wants to be your friend'}

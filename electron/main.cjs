@@ -7,6 +7,7 @@ const {
     ipcMain,
     safeStorage,
     shell,
+    powerMonitor,
 } = require('electron');
 const path = require('node:path');
 const { createRendererServer, listenRendererServer } = require('./renderer-server.cjs');
@@ -39,6 +40,12 @@ else {
                     return false;
                 }
             };
+            ipcMain.handle('presence:idle-state', (event) => {
+                if (!trusted(event.senderFrame?.url)) return null;
+                const state = powerMonitor.getSystemIdleState(60);
+                if (state === 'unknown') return null;
+                return { seconds: powerMonitor.getSystemIdleTime(), locked: state === 'locked' };
+            });
             ipcMain.on('client-state:get', (event, key) => {
                 event.returnValue = trusted(event.senderFrame?.url) ? clientState.get(key) : null;
             });
@@ -119,6 +126,7 @@ else {
                         contextIsolation: true,
                         nodeIntegration: false,
                         sandbox: true,
+                        backgroundThrottling: false,
                     },
                 });
                 win.webContents.setWindowOpenHandler(({ url }) => {

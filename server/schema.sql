@@ -1,6 +1,7 @@
 PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
     CREATE TABLE IF NOT EXISTS roles(id TEXT PRIMARY KEY,name TEXT,color TEXT,permissions TEXT);
     CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,username TEXT UNIQUE COLLATE NOCASE,password TEXT,role TEXT REFERENCES roles(id),banned INTEGER DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS presence_preferences(user TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,status TEXT NOT NULL CHECK(status IN ('online','idle','dnd')));
     CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user TEXT REFERENCES users(id),expires INTEGER);
     CREATE TABLE IF NOT EXISTS channels(id TEXT PRIMARY KEY,name TEXT,kind TEXT);
     CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,room TEXT,author TEXT REFERENCES users(id),body TEXT,created INTEGER,edited INTEGER,pinned INTEGER DEFAULT 0);

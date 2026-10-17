@@ -432,7 +432,8 @@ small {
     margin-top: 7px;
 }
 .online-dot,
-.offline-dot {
+.offline-dot,
+.presence-dot {
     display: block;
     width: 6px;
     height: 6px;
@@ -441,7 +442,25 @@ small {
     flex-shrink: 0;
 }
 .offline-dot {
-    background: #666979;
+    background: #da6675;
+}
+.idle-dot {
+    background: #efa647;
+}
+.dnd-dot {
+    background: #da6675;
+}
+.dnd-dot::after {
+    content: '';
+    position: absolute;
+    width: 60%;
+    height: 2px;
+    background: #22232b;
+    top: calc(50% - 1px);
+    left: 20%;
+}
+.presence-dot {
+    position: relative;
 }
 .sidebar-content {
     padding: 20px 12px;
@@ -565,6 +584,19 @@ small {
 .user-name small {
     font-size: 11px;
     color: #7f8293;
+}
+.user-name > button {
+    padding: 0;
+    justify-content: flex-start;
+    max-width: 100%;
+}
+.user-name select {
+    font-size: 11px;
+    color: var(--muted);
+    padding: 3px 0;
+    border: 0;
+    background: transparent;
+    min-width: 0;
 }
 .voice-connected {
     padding: 13px;
@@ -997,10 +1029,11 @@ small {
     gap: 10px;
     text-align: left;
 }
-.member > .avatar-status {
+.avatar-status {
     position: relative;
+    flex-shrink: 0;
 }
-.avatar-status .avatar {
+.member .avatar-status .avatar {
     width: 33px;
     height: 33px;
     border-radius: 11px;
@@ -1155,6 +1188,9 @@ small {
 }
 .friend-row > div {
     flex: 1;
+}
+.friend-row > .friend-avatar {
+    flex: 0 0 auto;
 }
 .friend-row strong {
     font-size: 14px;

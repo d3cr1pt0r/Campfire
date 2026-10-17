@@ -14,7 +14,6 @@ import {
     Paperclip,
     Download,
     Smile,
-    Plus,
     Pencil,
     Trash2,
 } from 'lucide-react';
@@ -234,15 +233,6 @@ export function ChatMessages({
                                             </span>
                                         </button>
                                     ))}
-                                    <button
-                                        title="Add reaction"
-                                        aria-label="Add reaction"
-                                        disabled={!permission('send')}
-                                        onClick={() => setModal(`reaction:${m.id}`)}
-                                    >
-                                        <Smile size={14} />
-                                        <Plus size={12} />
-                                    </button>
                                 </div>
                             </div>
                             <div className="message-actions">

@@ -15,6 +15,7 @@ import { registerProfiles } from './profiles.js';
 import { registerFriends } from './friends.js';
 import { registerAdministration } from './administration.js';
 import { registerCalls } from './calls.js';
+import { registerPresence } from './presence.js';
 
 export function createApp({
     dataDir = 'data',
@@ -90,6 +91,7 @@ export function createApp({
             res.json({ ok: true });
         }),
     );
+    const presence = registerPresence(context);
     const calls = registerCalls(context);
     app.get(
         '/api/state',
@@ -100,6 +102,7 @@ export function createApp({
                 me: sessions.publicUser(req.user),
                 name: get('SELECT value FROM settings WHERE key=?', 'name').value,
                 users: sessions.users(),
+                presence: presence.snapshot(),
                 roles: all('SELECT * FROM roles').map((role) => ({
                     ...role,
                     permissions: JSON.parse(role.permissions),
