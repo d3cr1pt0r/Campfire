@@ -1,6 +1,7 @@
 const {
     app,
     BrowserWindow,
+    Menu,
     session,
     desktopCapturer,
     dialog,
@@ -27,6 +28,7 @@ else {
     });
     app.whenReady()
         .then(async () => {
+            Menu.setApplicationMenu(null);
             const clientState = createClientState(app.getPath('userData'), safeStorage);
             assetServer = createRendererServer(path.join(__dirname, '..', 'dist'));
             const rendererPort = await listenRendererServer(
@@ -133,6 +135,11 @@ else {
                     minWidth: 960,
                     minHeight: 640,
                     title: 'Driskord',
+                    icon: path.join(
+                        __dirname,
+                        'icons',
+                        process.platform === 'win32' ? 'icon.ico' : 'icon.png',
+                    ),
                     backgroundColor: '#18191f',
                     webPreferences: {
                         preload: path.join(__dirname, 'preload.cjs'),

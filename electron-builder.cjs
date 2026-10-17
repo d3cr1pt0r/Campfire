@@ -14,6 +14,7 @@ module.exports = {
     npmRebuild: false, // The desktop shell uses only Electron/Node built-ins.
     publish: null,
     linux: {
+        icon: 'electron/icons/icon.png',
         target: [
             { target: 'AppImage', arch: ['x64'] },
             { target: 'tar.gz', arch: ['x64'] },
@@ -23,6 +24,7 @@ module.exports = {
         artifactName: 'Driskord-${version}-linux-${arch}.${ext}',
     },
     win: {
+        icon: 'electron/icons/icon.ico',
         target: [{ target: 'portable', arch: ['x64'] }],
         artifactName: 'Driskord-${version}-${arch}-Portable.${ext}',
     },
