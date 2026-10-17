@@ -92,10 +92,10 @@ npm run dist:win
 
 The command type-checks and builds the interface, then downloads/runs the pinned `electron-builder@26.0.12` tool and its packaging dependencies. It needs internet access. Application dependencies remain controlled by `package-lock.json`; this packaging tool is fetched on demand rather than added to the app's dependency tree.
 
-Expected output for version 0.1.3:
+Expected output for version 0.1.4:
 
 ```text
-release/Driskord-0.1.3-x64-Portable.exe
+release/Driskord-0.1.4-x64-Portable.exe
 ```
 
 Send **that executable plus your shared server's HTTPS URL** to friends. They launch it, enter the server address, and create an account on your server. Your standalone server must remain running and reachable. To update, close Driskord and replace the old executable with the new one.
