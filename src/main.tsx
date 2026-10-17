@@ -1,3 +1,4 @@
+import { version as appVersion } from '../package.json';
 import { ChatComposer } from './ChatComposer';
 import { ThreadPanel } from './ThreadPanel';
 import { ChatMessages } from './ChatMessages';
@@ -769,7 +770,7 @@ function App() {
                         <button title="Settings" onClick={() => openSettings()}>
                             <Settings size={23} />
                         </button>
-                        <span className="rail-version">v0.1.5</span>
+                        <span className="rail-version">v{appVersion}</span>
                     </nav>
                     <aside className="sidebar">
                         <button
