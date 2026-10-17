@@ -769,7 +769,7 @@ function App() {
                         <button title="Settings" onClick={() => openSettings()}>
                             <Settings size={23} />
                         </button>
-                        <span className="rail-version">v0.1.4</span>
+                        <span className="rail-version">v0.1.5</span>
                     </nav>
                     <aside className="sidebar">
                         <button

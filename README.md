@@ -92,10 +92,10 @@ npm run dist:win
 
 The command type-checks and builds the interface, then downloads/runs the pinned `electron-builder@26.0.12` tool and its packaging dependencies. It needs internet access. Application dependencies remain controlled by `package-lock.json`; this packaging tool is fetched on demand rather than added to the app's dependency tree.
 
-Expected output for version 0.1.4:
+Expected output for version 0.1.5:
 
 ```text
-release/Driskord-0.1.4-x64-Portable.exe
+release/Driskord-0.1.5-x64-Portable.exe
 ```
 
 Send **that executable plus your shared server's HTTPS URL** to friends. They launch it, enter the server address, and create an account on your server. Your standalone server must remain running and reachable. To update, close Driskord and replace the old executable with the new one.
@@ -133,29 +133,29 @@ npm run dist:linux
 
 This runs the type check, builds the interface, and packages two standalone clients with the same pinned electron-builder version used for Windows. With npm 12 or later, its default Git-dependency restriction may reject electron-builder’s pinned `@electron/node-gyp` dependency; use `npm run dist:linux --allow-git=all` to allow it for this invocation only.
 
-Outputs for version 0.1.4:
+Outputs for version 0.1.5:
 
 ```text
-release/Driskord-0.1.4-linux-x86_64.AppImage
-release/Driskord-0.1.4-linux-x64.tar.gz
+release/Driskord-0.1.5-linux-x86_64.AppImage
+release/Driskord-0.1.5-linux-x64.tar.gz
 ```
 
 Both include Electron; users do not need Node.js or a local server. AppImage names the x64 architecture `x86_64`. Send the AppImage and your shared server URL. After downloading, make it executable and launch it:
 
 ```bash
-chmod +x Driskord-0.1.4-linux-x86_64.AppImage
-./Driskord-0.1.4-linux-x86_64.AppImage
+chmod +x Driskord-0.1.5-linux-x86_64.AppImage
+./Driskord-0.1.5-linux-x86_64.AppImage
 ```
 
 If the distribution lacks working FUSE support, use the archive instead:
 
 ```bash
-tar -xzf Driskord-0.1.4-linux-x64.tar.gz
-cd Driskord-0.1.4-linux-x64
+tar -xzf Driskord-0.1.5-linux-x64.tar.gz
+cd Driskord-0.1.5-linux-x64
 ./driskord
 ```
 
-Keep all extracted files together. Alternatively, AppImage supports `./Driskord-0.1.4-linux-x86_64.AppImage --appimage-extract-and-run` without FUSE; this extracts the runtime on each launch. See the [AppImage FUSE guide](https://docs.appimage.org/user-guide/troubleshooting/fuse.html).
+Keep all extracted files together. Alternatively, AppImage supports `./Driskord-0.1.5-linux-x86_64.AppImage --appimage-extract-and-run` without FUSE; this extracts the runtime on each launch. See the [AppImage FUSE guide](https://docs.appimage.org/user-guide/troubleshooting/fuse.html).
 
 Settings and sign-in remain in Electron's user-data directory (normally `~/.config/Driskord`, or under `XDG_CONFIG_HOME`). To update, close Driskord and replace the AppImage or the entire extracted archive directory. The server remains separate and must be reachable. Builds target Linux x64 with desktop libraries supported by Electron; they are not universal binaries for ARM or every Linux distribution. Screen capture and device permissions depend on the desktop session and available portals. No sandbox-disabling flags are included in the launch commands.
 
