@@ -398,6 +398,24 @@ label,
 .call-heading > button {
     flex-shrink: 0;
 }
+.call-identity,
+.call-heading-actions {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 12px;
+}
+.call-identity {
+    flex: 1;
+}
+.call-identity > svg,
+.call-heading-actions > * {
+    flex-shrink: 0;
+}
+.call-heading-actions > button {
+    min-width: var(--control-size);
+    min-height: var(--control-size);
+}
 .call-summary-copy {
     display: flex;
     flex-direction: column;
@@ -414,6 +432,9 @@ label,
 .call-summary-copy small {
     font-size: 11px;
     color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .call-panel-body {
     flex: 1;
@@ -505,6 +526,45 @@ label,
     color: var(--muted);
     font-size: 11px;
 }
+.call-dock.compact .call-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    position: relative;
+}
+.call-dock.compact .call-heading,
+.call-dock.compact .call-panel-body {
+    display: contents;
+}
+.call-dock.compact .call-identity {
+    grid-column: 1;
+    grid-row: 1;
+    padding-left: 24px;
+    padding-right: 12px;
+}
+.call-dock.compact .call-heading-actions {
+    grid-column: 3;
+    grid-row: 1;
+    justify-content: flex-end;
+    padding-right: 24px;
+}
+.call-dock.compact .call-toolbar {
+    grid-column: 2;
+    grid-row: 1;
+    padding: 0;
+}
+.call-dock.compact .call-stage {
+    position: absolute;
+    width: 0;
+    height: 0;
+    margin: 0;
+    visibility: hidden;
+}
+.call-dock.compact .call-push-hint,
+.call-dock.compact .call-summary-kind,
+.call-dock.compact .call-details {
+    display: none;
+}
 .call-panel-body > .call-details {
     flex: 0 1 auto;
     min-height: 0;
@@ -551,6 +611,29 @@ label,
     opacity: 1;
 }
 @media (max-width: 800px) {
+    .call-dock.compact .call-identity {
+        padding-inline: 12px 8px;
+    }
+    .call-dock.compact .call-identity > svg,
+    .call-dock.compact .live-badge {
+        display: none;
+    }
+    .call-dock.compact .call-summary-copy strong {
+        font-size: 12px;
+    }
+    .call-dock.compact .call-heading-actions {
+        padding-right: 8px;
+    }
+    .call-dock.compact .call-controls {
+        gap: 4px;
+    }
+    .call-dock.compact .call-controls > button {
+        width: 32px;
+        min-width: 32px;
+        height: 32px;
+        min-height: 32px;
+        padding: 6px;
+    }
     .call-dock .call-heading {
         padding-inline: 16px;
         gap: 8px;

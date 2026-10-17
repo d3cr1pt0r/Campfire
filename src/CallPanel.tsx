@@ -50,7 +50,7 @@ export function CallPanel({
     const [conversationMinimum, setConversationMinimum] = useState(320);
     const [expandedHeight, setExpandedHeight] = useState<number | null>(null);
     const [resizing, setResizing] = useState(false);
-    const [minimum, setMinimum] = useState(124);
+    const [minimum, setMinimum] = useState(76);
     const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
     const gallery = fitCallParticipants(stageSize.width, stageSize.height, call.remote.length + 1);
     const participantOpacity = Math.max(0, Math.min(1, (stageSize.height - 24) / 96));
@@ -58,6 +58,7 @@ export function CallPanel({
     const height = call.panelOpen
         ? Math.max(minimum, Math.min(maximum, expandedHeight ?? workspaceHeight * 0.43))
         : minimum;
+    const compactLayout = height < minimum + 64;
     const privateCall = call.channel?.startsWith('private:');
     const participants = new Set(
         state.calls
@@ -71,12 +72,9 @@ export function CallPanel({
             (element) => !element.matches('.call-dock, .call-splitter, .main-columns'),
         );
         const composer = workspace.querySelector('.chat-area > .composer-wrap');
+        const serverHeading = workspace.closest('.app-shell')?.querySelector('.server-heading');
         const update = () => {
-            const heading = dock.current?.querySelector('.call-heading');
-            setMinimum(
-                (heading?.getBoundingClientRect().height ?? 64) +
-                    (toolbar.current?.getBoundingClientRect().height ?? 60),
-            );
+            setMinimum(serverHeading?.getBoundingClientRect().height || 76);
             setWorkspaceHeight(workspace.clientHeight);
             // Reserve the actual conversation controls plus one line of history.
             // The composer can grow when typing or attaching files.
@@ -93,6 +91,7 @@ export function CallPanel({
         update();
         const observer = new ResizeObserver(update);
         observer.observe(workspace);
+        if (serverHeading) observer.observe(serverHeading);
         if (toolbar.current) observer.observe(toolbar.current);
         chrome.forEach((element) => observer.observe(element));
         if (composer) observer.observe(composer);
@@ -124,36 +123,50 @@ export function CallPanel({
         <>
             <div
                 ref={dock}
-                className={`call-dock ${resizing ? 'resizing' : ''}`}
+                className={`call-dock ${resizing ? 'resizing' : ''} ${compactLayout ? 'compact' : ''}`}
                 style={{ height }}
             >
                 <section id="call-panel" className="call-panel" aria-label="Call details">
                     <div className="call-heading">
-                        {privateCall ? <Phone size={20} /> : <Volume2 size={20} />}
-                        <div className="call-summary-copy">
-                            <strong title={callName}>{callName}</strong>
-                            <small>
-                                {privateCall ? 'Private call' : 'Voice channel'} · {participants} /
-                                8 connected
-                            </small>
+                        <div className="call-identity">
+                            {privateCall ? <Phone size={20} /> : <Volume2 size={20} />}
+                            <div className="call-summary-copy">
+                                <strong title={callName}>{callName}</strong>
+                                <small
+                                    title={`${privateCall ? 'Private call' : 'Voice channel'} · ${participants} / 8 connected`}
+                                >
+                                    <span className="call-summary-kind">
+                                        {privateCall ? 'Private call' : 'Voice channel'} ·{' '}
+                                    </span>
+                                    {participants} / 8 connected
+                                </small>
+                            </div>
                         </div>
-                        <span className="live-badge">LIVE</span>
-                        <button
-                            aria-label={call.panelOpen ? 'Hide call details' : 'Show call details'}
-                            title={call.panelOpen ? 'Hide call details' : 'Show call details'}
-                            aria-expanded={call.panelOpen}
-                            aria-controls="call-panel-body"
-                            onClick={toggle}
-                        >
-                            {call.panelOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                        </button>
+                        <div className="call-heading-actions">
+                            <span className="live-badge">LIVE</span>
+                            <button
+                                aria-label={
+                                    call.panelOpen ? 'Hide call details' : 'Show call details'
+                                }
+                                title={call.panelOpen ? 'Hide call details' : 'Show call details'}
+                                aria-expanded={call.panelOpen}
+                                aria-controls="call-panel-body"
+                                onClick={toggle}
+                            >
+                                {call.panelOpen ? (
+                                    <ChevronUp size={18} />
+                                ) : (
+                                    <ChevronDown size={18} />
+                                )}
+                            </button>
+                        </div>
                     </div>
                     <div className="call-panel-body" id="call-panel-body">
                         <div
                             className="call-stage"
                             ref={stage}
-                            inert={participantOpacity === 0}
-                            aria-hidden={participantOpacity === 0}
+                            inert={compactLayout || participantOpacity === 0}
+                            aria-hidden={compactLayout || participantOpacity === 0}
                         >
                             <div
                                 className="video-grid"
@@ -267,7 +280,15 @@ export function CallPanel({
                                 </p>
                             </div>
                         )}
-                        <div className="call-toolbar" ref={toolbar}>
+                        <div
+                            className="call-toolbar"
+                            ref={toolbar}
+                            title={
+                                prefs.pushToTalk
+                                    ? 'Hold Space to talk (outside text fields)'
+                                    : undefined
+                            }
+                        >
                             <div className="call-controls">
                                 {call.channel?.startsWith('private:') &&
                                     (state.me.role === 'owner' ||
