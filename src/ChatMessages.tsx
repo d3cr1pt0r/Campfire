@@ -1,5 +1,5 @@
 import { ReactionChip } from './ReactionChip';
-import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
 import type { State, User, Message } from './types';
 import type { ApiClient } from './api';
@@ -21,8 +21,50 @@ import {
     Reply,
 } from 'lucide-react';
 import { ChatContent, AuthImage } from './ChatContent';
+import { needsScrollHistory, restoredScrollOffset, type ChatScrollPosition } from './chatScroll';
 
-export function ChatMessages({
+export function ChatMessages(
+    props: Omit<React.ComponentProps<typeof ChatMessageList>, 'saved' | 'save'> & {
+        scrollMemory?: Map<string, ChatScrollPosition>;
+        scrollKey?: string;
+    },
+) {
+    const { scrollMemory, scrollKey, ...listProps } = props;
+    const [saved] = useState(() => (scrollKey ? scrollMemory?.get(scrollKey) : undefined));
+    const { conversation, visibleMessages } = props;
+    const waiting =
+        !!saved &&
+        !saved.atEnd &&
+        !conversation.error &&
+        (!conversation.loaded ||
+            (!!conversation.next && needsScrollHistory(saved, visibleMessages)));
+    useEffect(() => {
+        if (waiting && conversation.loaded && !conversation.loading) void conversation.loadOlder();
+    }, [
+        waiting,
+        conversation.loaded,
+        conversation.loading,
+        conversation.loadOlder,
+        visibleMessages,
+    ]);
+    if (waiting)
+        return (
+            <div className="messages" role="status">
+                Restoring reading position…
+            </div>
+        );
+    return (
+        <ChatMessageList
+            {...listProps}
+            saved={saved}
+            save={(position) => {
+                if (scrollKey) scrollMemory?.set(scrollKey, position);
+            }}
+        />
+    );
+}
+
+function ChatMessageList({
     permission,
     conversation,
     search,
@@ -42,7 +84,11 @@ export function ChatMessages({
     clearFilters,
     onReply,
     thread = false,
+    saved,
+    save,
 }: {
+    saved?: ChatScrollPosition;
+    save: (position: ChatScrollPosition) => void;
     onReply?: (message: Message) => void;
     thread?: boolean;
     permission: (permission: string) => boolean;
@@ -79,6 +125,9 @@ export function ChatMessages({
             [visibleMessages],
         ),
         overscan: 5,
+        initialMeasurementsCache: saved?.measurements,
+        initialOffset: () =>
+            saved && !saved.atEnd ? restoredScrollOffset(saved, visibleMessages) : 0,
         useAnimationFrameWithResizeObserver: true,
         anchorTo: 'end',
         followOnAppend: true,
@@ -100,9 +149,29 @@ export function ChatMessages({
     useLayoutEffect(() => {
         if (!initialized.current && visibleMessages.length) {
             initialized.current = true;
-            if (!search && !pins) virtualizer.scrollToEnd();
+            if ((!saved || saved.atEnd) && !search && !pins) virtualizer.scrollToEnd();
         }
-    }, [visibleMessages.length, virtualizer, search, pins]);
+    }, [visibleMessages.length, virtualizer, search, pins, saved]);
+    const remember = useRef(() => {});
+    remember.current = () => {
+        const element = scroll.current;
+        if (!initialized.current || !element || !conversation.loaded || conversation.error) return;
+        const offset = element.scrollTop;
+        const item = virtualizer.getVirtualItems().find((item) => item.end > offset);
+        const message = item && item.index > 0 ? visibleMessages[item.index - 1] : undefined;
+        save({
+            offset,
+            atEnd: element.scrollHeight - element.clientHeight - offset <= 80,
+            anchor:
+                message && item
+                    ? { id: message.id, created: message.created, offset: offset - item.start }
+                    : null,
+            measurements: virtualizer.takeSnapshot(),
+        });
+    };
+    // Capture before React detaches the scroll element. Keep measurements with
+    // the reading anchor so remounting can restore variable-height rows.
+    useLayoutEffect(() => () => remember.current(), []);
     const loadOlder = () => {
         if (
             initialized.current &&

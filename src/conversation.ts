@@ -4,14 +4,20 @@ export type MessagePage = { messages: Message[]; next: string | null };
 export type ConversationEvent =
     | { type: 'upsert'; message: Message }
     | { type: 'delete'; id: string };
-type Snapshot = { messages: Message[]; next: string | null; loading: boolean; error: string };
+type Snapshot = {
+    messages: Message[];
+    next: string | null;
+    loading: boolean;
+    loaded: boolean;
+    error: string;
+};
 
 export function createConversation(
     room: string,
     load: (before: string | null, signal: AbortSignal) => Promise<MessagePage>,
     matches: (message: Message) => boolean = () => true,
 ) {
-    let snapshot: Snapshot = { messages: [], next: null, loading: false, error: '' };
+    let snapshot: Snapshot = { messages: [], next: null, loading: false, loaded: false, error: '' };
     let pending: { controller: AbortController; events: ConversationEvent[] } | null = null;
     let closed = false;
     const listeners = new Set<() => void>();
@@ -50,7 +56,13 @@ export function createConversation(
             // Events that arrived after this request started win over its snapshot,
             // including edits and deletions of messages not yet loaded.
             for (const event of current.events) messages = apply(messages, event);
-            publish({ messages: sorted(messages), next: page.next, loading: false, error: '' });
+            publish({
+                messages: sorted(messages),
+                next: page.next,
+                loading: false,
+                loaded: true,
+                error: '',
+            });
         } catch (error) {
             if (!closed && pending === current && !current.controller.signal.aborted)
                 publish({ ...snapshot, loading: false, error: (error as Error).message });

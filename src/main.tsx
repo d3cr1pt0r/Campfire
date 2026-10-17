@@ -4,6 +4,7 @@ import { version as appVersion } from '../package.json';
 import { ChatComposer } from './ChatComposer';
 import { ThreadPanel } from './ThreadPanel';
 import { ChatMessages } from './ChatMessages';
+import type { ChatScrollPosition } from './chatScroll';
 import { CallPanel } from './CallPanel';
 import { FriendsPanel } from './FriendsPanel';
 import { SettingsPanel } from './SettingsPanel';
@@ -114,6 +115,7 @@ const invitationFromLink = new URLSearchParams(window.location.hash.slice(1)).ge
 if (invitationFromLink)
     history.replaceState(null, '', window.location.pathname + window.location.search);
 function App() {
+    const chatScrollMemory = useRef(new Map<string, ChatScrollPosition>());
     const [url, setUrl] = useState(initial.url),
         [token, setToken] = useState(initial.token),
         [state, setState] = useState<State | null>(null),
@@ -1571,6 +1573,14 @@ function App() {
                                 )}
                                 <ChatMessages
                                     key={`${url}:${state.me.id}:${room}:${search}:${pins}`}
+                                    scrollMemory={chatScrollMemory.current}
+                                    scrollKey={JSON.stringify([
+                                        url,
+                                        state.me.id,
+                                        room,
+                                        search,
+                                        pins,
+                                    ])}
                                     onReply={setThread}
                                     permission={conversationPermission}
                                     conversation={conversation}
