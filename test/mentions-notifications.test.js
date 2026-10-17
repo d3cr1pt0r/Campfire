@@ -177,3 +177,32 @@ test('notification sound unlocks on interaction, reuses its context, bounds burs
     assert.equal(closed, 1);
     assert.equal(handlers.size, 0);
 });
+
+test('server muting silences mentions, thread replies and DMs only for the selected account/server', () => {
+    const server = 'https://chat.example';
+    const prefs = { serverNotifications: { [notificationKey(server, me.id, '*')]: false } };
+    assert.equal(shouldNotify(message('@d3cr1pt0r'), me, prefs, server), false);
+    assert.equal(
+        shouldNotify(message('@d3cr1pt0r', { thread: 'parent' }), me, prefs, server),
+        false,
+    );
+    assert.equal(shouldNotify(message('hello', { room: 'dm:bob:me' }), me, prefs, server), false);
+    assert.equal(
+        shouldNotify(message('hello', { room: 'dm:bob:me' }), me, prefs, server + '/'),
+        false,
+    );
+    assert.equal(shouldNotify(message('@d3cr1pt0r'), me, prefs, 'https://another.example'), true);
+    assert.equal(shouldNotify(message('@d3cr1pt0r'), { ...me, id: 'other' }, prefs, server), true);
+});
+
+test('emoji completion uses the caret, avoids URLs and resolves standard and custom aliases', async () => {
+    const { emojiQuery, emojiMatches } = await import('../src/emojiCompletion.ts');
+    assert.deepEqual(emojiQuery('hi :smi later', 7), { start: 3, end: 7, query: 'smi' });
+    assert.equal(emojiQuery('https:', 6), null);
+    assert.equal(emojiQuery('12:30', 5), null);
+    assert.equal(emojiQuery('done :smile:', 12), null);
+    assert.equal(emojiMatches('smi', [])[0].value, '😄');
+    assert.equal(emojiMatches('camp', [{ name: 'campfire' }])[0].value, ':campfire:');
+    assert.equal(emojiMatches('smile', [{ name: 'smile' }])[0].value, ':smile:');
+    assert.equal(emojiMatches('', []).length, 8);
+});

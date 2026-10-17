@@ -300,6 +300,7 @@ export function ThreadPanel(props: Props) {
             <ChatComposer
                 canAttach={canPost && permission('files.attach')}
                 users={state.users}
+                emojis={state.emojis}
                 attachments={attachments}
                 setAttachments={setAttachments}
                 draft={draft}

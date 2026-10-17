@@ -102,6 +102,19 @@ test('invitations are hashed, single use, revocable, expiring, and survive resta
     const b = await f.invite(owner);
     await f.api(owner, `/invitations/${b.id}`, 'DELETE');
     assert.equal((await f.signup('Revoked', { inviteCode: b.code })).status, 403);
+    const listed = (await f.api(owner, '/registration')).data.invitations;
+    assert.equal(
+        listed.some((invite) => invite.id === b.id),
+        false,
+    );
+    assert.equal(
+        listed.some((invite) => invite.id === a.id),
+        true,
+    );
+    assert.equal(
+        f.service.db.prepare('SELECT revoked FROM invitations WHERE id=?').get(b.id).revoked,
+        1,
+    );
     const c = await f.invite(owner);
     f.service.db.prepare('UPDATE invitations SET expires=? WHERE id=?').run(Date.now() - 1, c.id);
     assert.equal((await f.signup('Expired', { inviteCode: c.code })).status, 403);

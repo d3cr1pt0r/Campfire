@@ -180,6 +180,9 @@ export function useCall(
             .getAudioTracks()
             .forEach((track) => (track.enabled = p.media.sharing && p.watching));
     };
+    useEffect(() => {
+        if (channel) socket?.emit('call:status', { muted, deafened, camera });
+    }, [socket, channel, muted, deafened, camera]);
     const syncMedia = async () => {
         socket?.emit('call:media', shareId.current);
         const track = currentVideo();

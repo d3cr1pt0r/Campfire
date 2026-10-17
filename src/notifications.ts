@@ -14,6 +14,7 @@ export function shouldNotify(
     users: User[] = [me],
 ) {
     if (message.author === me.id || me.status === 'dnd') return false;
+    if (prefs.serverNotifications?.[notificationKey(server, me.id, '*')] === false) return false;
     if (prefs.channelNotifications?.[notificationKey(server, me.id, message.room)] === false)
         return false;
     if (message.room.startsWith('dm:')) return prefs.dmNotifications !== false;

@@ -1,3 +1,4 @@
+import { ReactionChip } from './ReactionChip';
 import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
 import type { State, User, Message } from './types';
@@ -19,7 +20,7 @@ import {
     Trash2,
     Reply,
 } from 'lucide-react';
-import { ChatContent, AuthImage, Emoji } from './ChatContent';
+import { ChatContent, AuthImage } from './ChatContent';
 
 export function ChatMessages({
     permission,
@@ -309,6 +310,47 @@ export function ChatMessages({
                                                     </button>
                                                 </React.Fragment>
                                             ))}
+                                            <div className="reactions">
+                                                {[...new Set(m.reactions.map((r) => r.emoji))].map(
+                                                    (emoji) => (
+                                                        <ReactionChip
+                                                            key={emoji}
+                                                            emoji={emoji}
+                                                            people={m.reactions
+                                                                .filter((r) => r.emoji === emoji)
+                                                                .map((r) => ({
+                                                                    id: r.user,
+                                                                    user: user(r.user),
+                                                                }))}
+                                                            mine={m.reactions.some(
+                                                                (r) =>
+                                                                    r.emoji === emoji &&
+                                                                    r.user === state.me.id,
+                                                            )}
+                                                            showNames={
+                                                                state.reactionAuthors !== false &&
+                                                                state.channels.find(
+                                                                    (c) => c.id === m.room,
+                                                                )?.reactionAuthors !== 0 &&
+                                                                state.channels.find(
+                                                                    (c) => c.id === m.room,
+                                                                )?.reactionAuthors !== false
+                                                            }
+                                                            canReact={permission('reactions.add')}
+                                                            custom={state.emojis || []}
+                                                            onReact={() =>
+                                                                void act(() =>
+                                                                    api(
+                                                                        `/messages/${m.id}/reaction`,
+                                                                        'POST',
+                                                                        { emoji },
+                                                                    ),
+                                                                )
+                                                            }
+                                                        />
+                                                    ),
+                                                )}
+                                            </div>
                                             {!thread && !!m.replyCount && (
                                                 <button
                                                     className="thread-replies"
@@ -319,54 +361,6 @@ export function ChatMessages({
                                                     {m.replyCount === 1 ? 'reply' : 'replies'}
                                                 </button>
                                             )}
-                                            <div className="reactions">
-                                                {[...new Set(m.reactions.map((r) => r.emoji))].map(
-                                                    (emoji) => (
-                                                        <button
-                                                            className={
-                                                                m.reactions.some(
-                                                                    (r) =>
-                                                                        r.emoji === emoji &&
-                                                                        r.user === state.me.id,
-                                                                )
-                                                                    ? 'mine'
-                                                                    : ''
-                                                            }
-                                                            key={emoji}
-                                                            aria-label={`${emoji}: ${m.reactions.filter((r) => r.emoji === emoji).length} reactions`}
-                                                            aria-pressed={m.reactions.some(
-                                                                (r) =>
-                                                                    r.emoji === emoji &&
-                                                                    r.user === state.me.id,
-                                                            )}
-                                                            disabled={!permission('reactions.add')}
-                                                            onClick={() =>
-                                                                void act(() =>
-                                                                    api(
-                                                                        `/messages/${m.id}/reaction`,
-                                                                        'POST',
-                                                                        {
-                                                                            emoji,
-                                                                        },
-                                                                    ),
-                                                                )
-                                                            }
-                                                        >
-                                                            <Emoji
-                                                                value={emoji}
-                                                                custom={state.emojis || []}
-                                                            />{' '}
-                                                            <span>
-                                                                {
-                                                                    m.reactions.filter(
-                                                                        (r) => r.emoji === emoji,
-                                                                    ).length
-                                                                }
-                                                            </span>
-                                                        </button>
-                                                    ),
-                                                )}
-                                            </div>
                                         </div>
                                         <div className="message-actions">
                                             {!thread && !m.thread && onReply && (

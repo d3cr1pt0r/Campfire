@@ -2,6 +2,7 @@ const {
     app,
     BrowserWindow,
     Menu,
+    Tray,
     session,
     desktopCapturer,
     dialog,
@@ -17,11 +18,14 @@ const { createRendererServer, listenRendererServer } = require('./renderer-serve
 const { createClientState } = require('./client-state.cjs');
 app.setAppUserModelId('org.driskord.desktop');
 let assetServer;
+let tray;
+let quitting = false;
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
     app.on('second-instance', () => {
         const win = BrowserWindow.getAllWindows()[0];
         if (win) {
+            win.show();
             if (win.isMinimized()) win.restore();
             win.focus();
         }
@@ -128,6 +132,41 @@ else {
                 },
                 { useSystemPicker: true },
             );
+            const trayEnabled = () => {
+                try {
+                    return JSON.parse(clientState.get('preferences') || '{}').closeToTray === true;
+                } catch {
+                    return false;
+                }
+            };
+            const showWindow = () => {
+                const win = BrowserWindow.getAllWindows()[0];
+                if (win) {
+                    win.show();
+                    if (win.isMinimized()) win.restore();
+                    win.focus();
+                }
+            };
+            const ensureTray = () => {
+                if (tray && !tray.isDestroyed()) return true;
+                try {
+                    tray = new Tray(path.join(__dirname, 'icons', 'campfire.png'));
+                    tray.setToolTip('Campfire');
+                    tray.setContextMenu(
+                        Menu.buildFromTemplate([
+                            { label: 'Open Campfire', click: showWindow },
+                            { type: 'separator' },
+                            { label: 'Quit Campfire', click: () => app.quit() },
+                        ]),
+                    );
+                    tray.on('click', showWindow);
+                    tray.on('double-click', showWindow);
+                    return true;
+                } catch {
+                    tray = null;
+                    return false;
+                }
+            };
             const open = () => {
                 const win = new BrowserWindow({
                     width: 1440,
@@ -149,6 +188,12 @@ else {
                         backgroundThrottling: false,
                     },
                 });
+                win.on('close', (event) => {
+                    if (!quitting && trayEnabled() && ensureTray()) {
+                        event.preventDefault();
+                        win.hide();
+                    }
+                });
                 win.webContents.setWindowOpenHandler(({ url }) => {
                     try {
                         const target = new URL(url);
@@ -169,6 +214,7 @@ else {
             open();
             app.on('activate', () => {
                 if (!BrowserWindow.getAllWindows().length) open();
+                else showWindow();
             });
         })
         .catch((error) => {
@@ -180,5 +226,7 @@ app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
 });
 app.on('before-quit', () => {
+    quitting = true;
+    tray?.destroy();
     assetServer?.close();
 });

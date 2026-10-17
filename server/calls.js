@@ -21,6 +21,9 @@ export function registerCalls({
                 user: s.data.user.id,
                 channel: s.data.call,
                 shareId: s.data.shareId || null,
+                muted: !!s.data.muted,
+                deafened: !!s.data.deafened,
+                camera: !!s.data.camera,
             }));
     // Private call authorization and invitations live only for the active session.
     const privateCalls = new Map();
@@ -172,6 +175,7 @@ export function registerCalls({
         for (const s of io.sockets.sockets.values()) {
             const u = userFor(s.data.token);
             if (u && !can(u, 'calls.share')) s.data.shareId = null;
+            if (u && !can(u, 'calls.camera')) s.data.camera = false;
             if (
                 s.data.call &&
                 (!u ||
@@ -252,7 +256,12 @@ export function registerCalls({
                 const peers = callState().filter(
                     (c) => c.channel === channel && c.socket !== socket.id,
                 );
-                if (socket.data.call !== channel) socket.data.shareId = null;
+                if (socket.data.call !== channel) {
+                    socket.data.shareId = null;
+                    socket.data.muted = false;
+                    socket.data.deafened = false;
+                    socket.data.camera = false;
+                }
                 socket.data.call = channel;
                 const room = privateCalls.get(channel);
                 if (room) {
@@ -278,6 +287,19 @@ export function registerCalls({
                     : canJoin(user, get('SELECT * FROM channels WHERE id=?', peer.data.call)))
             );
         };
+        socket.on('call:status', (status) => {
+            if (
+                !socket.data.call ||
+                !allowedInCall(socket) ||
+                !status ||
+                ['muted', 'deafened', 'camera'].some((key) => typeof status[key] !== 'boolean')
+            )
+                return;
+            socket.data.muted = status.muted || status.deafened;
+            socket.data.deafened = status.deafened;
+            socket.data.camera = status.camera && can(socket.data.user, 'calls.camera');
+            broadcastCalls();
+        });
         socket.on('call:media', (shareId) => {
             if (!socket.data.call || !allowedInCall(socket)) return;
             if (

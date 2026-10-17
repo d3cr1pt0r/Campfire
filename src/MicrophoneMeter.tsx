@@ -65,7 +65,6 @@ export function MicrophoneMeter({
         try {
             const current = createMicrophoneMonitor({
                 preferences,
-                activeStream,
                 context: context.current,
                 onReading: (value) => {
                     if (active) setReading(value);
@@ -144,7 +143,7 @@ export function MicrophoneMeter({
             </div>
             <p className="muted">
                 {activeStream
-                    ? `Current call microphone: ${activeStream.getAudioTracks()[0]?.label || 'Microphone'}. Mute, deafen and push-to-talk affect this meter. Rejoin the call to apply a different input selection.`
+                    ? 'This local test uses the selected microphone independently of call mute, deafen and push-to-talk. Rejoin the call to apply a different input selection.'
                     : 'Start the test and speak to check the selected input. Audio stays local and is not played back.'}
             </p>
             {testing && reading && <small className="microphone-device">{reading.device}</small>}

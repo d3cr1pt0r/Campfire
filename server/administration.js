@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { channelName } from './images.js';
+import { boundedPng, channelName } from './images.js';
 import { check, route, validateRole } from './policies.js';
 import { transaction } from './database.js';
 export function registerAdministration({
     app,
+    io,
     db,
     get,
     all,
@@ -82,14 +83,53 @@ export function registerAdministration({
             res.json({ ok: true });
         }),
     );
+    app.post(
+        '/api/channels/:id/drop',
+        route((req, res) => {
+            const channel = managedChannel(req, 'channels.reorder');
+            const target = get('SELECT * FROM channels WHERE id=?', req.body.target);
+            check(
+                target && target.kind === channel.kind && mode(req.user, target) !== 'hidden',
+                'Invalid drop target',
+            );
+            const placement = req.body.placement ?? 'before';
+            check(['before', 'after'].includes(placement), 'Invalid drop placement');
+            transaction(db, () => {
+                const ordered = all(
+                    'SELECT id FROM channels WHERE kind=? ORDER BY position,rowid',
+                    channel.kind,
+                ).map((c) => c.id);
+                if (channel.id !== target.id) {
+                    ordered.splice(ordered.indexOf(channel.id), 1);
+                    ordered.splice(
+                        ordered.indexOf(target.id) + (placement === 'after' ? 1 : 0),
+                        0,
+                        channel.id,
+                    );
+                    ordered.forEach((id, position) =>
+                        run('UPDATE channels SET position=? WHERE id=?', position, id),
+                    );
+                }
+            });
+            publishChannels();
+            res.json({ ok: true });
+        }),
+    );
     app.patch(
         '/api/channels/:id',
         route((req, res) => {
             const channel = managedChannel(req, 'channels.edit');
             check(
-                req.body.name !== undefined || req.body.description !== undefined,
+                req.body.name !== undefined ||
+                    req.body.description !== undefined ||
+                    req.body.reactionAuthors !== undefined,
                 'No channel changes provided',
             );
+            if (req.body.reactionAuthors !== undefined)
+                check(
+                    channel.kind === 'text' && typeof req.body.reactionAuthors === 'boolean',
+                    'Invalid reaction author setting',
+                );
             let name = channel.name;
             try {
                 if (req.body.name !== undefined) name = channelName(req.body.name, channel.kind);
@@ -113,6 +153,13 @@ export function registerAdministration({
                 description,
                 channel.id,
             );
+            if (req.body.reactionAuthors !== undefined) {
+                run(
+                    'UPDATE channels SET reactionAuthors=? WHERE id=?',
+                    Number(req.body.reactionAuthors),
+                    channel.id,
+                );
+            }
             publishChannels();
             res.json({ ok: true });
         }),
@@ -315,17 +362,63 @@ export function registerAdministration({
             res.json({ ok: true });
         }),
     );
+    app.post(
+        '/api/users/:id/access',
+        route((req, res) => {
+            requireOwner(req);
+            const target = get('SELECT * FROM users WHERE id=?', req.params.id);
+            check(
+                target && target.role !== 'owner' && target.id !== req.user.id,
+                'The owner cannot be removed',
+                409,
+            );
+            check(typeof req.body.enabled === 'boolean', 'Invalid access setting');
+            transaction(db, () => {
+                run('UPDATE users SET banned=? WHERE id=?', Number(!req.body.enabled), target.id);
+                run('DELETE FROM sessions WHERE user=?', target.id);
+            });
+            for (const socket of io.sockets.sockets.values())
+                if (socket.data.user.id === target.id) socket.disconnect(true);
+            enforceCalls();
+            publishChannels();
+            res.json({ ok: true });
+        }),
+    );
     app.patch(
         '/api/settings',
         route((req, res) => {
             requirePermission(req.user, 'server.edit');
+            const { name, icon, reactionAuthors } = req.body;
             check(
-                typeof req.body.name === 'string' &&
-                    req.body.name.trim().length > 0 &&
-                    req.body.name.length <= 64,
-                'Server name must contain 1–64 characters',
+                name !== undefined || icon !== undefined || reactionAuthors !== undefined,
+                'No settings provided',
             );
-            run('UPDATE settings SET value=? WHERE key=?', req.body.name.trim(), 'name');
+            if (name !== undefined)
+                check(
+                    typeof name === 'string' && name.trim().length > 0 && name.length <= 64,
+                    'Server name must contain 1–64 characters',
+                );
+            if (reactionAuthors !== undefined)
+                check(typeof reactionAuthors === 'boolean', 'Invalid reaction setting');
+            let image;
+            if (icon !== undefined && icon !== null) {
+                try {
+                    image = boundedPng(icon, 256);
+                } catch (error) {
+                    check(false, error.message);
+                }
+            }
+            transaction(db, () => {
+                const save = (key, value) =>
+                    run(
+                        'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+                        key,
+                        value,
+                    );
+                if (name !== undefined) save('name', name.trim());
+                if (icon !== undefined) save('icon', image || '');
+                if (reactionAuthors !== undefined) save('reactionAuthors', String(reactionAuthors));
+            });
             publishChannels();
             res.json({ ok: true });
         }),

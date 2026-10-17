@@ -1,5 +1,5 @@
 import { hasRolePermission } from '../shared/permissions.js';
-import { shouldNotify, createNotificationSound } from './notifications';
+import { notificationKey, shouldNotify, createNotificationSound } from './notifications';
 import { version as appVersion } from '../package.json';
 import { ChatComposer } from './ChatComposer';
 import { ThreadPanel } from './ThreadPanel';
@@ -44,6 +44,9 @@ import {
     Radio,
     Globe,
     MonitorPlay,
+    Video,
+    Bell,
+    BellOff,
 } from 'lucide-react';
 import type { State, Message, Preferences, User } from './types';
 import { useCall } from './useCall';
@@ -189,6 +192,17 @@ function App() {
         [prefs.theme],
     );
     usePresence(socket, prefs);
+    useEffect(() => {
+        const update = () =>
+            document.documentElement.classList.toggle('app-focused', document.hasFocus());
+        update();
+        window.addEventListener('focus', update);
+        window.addEventListener('blur', update);
+        return () => {
+            window.removeEventListener('focus', update);
+            window.removeEventListener('blur', update);
+        };
+    }, []);
     const [navigationOpen, setNavigationOpen] = useState(false);
     const [compact, setCompact] = useState(() => window.innerWidth <= 800);
     const navigation = useRef<HTMLDivElement>(null);
@@ -645,6 +659,33 @@ function App() {
             notify('Custom emoji uploaded.');
         });
     };
+    useEffect(() => {
+        const shortcut = (event: KeyboardEvent) => {
+            if (!state || event.isComposing || event.repeat) return;
+            const key = event.key.toLowerCase();
+            if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+                if (key === 'f' && !event.shiftKey && !modal) {
+                    event.preventDefault();
+                    setView('chat');
+                    requestAnimationFrame(() => {
+                        const input = document.querySelector<HTMLInputElement>('.search input');
+                        input?.focus();
+                        input?.select();
+                    });
+                } else if (key === ',' && !event.shiftKey && !modal) {
+                    event.preventDefault();
+                    setSettingsTab('account');
+                    setModal('settings');
+                } else if (event.shiftKey && call.channel && (key === 'm' || key === 'd')) {
+                    event.preventDefault();
+                    if (key === 'm') call.setMuted(!call.muted);
+                    else call.setDeafened(!call.deafened);
+                }
+            }
+        };
+        window.addEventListener('keydown', shortcut);
+        return () => window.removeEventListener('keydown', shortcut);
+    }, [state, modal, call.channel, call.muted, call.deafened]);
     const callName = state?.channels.find((c) => c.id === call.channel)?.name || 'Private call';
     const logout = async () => {
         await act(async () => {
@@ -911,7 +952,11 @@ function App() {
                                 )
                             }
                         >
-                            {initials(state.name)}
+                            {state.icon ? (
+                                <img src={`data:image/png;base64,${state.icon}`} alt={state.name} />
+                            ) : (
+                                initials(state.name)
+                            )}
                         </button>
                         <button
                             className="rail-add"
@@ -1045,6 +1090,34 @@ function App() {
                                                         speaking={speaking.has(p.user)}
                                                     />
                                                     <span>{displayName(user(p.user))}</span>
+                                                    {p.deafened ? (
+                                                        <span
+                                                            title="Deafened"
+                                                            aria-label="Deafened"
+                                                        >
+                                                            <HeadphoneOff size={14} />
+                                                        </span>
+                                                    ) : p.muted ? (
+                                                        <span
+                                                            title="Microphone muted"
+                                                            aria-label="Microphone muted"
+                                                        >
+                                                            <MicOff size={14} />
+                                                        </span>
+                                                    ) : null}
+                                                    {p.camera && (
+                                                        <button
+                                                            className="voice-stream-indicator"
+                                                            title="Open camera call"
+                                                            onClick={() => {
+                                                                if (call.channel !== p.channel)
+                                                                    void call.join(p.channel);
+                                                                else call.setPanelOpen(true);
+                                                            }}
+                                                        >
+                                                            <Video size={14} /> CAM
+                                                        </button>
+                                                    )}
                                                     {p.shareId && (
                                                         <button
                                                             className="voice-stream-indicator"
@@ -1328,11 +1401,48 @@ function App() {
                                     >
                                         <Users size={21} />
                                     </button>
+                                    <button
+                                        title={
+                                            prefs.channelNotifications?.[
+                                                notificationKey(url, state.me.id, room)
+                                            ] === false
+                                                ? 'Unmute conversation'
+                                                : 'Mute conversation'
+                                        }
+                                        aria-label="Mute conversation"
+                                        aria-pressed={
+                                            prefs.channelNotifications?.[
+                                                notificationKey(url, state.me.id, room)
+                                            ] === false
+                                        }
+                                        onClick={() =>
+                                            setPrefs((previous) => {
+                                                const key = notificationKey(url, state.me.id, room);
+                                                return {
+                                                    ...previous,
+                                                    channelNotifications: {
+                                                        ...previous.channelNotifications,
+                                                        [key]:
+                                                            previous.channelNotifications?.[key] ===
+                                                            false,
+                                                    },
+                                                };
+                                            })
+                                        }
+                                    >
+                                        {prefs.channelNotifications?.[
+                                            notificationKey(url, state.me.id, room)
+                                        ] === false ? (
+                                            <BellOff size={19} />
+                                        ) : (
+                                            <Bell size={19} />
+                                        )}
+                                    </button>
                                     <label className="search">
                                         <span className="sr-only">Search this conversation</span>
                                         <input
                                             type="search"
-                                            placeholder="Search messages"
+                                            placeholder="Search messages (Ctrl+F)"
                                             value={search}
                                             onChange={(e) => setSearch(e.target.value)}
                                         />
@@ -1486,6 +1596,7 @@ function App() {
                                 <ChatComposer
                                     canAttach={canPost && permission('files.attach')}
                                     users={state.users}
+                                    emojis={state.emojis}
                                     attachments={attachments}
                                     setAttachments={setAttachments}
                                     draft={draft}

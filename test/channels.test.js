@@ -371,3 +371,128 @@ test('upgrading existing channels supplies descriptions once without overwriting
         db.close();
     }
 });
+
+test('drop reordering preserves channel types, denies hidden targets and persists', async (t) => {
+    const f = await fixture(t),
+        { api, owner, member } = f;
+    const last = await api(owner, '/channels', 'POST', { name: 'last', kind: 'text' });
+    await api(member, `/channels/${last.id}/drop`, 'POST', { target: 'general' }, 403);
+    await api(owner, `/channels/${last.id}/drop`, 'POST', { target: 'lounge' }, 400);
+    await api(owner, `/channels/${last.id}/drop`, 'POST', { target: 'missing' }, 400);
+    await api(owner, `/channels/${last.id}/drop`, 'POST', { target: 'general' });
+    assert.equal((await api(owner, '/state')).channels[0].id, last.id);
+    await f.restart();
+    assert.equal((await api(owner, '/state')).channels[0].id, last.id);
+    await api(owner, `/channels/${last.id}/drop`, 'POST', { target: last.id });
+    assert.equal((await api(owner, '/state')).channels[0].id, last.id);
+    const role = await api(owner, '/roles', 'POST', {
+        name: 'Sorter',
+        color: '#aabbcc',
+        permissions: ['channels.reorder'],
+    });
+    await api(owner, `/users/${member.user.id}/role`, 'PATCH', { role: role.id });
+    await f.access('general', 'hidden', role.id);
+    await api(member, `/channels/${last.id}/drop`, 'POST', { target: 'general' }, 400);
+    await api(member, '/channels/general/drop', 'POST', { target: last.id }, 404);
+});
+
+test('server icon and server/channel reaction display settings validate permissions and persist', async (t) => {
+    const f = await fixture(t),
+        { api, owner, member } = f;
+    const { default: sharp } = await import('sharp');
+    const icon = (
+        await sharp({ create: { width: 16, height: 16, channels: 4, background: '#ff8844' } })
+            .png()
+            .toBuffer()
+    ).toString('base64');
+    await api(member, '/settings', 'PATCH', { icon }, 403);
+    await api(owner, '/settings', 'PATCH', { name: 'Should not save', icon: 'not-png' }, 400);
+    assert.notEqual((await api(owner, '/state')).name, 'Should not save');
+    await api(owner, '/settings', 'PATCH', { icon, reactionAuthors: false });
+    await api(member, '/channels/general', 'PATCH', { reactionAuthors: false }, 403);
+    await api(owner, '/channels/general', 'PATCH', { reactionAuthors: false });
+    await api(owner, '/channels/lounge', 'PATCH', { reactionAuthors: false }, 400);
+    await api(
+        owner,
+        '/channels/general',
+        'PATCH',
+        { name: 'should-not-save', reactionAuthors: 'false' },
+        400,
+    );
+    await f.restart();
+    const state = await api(member, '/state');
+    assert.equal(state.icon, icon);
+    assert.equal(state.reactionAuthors, false);
+    assert.equal(state.channels.find((c) => c.id === 'general').reactionAuthors, 0);
+    assert.equal(state.channels.find((c) => c.id === 'general').name, 'general');
+    await api(owner, '/settings', 'PATCH', { icon: null, reactionAuthors: true });
+    assert.equal((await api(member, '/state')).icon, null);
+});
+
+test('owner can remove and restore members while retaining history and revoking every session', async (t) => {
+    const f = await fixture(t),
+        { api, owner, member } = f;
+    const message = await api(member, '/messages', 'POST', {
+        room: 'general',
+        body: 'Keep history',
+    });
+    const login = () =>
+        request(f.service.app, '/auth/login', null, 'POST', {
+            username: 'Member',
+            password: 'test-password-123',
+        });
+    const other = (await login()).data;
+    await api(member, `/users/${owner.user.id}/access`, 'POST', { enabled: false }, 403);
+    await api(owner, `/users/${owner.user.id}/access`, 'POST', { enabled: false }, 409);
+    await api(owner, `/users/${member.user.id}/access`, 'POST', { enabled: false });
+    await api(member, '/state', 'GET', undefined, 401);
+    await api(other, '/state', 'GET', undefined, 401);
+    assert.equal((await login()).status, 401);
+    const state = await api(owner, '/state');
+    assert.equal(
+        state.users.some((u) => u.id === member.user.id),
+        false,
+    );
+    assert.equal(state.removedUsers[0].id, member.user.id);
+    assert.equal(
+        f.service.db.prepare('SELECT body FROM messages WHERE id=?').get(message.id).body,
+        'Keep history',
+    );
+    await f.restart();
+    assert.equal((await login()).status, 401);
+    await api(owner, `/users/${member.user.id}/access`, 'POST', { enabled: true });
+    assert.equal((await login()).status, 200);
+    await api(member, '/state', 'GET', undefined, 401);
+});
+
+test('channel drops move in both directions, reach either end, and reject invalid placements atomically', async (t) => {
+    const { owner, api } = await fixture(t);
+    const last = await api(owner, '/channels', 'POST', { name: 'last', kind: 'text' });
+    const order = async () =>
+        (await api(owner, '/state')).channels.filter((c) => c.kind === 'text').map((c) => c.id);
+    await api(owner, '/channels/general/drop', 'POST', { target: last.id, placement: 'after' });
+    assert.deepEqual(await order(), ['introductions', last.id, 'general']);
+    await api(owner, '/channels/general/drop', 'POST', {
+        target: 'introductions',
+        placement: 'before',
+    });
+    assert.deepEqual(await order(), ['general', 'introductions', last.id]);
+    await api(owner, '/channels/general/drop', 'POST', {
+        target: 'introductions',
+        placement: 'after',
+    });
+    assert.deepEqual(await order(), ['introductions', 'general', last.id]);
+    await api(owner, `/channels/${last.id}/drop`, 'POST', {
+        target: 'general',
+        placement: 'before',
+    });
+    assert.deepEqual(await order(), ['introductions', last.id, 'general']);
+    await api(
+        owner,
+        '/channels/general/drop',
+        'POST',
+        { target: last.id, placement: 'sideways' },
+        400,
+    );
+    assert.deepEqual(await order(), ['introductions', last.id, 'general']);
+});

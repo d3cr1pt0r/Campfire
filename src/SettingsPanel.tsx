@@ -60,7 +60,9 @@ export function SettingsPanel({
     uploadEmoji: (event: React.FormEvent<HTMLFormElement>) => void;
     permission: (permission: string) => boolean;
 }) {
+    const [serverIconFile, setServerIconFile] = useState<File | null>(null);
     const [avatarFile, setAvatarFile] = useState<File | null>(null);
+    const [removeUser, setRemoveUser] = useState<string | null>(null);
     const [deleteEmoji, setDeleteEmoji] = useState<string | null>(null);
     const [deleteRole, setDeleteRole] = useState<string | null>(null);
     const sections = [
@@ -613,6 +615,27 @@ export function SettingsPanel({
                             this device; conversation overrides below apply to your current account
                             on this server.
                         </p>
+                        <Toggle
+                            title={`Mute ${state.name}`}
+                            value={
+                                prefs.serverNotifications?.[
+                                    notificationKey(url, state.me.id, '*')
+                                ] === false
+                            }
+                            set={(muted) =>
+                                setPrefs((previous) => ({
+                                    ...previous,
+                                    serverNotifications: {
+                                        ...previous.serverNotifications,
+                                        [notificationKey(url, state.me.id, '*')]: !muted,
+                                    },
+                                }))
+                            }
+                        />
+                        <p className="muted">
+                            Server mute silences message sounds and desktop alerts, including direct
+                            messages. Unread indicators remain visible.
+                        </p>
                         <h3>Text channels</h3>
                         <p className="muted">
                             Turn a channel off to silence its direct mentions, including thread
@@ -669,6 +692,22 @@ export function SettingsPanel({
                         </details>
                     </>
                 )}
+                {settingsTab === 'account' && (
+                    <p className="muted">
+                        Shortcuts: Ctrl/Cmd + F searches messages · Ctrl/Cmd + , opens settings ·
+                        Ctrl/Cmd + Shift + M mutes your microphone · Ctrl/Cmd + Shift + D deafens.
+                        Type : for emoji suggestions; use arrows and Enter or Tab to choose.
+                    </p>
+                )}
+                {settingsTab === 'account' && window.driskord && (
+                    <Toggle
+                        title="Close to system tray"
+                        value={!!prefs.closeToTray}
+                        set={(value) =>
+                            setPrefs((previous) => ({ ...previous, closeToTray: value }))
+                        }
+                    />
+                )}
                 {settingsTab === 'server' && (
                     <>
                         <p className="muted">
@@ -702,7 +741,147 @@ export function SettingsPanel({
                                 Save changes
                             </button>
                         </form>
+                        {permission('server.edit') && (
+                            <>
+                                <label>
+                                    Server icon
+                                    <input
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/webp,image/gif"
+                                        disabled={busy}
+                                        onChange={(event) => {
+                                            const file = event.target.files?.[0];
+                                            event.target.value = '';
+                                            if (file) setServerIconFile(file);
+                                        }}
+                                    />
+                                </label>
+                                {state.icon && (
+                                    <>
+                                        <img
+                                            className="server-icon-preview"
+                                            src={`data:image/png;base64,${state.icon}`}
+                                            alt="Server icon"
+                                        />
+                                        <button
+                                            disabled={busy}
+                                            onClick={() => {
+                                                const bytes = Uint8Array.from(
+                                                    atob(state.icon!),
+                                                    (character) => character.charCodeAt(0),
+                                                );
+                                                setServerIconFile(
+                                                    new File([bytes], 'server-icon.png', {
+                                                        type: 'image/png',
+                                                    }),
+                                                );
+                                            }}
+                                        >
+                                            Adjust server icon
+                                        </button>
+                                        <button
+                                            disabled={busy}
+                                            onClick={() =>
+                                                void act(async () => {
+                                                    await api('/settings', 'PATCH', { icon: null });
+                                                    await refresh();
+                                                })
+                                            }
+                                        >
+                                            Remove icon
+                                        </button>
+                                    </>
+                                )}
+                                <Toggle
+                                    title="Show who reacted to messages"
+                                    value={state.reactionAuthors !== false}
+                                    set={(value) =>
+                                        void act(async () => {
+                                            await api('/settings', 'PATCH', {
+                                                reactionAuthors: value,
+                                            });
+                                            await refresh();
+                                        })
+                                    }
+                                />
+                                <p className="muted">
+                                    Show who reacted in a popup on hover or keyboard focus. Each
+                                    text channel can also disable names in Channels. This controls
+                                    display for everyone on this server.
+                                </p>
+                            </>
+                        )}
                         {state.me.role === 'owner' && <RegistrationSettings api={api} url={url} />}
+                        {state.me.role === 'owner' && (
+                            <section className="server-members">
+                                <h3>Manage members</h3>
+                                {state.users
+                                    .filter((u) => u.role !== 'owner')
+                                    .map((u) => (
+                                        <div key={u.id} className="server-member-row">
+                                            <span>{displayName(u)}</span>
+                                            {removeUser !== u.id ? (
+                                                <button
+                                                    className="danger-text"
+                                                    disabled={busy}
+                                                    onClick={() => setRemoveUser(u.id)}
+                                                >
+                                                    Remove member
+                                                </button>
+                                            ) : (
+                                                <div role="alert">
+                                                    <p>
+                                                        Remove {displayName(u)} from this server?
+                                                        Their messages remain, all sessions end, and
+                                                        access is blocked until you restore it.
+                                                    </p>
+                                                    <button
+                                                        disabled={busy}
+                                                        onClick={() => setRemoveUser(null)}
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                    <button
+                                                        className="danger-bg"
+                                                        disabled={busy}
+                                                        onClick={() =>
+                                                            void act(async () => {
+                                                                await api(
+                                                                    `/users/${u.id}/access`,
+                                                                    'POST',
+                                                                    { enabled: false },
+                                                                );
+                                                                setRemoveUser(null);
+                                                                await refresh();
+                                                            })
+                                                        }
+                                                    >
+                                                        Confirm removal
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                {state.removedUsers?.map((u) => (
+                                    <div key={u.id} className="server-member-row">
+                                        <span>{displayName(u)} · Removed</span>
+                                        <button
+                                            disabled={busy}
+                                            onClick={() =>
+                                                void act(async () => {
+                                                    await api(`/users/${u.id}/access`, 'POST', {
+                                                        enabled: true,
+                                                    });
+                                                    await refresh();
+                                                })
+                                            }
+                                        >
+                                            Restore access
+                                        </button>
+                                    </div>
+                                ))}
+                            </section>
+                        )}
                         <label>
                             Server address
                             <input readOnly value={url} />
@@ -851,6 +1030,18 @@ export function SettingsPanel({
                     <LogOut size={16} /> Sign out
                 </button>
             </div>
+            {serverIconFile && (
+                <AvatarCropper
+                    file={serverIconFile}
+                    size={256}
+                    variant="server"
+                    onSave={async (icon) => {
+                        await api('/settings', 'PATCH', { icon });
+                        await refresh();
+                    }}
+                    onClose={() => setServerIconFile(null)}
+                />
+            )}
             {avatarFile && (
                 <AvatarCropper
                     file={avatarFile}

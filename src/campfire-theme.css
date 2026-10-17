@@ -654,3 +654,217 @@ label,
     color: #fff3dd;
     background-color: #ffffff0b;
 }
+
+/* Quiet scrollbars retain their width to avoid layout shifts. */
+:root * {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+}
+.app-focused *:hover,
+.app-focused *:focus-within {
+    scrollbar-color: var(--scrollbar-thumb, #8f8177) transparent;
+}
+*::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+    background: transparent;
+}
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+    background: transparent;
+    border: 0;
+}
+*::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+}
+*::-webkit-scrollbar-thumb {
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+}
+.app-focused *:hover::-webkit-scrollbar-thumb,
+.app-focused *:focus-within::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb, #8f8177);
+}
+.server-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+}
+.server-icon-preview {
+    width: 80px;
+    height: 80px;
+    border-radius: 20px;
+    object-fit: cover;
+}
+.reactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+.reactions:empty {
+    display: none;
+}
+
+.thread-replies {
+    display: flex;
+    width: fit-content;
+    margin-top: 10px;
+    margin-bottom: 4px;
+    padding: 5px 0;
+    gap: 6px;
+}
+.channel-drag-handle {
+    cursor: grab;
+    touch-action: none;
+}
+.channel-drag-handle:active {
+    cursor: grabbing;
+}
+.channel-settings-item.is-dragging {
+    opacity: 0.45;
+}
+.server-member-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+}
+.voice-member > span[aria-label] {
+    flex: 0 0 auto;
+    display: inline-flex;
+    flex-shrink: 0;
+}
+.voice-member {
+    flex-wrap: wrap;
+}
+
+.channel-settings-item.drop-before {
+    box-shadow: inset 0 3px 0 var(--accent);
+}
+.channel-settings-item.drop-after {
+    box-shadow: inset 0 -3px 0 var(--accent);
+}
+
+/* Canvas attachments sit close to the paper-colored chat surface. */
+:root[data-theme='canvas'] {
+    --scrollbar-thumb: #c7bfaf;
+}
+:root[data-theme='canvas'] .attachment-image .image-preview-button {
+    background: var(--panel);
+}
+:root[data-theme='canvas'] .attachment-image .image-preview-button:hover {
+    background: #eae3d5;
+}
+:root[data-theme='canvas'] .attachment {
+    background: var(--panel);
+    color: var(--ink);
+    border-color: var(--line);
+}
+:root[data-theme='canvas'] .attachment:hover {
+    background: #eae3d5;
+}
+:root[data-theme='canvas'] .attachment > svg:first-child {
+    color: var(--accent);
+}
+:root[data-theme='canvas'] .attachment > svg:last-child {
+    color: var(--muted);
+}
+:root[data-theme='canvas'] .image-preview-button:focus-visible {
+    outline-color: var(--accent);
+}
+:root[data-theme='canvas'] .image-viewer .stream-viewer-stage {
+    background: var(--panel);
+}
+
+/* Reaction identities live in a separate overlay, outside virtualized message rows. */
+.reaction-popup {
+    position: fixed;
+    z-index: 2000;
+    width: max-content;
+    min-width: 180px;
+    max-width: min(280px, calc(100vw - 16px));
+    max-height: min(320px, calc(100dvh - 16px));
+    overflow-y: auto;
+    background: var(--raised);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 8px 28px #0003;
+    animation: reaction-popup-enter 140ms ease-out;
+}
+.reaction-popup-heading {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+}
+.reaction-popup-heading strong {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 500;
+}
+.reaction-popup-heading > .custom-emoji,
+.reaction-popup-heading .custom-emoji {
+    width: 22px;
+    height: 22px;
+}
+.reaction-popup ul {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0;
+    display: grid;
+    gap: 9px;
+}
+.reaction-popup li {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 13px;
+}
+.reaction-popup li > span:last-child {
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+.reaction-popup .avatar {
+    flex-shrink: 0;
+}
+:root[data-theme='canvas'] .reactions button {
+    background: var(--panel);
+    border-color: var(--line);
+    color: var(--ink);
+}
+:root[data-theme='canvas'] .reactions button.mine {
+    background: var(--soft-accent);
+    border-color: var(--accent);
+}
+:root[data-theme='canvas'] .reactions button > span {
+    color: var(--muted);
+}
+.reactions button[aria-disabled='true'] {
+    cursor: default;
+}
+@keyframes reaction-popup-enter {
+    from {
+        opacity: 0;
+        transform: translateY(3px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .reaction-popup {
+        animation: none;
+    }
+}

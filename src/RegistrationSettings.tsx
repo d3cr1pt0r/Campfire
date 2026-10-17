@@ -15,6 +15,7 @@ export function RegistrationSettings({ api, url }: { api: ApiClient; url: string
     const [busy, setBusy] = useState(false);
     const [label, setLabel] = useState('');
     const [code, setCode] = useState('');
+    const [codeInvitationId, setCodeInvitationId] = useState<string | null>(null);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [copied, setCopied] = useState('');
     const load = useCallback(async () => setData(await api<Registration>('/registration')), [api]);
@@ -40,6 +41,7 @@ export function RegistrationSettings({ api, url }: { api: ApiClient; url: string
             setCode('');
             setCopied('');
         });
+    const invitations = data?.invitations.filter((invite) => !invite.revoked) || [];
     const copy = async (value: string, message: string) => {
         try {
             await navigator.clipboard.writeText(value);
@@ -110,12 +112,13 @@ export function RegistrationSettings({ api, url }: { api: ApiClient; url: string
                                 onSubmit={(e) => {
                                     e.preventDefault();
                                     void act(async () => {
-                                        const result = await api<{ code: string }>(
+                                        const result = await api<{ id: string; code: string }>(
                                             '/invitations',
                                             'POST',
                                             { label },
                                         );
                                         setCode(result.code);
+                                        setCodeInvitationId(result.id);
                                         setLabel('');
                                         setCopied('');
                                     });
@@ -174,9 +177,11 @@ export function RegistrationSettings({ api, url }: { api: ApiClient; url: string
                     )}
                     {copied && <p role="status">{copied}</p>}
                     <h4>Invitations</h4>
-                    {!data.invitations.length && <p className="muted">No invitations yet.</p>}
-                    <p className="muted">Showing up to 200 invitations, newest first.</p>
-                    {data.invitations.map((invite) => {
+                    {!invitations.length && <p className="muted">No invitations to display.</p>}
+                    <p className="muted">
+                        Showing up to 200 invitations, newest first. Revoked invitations are hidden.
+                    </p>
+                    {invitations.map((invite) => {
                         const status = invite.usedBy
                             ? 'Used'
                             : invite.revoked
@@ -198,6 +203,11 @@ export function RegistrationSettings({ api, url }: { api: ApiClient; url: string
                                         onClick={() =>
                                             void act(async () => {
                                                 await api(`/invitations/${invite.id}`, 'DELETE');
+                                                if (codeInvitationId === invite.id) {
+                                                    setCode('');
+                                                    setCodeInvitationId(null);
+                                                    setCopied('');
+                                                }
                                             })
                                         }
                                     >

@@ -1,4 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
+import { Emoji } from './ChatContent';
+import { emojiQuery, emojiMatches } from './emojiCompletion';
 import { mentionQuery, completeMention } from './mentions';
 import { Paperclip, X, Plus, Smile, Send } from 'lucide-react';
 import { displayName } from './profiles';
@@ -25,6 +27,7 @@ type Props = {
     placeholder: string;
     label?: string;
     users: User[];
+    emojis?: { id: string; name: string; author: string }[];
 };
 export function ChatComposer({
     attachments,
@@ -47,6 +50,7 @@ export function ChatComposer({
     placeholder,
     label = 'Message',
     users,
+    emojis = [],
 }: Props) {
     const input = useRef<HTMLTextAreaElement>(null);
     const listId = useId();
@@ -65,11 +69,30 @@ export function ChatComposer({
                   .sort((a, b) => a.username.localeCompare(b.username))
                   .slice(0, 8)
             : [];
-    const chosen = Math.min(active, Math.max(0, matches.length - 1));
+    const emojiSearch =
+        !composing && focused && canPost && dismissed !== `${draft}:${caret}`
+            ? emojiQuery(draft, caret)
+            : null;
+    const emojiOptions = emojiSearch ? emojiMatches(emojiSearch.query, emojis) : [];
+    const completeEmoji = (option: { value: string }) => {
+        if (!emojiSearch) return;
+        const text = draft.slice(0, emojiSearch.start) + option.value + ' ' + draft.slice(caret);
+        if (text.length > 4000) return;
+        const next = emojiSearch.start + option.value.length + 1;
+        setDraft(text);
+        setCaret(next);
+        setDismissed(`${text}:${next}`);
+        requestAnimationFrame(() => {
+            input.current?.focus();
+            input.current?.setSelectionRange(next, next);
+        });
+    };
+    const optionCount = matches.length || emojiOptions.length;
+    const chosen = Math.min(active, Math.max(0, optionCount - 1));
     useEffect(() => {
-        if (matches.length)
+        if (optionCount)
             document.getElementById(`${listId}-${chosen}`)?.scrollIntoView({ block: 'nearest' });
-    }, [chosen, listId, matches.length]);
+    }, [chosen, listId, optionCount]);
     const complete = (candidate: User) => {
         if (!query) return;
         const result = completeMention(draft, query, candidate.username);
@@ -124,6 +147,30 @@ export function ChatComposer({
                     ))}
                 </div>
             )}
+            {!!emojiOptions.length && (
+                <div
+                    className="mention-suggestions"
+                    id={listId}
+                    role="listbox"
+                    aria-label="Choose an emoji"
+                >
+                    {emojiOptions.map((option, index) => (
+                        <button
+                            type="button"
+                            key={option.name}
+                            id={`${listId}-${index}`}
+                            role="option"
+                            aria-selected={chosen === index}
+                            tabIndex={-1}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => completeEmoji(option)}
+                        >
+                            <Emoji value={option.value} custom={emojis} />
+                            <span>:{option.name}:</span>
+                        </button>
+                    ))}
+                </div>
+            )}
             <form className="composer" onSubmit={send}>
                 <button
                     type="button"
@@ -152,9 +199,9 @@ export function ChatComposer({
                     ref={input}
                     role="combobox"
                     aria-autocomplete="list"
-                    aria-expanded={!!matches.length}
-                    aria-controls={matches.length ? listId : undefined}
-                    aria-activedescendant={matches.length ? `${listId}-${chosen}` : undefined}
+                    aria-expanded={!!optionCount}
+                    aria-controls={optionCount ? listId : undefined}
+                    aria-activedescendant={optionCount ? `${listId}-${chosen}` : undefined}
                     onFocus={() => setFocused(true)}
                     onBlur={() => setFocused(false)}
                     onCompositionStart={() => setComposing(true)}
@@ -193,18 +240,19 @@ export function ChatComposer({
                     }}
                     onKeyDown={(e) => {
                         if (e.nativeEvent.isComposing || composing) return;
-                        if (matches.length) {
+                        if (optionCount) {
                             if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                                 e.preventDefault();
                                 setActive(
-                                    (chosen + (e.key === 'ArrowDown' ? 1 : -1) + matches.length) %
-                                        matches.length,
+                                    (chosen + (e.key === 'ArrowDown' ? 1 : -1) + optionCount) %
+                                        optionCount,
                                 );
                                 return;
                             }
-                            if (e.key === 'Enter' && !e.shiftKey) {
+                            if ((e.key === 'Enter' || e.key === 'Tab') && !e.shiftKey) {
                                 e.preventDefault();
-                                complete(matches[chosen]);
+                                if (emojiOptions.length) completeEmoji(emojiOptions[chosen]);
+                                else complete(matches[chosen]);
                                 return;
                             }
                             if (e.key === 'Escape') {

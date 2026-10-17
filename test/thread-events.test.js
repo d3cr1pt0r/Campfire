@@ -89,4 +89,25 @@ test('thread events broadcast reply counts and typing only to authorized room pa
     assert.deepEqual(counts, [1, 0]);
     assert.equal(deleted[0].id, reply.id);
     assert.deepEqual(leaked, []);
+    b.emit('call:status', { muted: true, deafened: true, camera: true });
+    assert.equal((await api(alice, '/state')).calls.length, 0);
+    b.emit('call:join', 'lounge', () => {});
+    b.emit('call:status', { muted: false, deafened: true, camera: true });
+    let member = (await api(alice, '/state')).calls.find((c) => c.user === bob.user.id);
+    assert.equal(member.muted, true);
+    assert.equal(member.deafened, true);
+    assert.equal(member.camera, true);
+    b.emit('call:status', { muted: 'no', deafened: false, camera: false });
+    assert.equal((await api(alice, '/state')).calls[0].camera, true);
+    const role = await api(alice, '/roles', 'POST', {
+        name: 'No camera',
+        color: '#aabbcc',
+        permissions: ['calls.join', 'calls.speak'],
+    });
+    await api(alice, `/users/${bob.user.id}/role`, 'PATCH', { role: role.id });
+    assert.equal((await api(alice, '/state')).calls[0].camera, false);
+    // Real Socket.IO middleware refreshes the user on every incoming packet.
+    b.data.user.role = role.id;
+    b.emit('call:status', { muted: true, deafened: false, camera: true });
+    assert.equal((await api(alice, '/state')).calls[0].camera, false);
 });

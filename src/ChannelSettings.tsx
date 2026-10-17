@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { ArrowUp, ArrowDown, ChevronDown, Hash, Volume2 } from 'lucide-react';
+import { Toggle } from './forms';
+import { useRef, useState } from 'react';
+import { GripVertical, ChevronDown, Hash, Volume2 } from 'lucide-react';
 import type { State, Channel } from './types';
 import type { ApiClient } from './api';
 
@@ -13,17 +14,45 @@ type Props = {
 };
 export function ChannelSettings(props: Props) {
     const [expanded, setExpanded] = useState<string | null>(null);
-    const move = (channel: Channel, direction: 'up' | 'down') =>
+    const [dragged, setDragged] = useState<string | null>(null);
+    const source = useRef<string | null>(null);
+    const [destination, setDestination] = useState<{
+        id: string;
+        placement: 'before' | 'after';
+    } | null>(null);
+    const [reordering, setReordering] = useState(false);
+    const resetDrag = () => {
+        source.current = null;
+        setDragged(null);
+        setDestination(null);
+    };
+    const drop = (sourceId: string, target: string, placement: 'before' | 'after' = 'before') => {
+        resetDrag();
+        setReordering(true);
         void props.act(async () => {
-            await props.api(`/channels/${channel.id}/move`, 'POST', { direction });
-            await props.refresh();
+            try {
+                await props.api(`/channels/${sourceId}/drop`, 'POST', { target, placement });
+                await props.refresh();
+            } finally {
+                setReordering(false);
+            }
         });
+    };
     return (
-        <div className="channel-settings-list">
+        <div className="channel-settings-list" aria-busy={reordering}>
+            <span className="sr-only" role="status">
+                {reordering
+                    ? 'Saving channel order…'
+                    : destination
+                      ? `Move ${props.state.channels.find((c) => c.id === dragged)?.name} ${destination.placement} ${props.state.channels.find((c) => c.id === destination.id)?.name}`
+                      : ''}
+            </span>
             <p className="muted">
                 Select a channel to edit its name and description. Channel access is configured in
-                Roles & permissions. Use the arrows to reorder channels within each type. Permanent
-                channels can be renamed and reordered.
+                Roles & permissions. Drag the handles to reorder channels within each type. The
+                highlighted line shows where the channel will be inserted. Focus a handle and use
+                Alt + Arrow keys to reorder with the keyboard. Permanent channels can be renamed and
+                reordered.
             </p>
             {(['text', 'voice'] as const).map((kind) => {
                 const channels = props.state.channels.filter((channel) => channel.kind === kind);
@@ -31,7 +60,68 @@ export function ChannelSettings(props: Props) {
                     <section key={kind} aria-label={`${kind} channel settings`}>
                         <h3>{kind === 'text' ? 'Text channels' : 'Voice channels'}</h3>
                         {channels.map((channel, index) => (
-                            <div className="channel-settings-item" key={channel.id}>
+                            <div
+                                className={`channel-settings-item ${dragged === channel.id ? 'is-dragging' : ''} ${destination?.id === channel.id ? `drop-${destination.placement}` : ''}`}
+                                key={channel.id}
+                                onDragOver={(event) => {
+                                    const id = source.current;
+                                    if (
+                                        props.busy ||
+                                        reordering ||
+                                        !id ||
+                                        id === channel.id ||
+                                        !channels.some((c) => c.id === id)
+                                    )
+                                        return;
+                                    event.preventDefault();
+                                    event.dataTransfer.dropEffect = 'move';
+                                    const rect = event.currentTarget
+                                        .querySelector('.channel-settings-summary')!
+                                        .getBoundingClientRect();
+                                    const placement =
+                                        event.clientY < rect.top + rect.height / 2
+                                            ? 'before'
+                                            : 'after';
+                                    setDestination((previous) =>
+                                        previous?.id === channel.id &&
+                                        previous.placement === placement
+                                            ? previous
+                                            : { id: channel.id, placement },
+                                    );
+                                }}
+                                onDragLeave={(event) => {
+                                    if (
+                                        !(event.relatedTarget instanceof Node) ||
+                                        !event.currentTarget.contains(event.relatedTarget)
+                                    )
+                                        setDestination((previous) =>
+                                            previous?.id === channel.id ? null : previous,
+                                        );
+                                }}
+                                onDrop={(event) => {
+                                    const id = source.current;
+                                    if (
+                                        props.busy ||
+                                        reordering ||
+                                        !id ||
+                                        id === channel.id ||
+                                        !channels.some((c) => c.id === id)
+                                    )
+                                        return;
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    const rect = event.currentTarget
+                                        .querySelector('.channel-settings-summary')!
+                                        .getBoundingClientRect();
+                                    drop(
+                                        id,
+                                        channel.id,
+                                        event.clientY < rect.top + rect.height / 2
+                                            ? 'before'
+                                            : 'after',
+                                    );
+                                }}
+                            >
                                 <div className="channel-settings-summary">
                                     <button
                                         className="channel-settings-expand"
@@ -51,28 +141,43 @@ export function ChannelSettings(props: Props) {
                                         <ChevronDown size={16} />
                                     </button>
                                     <button
-                                        title="Move up"
-                                        aria-label={`Move ${channel.name} up`}
+                                        type="button"
+                                        className="channel-drag-handle"
+                                        title="Drag to reorder · Alt + Arrow keys"
+                                        aria-label={`Reorder ${channel.name}`}
                                         disabled={
                                             props.busy ||
-                                            !props.permission('channels.reorder') ||
-                                            index === 0
+                                            reordering ||
+                                            !props.permission('channels.reorder')
                                         }
-                                        onClick={() => move(channel, 'up')}
-                                    >
-                                        <ArrowUp size={16} />
-                                    </button>
-                                    <button
-                                        title="Move down"
-                                        aria-label={`Move ${channel.name} down`}
-                                        disabled={
-                                            props.busy ||
-                                            !props.permission('channels.reorder') ||
-                                            index === channels.length - 1
+                                        draggable={
+                                            !props.busy &&
+                                            !reordering &&
+                                            props.permission('channels.reorder')
                                         }
-                                        onClick={() => move(channel, 'down')}
+                                        onDragStart={(event) => {
+                                            source.current = channel.id;
+                                            setDragged(channel.id);
+                                            setExpanded(null);
+                                            event.dataTransfer.setData('text/plain', channel.id);
+                                            event.dataTransfer.effectAllowed = 'move';
+                                        }}
+                                        onDragEnd={resetDrag}
+                                        onKeyDown={(event) => {
+                                            if (
+                                                !event.altKey ||
+                                                !['ArrowUp', 'ArrowDown'].includes(event.key)
+                                            )
+                                                return;
+                                            event.preventDefault();
+                                            const next = index + (event.key === 'ArrowUp' ? -1 : 1);
+                                            if (next < 0 || next >= channels.length) return;
+                                            if (event.key === 'ArrowUp')
+                                                drop(channel.id, channels[next].id);
+                                            else drop(channel.id, channels[next].id, 'after');
+                                        }}
                                     >
-                                        <ArrowDown size={16} />
+                                        <GripVertical size={18} />
                                     </button>
                                 </div>
                                 {expanded === channel.id && (
@@ -152,6 +257,20 @@ function ChannelEditor({
                     Save channel
                 </button>
             </form>
+            {channel.kind === 'text' && permission('channels.edit') && (
+                <Toggle
+                    title="Show who reacted in this channel"
+                    value={channel.reactionAuthors !== 0 && channel.reactionAuthors !== false}
+                    set={(value) =>
+                        void act(async () => {
+                            await api(`/channels/${channel.id}`, 'PATCH', {
+                                reactionAuthors: value,
+                            });
+                            await refresh();
+                        })
+                    }
+                />
+            )}
             {!channel.protected &&
                 permission('channels.delete') &&
                 (confirming ? (

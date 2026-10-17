@@ -7,8 +7,12 @@ export function AvatarCropper({
     file,
     onSave,
     onClose,
+    size = 512,
+    variant = 'profile',
 }: {
     file: File;
+    size?: number;
+    variant?: 'profile' | 'server';
     onSave: (data: string) => Promise<void>;
     onClose: () => void;
 }) {
@@ -71,19 +75,27 @@ export function AvatarCropper({
                 className="modal avatar-cropper"
                 role="dialog"
                 aria-modal="true"
-                aria-label="Position profile picture"
+                aria-label={
+                    variant === 'server' ? 'Position server icon' : 'Position profile picture'
+                }
             >
-                <h2>Position your profile picture</h2>
+                <h2>
+                    {variant === 'server'
+                        ? 'Position your server icon'
+                        : 'Position your profile picture'}
+                </h2>
                 <p>
                     Drag the picture or use the sliders. The rounded preview shows how your avatar
-                    will look.
+                    will look. {variant === 'server' && 'The same crop is used in the server rail.'}
                 </p>
                 <canvas
                     ref={canvas}
-                    width={512}
-                    height={512}
+                    width={size}
+                    height={size}
                     className="avatar-crop-preview"
-                    aria-label="Profile picture preview"
+                    aria-label={
+                        variant === 'server' ? 'Server icon preview' : 'Profile picture preview'
+                    }
                     onPointerDown={(event) => {
                         if (!bitmap || saving) return;
                         event.currentTarget.setPointerCapture(event.pointerId);

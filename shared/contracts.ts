@@ -19,6 +19,7 @@ export type Channel = {
     kind: 'text' | 'voice';
     description: string;
     protected: boolean;
+    reactionAuthors?: number | boolean;
     access: 'full' | 'read-only';
 };
 export type ChannelAccess = {
@@ -31,10 +32,16 @@ export type CallMember = {
     user: string;
     channel: string;
     shareId?: string | null;
+    muted?: boolean;
+    deafened?: boolean;
+    camera?: boolean;
 };
 export type State = {
     me: User;
     name: string;
+    icon?: string | null;
+    reactionAuthors?: boolean;
+    removedUsers?: User[];
     users: User[];
     roles: Role[];
     channels: Channel[];
@@ -80,6 +87,8 @@ export type Preferences = {
     dmNotifications?: boolean;
     mentionNotifications?: boolean;
     channelNotifications?: Record<string, boolean>;
+    serverNotifications?: Record<string, boolean>;
+    closeToTray?: boolean;
     input: string;
     inputLabel?: string;
     output: string;
@@ -118,6 +127,7 @@ export interface ServerEvents {
 }
 export interface ClientEvents {
     'call:media': (shareId: string | null) => void;
+    'call:status': (status: { muted: boolean; deafened: boolean; camera: boolean }) => void;
     'presence:idle': (idle: boolean) => void;
     typing: (room: string, thread?: string) => void;
     'call:join': (channel: string, ack: (result: JoinResult) => void) => void;

@@ -55,7 +55,7 @@ export function createRegistration({ app, get, all, run, db, io, setupCode }) {
                 res.set('Cache-Control', 'no-store').json({
                     mode: mode(),
                     invitations: all(
-                        'SELECT id,label,created,expires,usedBy,revoked FROM invitations ORDER BY created DESC,rowid DESC LIMIT 200',
+                        'SELECT id,label,created,expires,usedBy,revoked FROM invitations WHERE revoked=0 ORDER BY created DESC,rowid DESC LIMIT 200',
                     ),
                 });
             }),

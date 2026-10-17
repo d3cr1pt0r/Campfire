@@ -106,6 +106,14 @@ export function createApp({
             res.json({
                 me: sessions.publicUser(req.user),
                 name: get('SELECT value FROM settings WHERE key=?', 'name').value,
+                icon: get("SELECT value FROM settings WHERE key='icon'")?.value || null,
+                reactionAuthors:
+                    get("SELECT value FROM settings WHERE key='reactionAuthors'")?.value !==
+                    'false',
+                removedUsers:
+                    req.user.role === 'owner'
+                        ? all('SELECT id,username,role FROM users WHERE banned=1')
+                        : [],
                 users: sessions.users(),
                 presence: presence.snapshot(),
                 roles: all('SELECT * FROM roles').map((role) => ({

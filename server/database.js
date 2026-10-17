@@ -104,6 +104,11 @@ export function migrate(db) {
                 );
             }
         },
+        () => {
+            db.exec(
+                'ALTER TABLE channels ADD COLUMN reactionAuthors INTEGER NOT NULL DEFAULT 1 CHECK(reactionAuthors IN (0,1))',
+            );
+        },
     ];
     migrations.forEach((apply, index) => {
         const version = index + 1;
