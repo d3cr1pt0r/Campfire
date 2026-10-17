@@ -7,6 +7,8 @@ services:
     environment:
       SERVER_NAME: "My Driskord server"
       CLIENT_ORIGINS: "${CLIENT_ORIGINS:-}"
+      TRUST_PROXY: "${TRUST_PROXY:-}"
+      MAX_STORED_UPLOAD_BYTES: "${MAX_STORED_UPLOAD_BYTES:-1073741824}"
       ICE_SERVERS: "${ICE_SERVERS:-[]}"
     volumes:
       - driskord-data:/data

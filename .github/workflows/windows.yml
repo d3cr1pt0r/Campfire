@@ -1,33 +1,33 @@
 name: Windows portable executable
 on:
-  workflow_dispatch:
-    inputs:
-      default_server_url:
-        description: 'Optional public server URL, e.g. https://chat.example.com'
-        required: false
-        type: string
+    workflow_dispatch:
+        inputs:
+            default_server_url:
+                description: 'Optional public server URL, e.g. https://chat.example.com'
+                required: false
+                type: string
 permissions:
-  contents: read
+    contents: read
 jobs:
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci
-      - run: npm run check
-      - run: npm test
-      - name: Build Windows x64 portable executable
-        run: npm run dist:win
-        env:
-          VITE_DEFAULT_SERVER_URL: ${{ inputs.default_server_url }}
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Driskord-Windows-x64-Portable
-          path: release/*-Portable.exe
-          if-no-files-found: error
-          retention-days: 14
+    windows:
+        runs-on: windows-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '24'
+                  cache: npm
+            - run: npm ci
+            - run: npm run check
+            - run: npm test
+            - name: Build Windows x64 portable executable
+              run: npm run dist:win
+              env:
+                  VITE_DEFAULT_SERVER_URL: ${{ inputs.default_server_url }}
+                  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: Driskord-Windows-x64-Portable
+                  path: release/*-Portable.exe
+                  if-no-files-found: error
+                  retention-days: 14

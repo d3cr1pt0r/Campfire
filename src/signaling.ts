@@ -1,4 +1,7 @@
-export type PeerSignal = { description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
+export type PeerSignal = {
+    description?: RTCSessionDescriptionInit;
+    candidate?: RTCIceCandidateInit;
+};
 
 // Keep one negotiation owner per peer and serialize incoming messages. In
 // particular, finish applying an answer before handling the next remote offer.
@@ -24,15 +27,22 @@ export function createPeerSignaling(
                 makingOffer = true;
                 await pc.setLocalDescription();
                 if (!closed && pc.localDescription) send({ description: pc.localDescription });
-            } finally { makingOffer = false; }
+            } finally {
+                makingOffer = false;
+            }
         },
         receive(data: PeerSignal): Promise<void> {
             const next = incoming.then(async () => {
                 if (closed) return;
                 if (data.description) {
-                    const collision = data.description.type === 'offer' && (makingOffer || pc.signalingState !== 'stable');
+                    const collision =
+                        data.description.type === 'offer' &&
+                        (makingOffer || pc.signalingState !== 'stable');
                     ignoreOffer = !polite && collision;
-                    if (ignoreOffer) { pending = []; return; }
+                    if (ignoreOffer) {
+                        pending = [];
+                        return;
+                    }
                     await pc.setRemoteDescription(data.description);
                     if (closed) return;
                     if (data.description.type === 'offer') {
@@ -41,7 +51,8 @@ export function createPeerSignaling(
                         await prepareAnswer();
                         if (closed) return;
                         await pc.setLocalDescription();
-                        if (!closed && pc.localDescription) send({ description: pc.localDescription });
+                        if (!closed && pc.localDescription)
+                            send({ description: pc.localDescription });
                     }
                     const candidates = pending;
                     pending = [];
@@ -56,6 +67,9 @@ export function createPeerSignaling(
             incoming = next.catch(() => {}); // One rejected message must not poison the queue.
             return next;
         },
-        close() { closed = true; pending = []; },
+        close() {
+            closed = true;
+            pending = [];
+        },
     };
 }

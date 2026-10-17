@@ -1,6 +1,6 @@
 # Driskord
 
-An English-only, self-hosted community chat app with an Electron desktop client and a reusable React browser interface. This is an initial implementation, not Discord feature parity or a production-audited release.
+An English-only, self-hosted community chat app with an Electron desktop client and a reusable React browser interface. See [REWORK.md](REWORK.md) for architecture, upgrade instructions, storage quotas, and validation scope. This is an initial implementation, not Discord feature parity or a production-audited release.
 
 ## Run the desktop app
 
@@ -133,7 +133,7 @@ The executable is not code-signed, so Windows may show an unknown-publisher/Smar
 - Role creation/editing, colors, chat/voice/management permissions, owner-only role assignment, and server naming.
 - Settings for notifications, audio input/output, and 360p/720p/1080p requested streaming resolution.
 
-Search, pinned views, and history currently operate on the latest 500 messages in a conversation. Unread counts are session-local. Screen sharing replaces the outgoing camera track and restores it when sharing stops. Windows desktop sharing supports system audio; see below for platform limitations. Settings affecting device capture apply on the next call/video start. Output-device support and capture picker behavior depend on the OS. Push-to-talk works while the app has focus and the cursor is outside an input field; it is not a system-wide hotkey.
+History loads in pages of 100 messages, with a **Load older messages** button. Search and pinned views query the full conversation and paginate results. Unread counts are session-local. Screen sharing replaces the outgoing camera track and restores it when sharing stops. Windows desktop sharing supports system audio; see below for platform limitations. Settings affecting device capture apply on the next call/video start. Output-device support and capture picker behavior depend on the OS. Push-to-talk works while the app has focus and the cursor is outside an input field; it is not a system-wide hotkey.
 
 Private channels, moderation/ban UI, custom server icons, saved multi-server sessions, threads, bots, password recovery, mobile clients, code-signed desktop releases, auto-updates, and a large-call media server are future work. Message text supports clickable HTTP(S) links and custom emoji tokens, with no HTML or Markdown execution. DMs are access-controlled on the server; they are **not end-to-end encrypted** against the server owner. WebRTC encrypts media transport, and TURN can relay that media.
 

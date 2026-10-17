@@ -20,11 +20,24 @@ export function playbackError(error: unknown): string {
     return `Audio playback failed${value?.name ? ` [${value.name}]` : ''}. Click Play audio to retry.${value?.message ? ` ${value.message}` : ''}`;
 }
 
-export function syncPlaybackTracks(audio: MediaStream, video: MediaStream, tracks: MediaStreamTrack[], preview = false): void {
-    const live = tracks.filter(track => track.readyState !== 'ended');
-    for (const [target, kind] of [[audio, 'audio'], [video, 'video']] as const) {
-        const desired = kind === 'audio' && preview ? [] : live.filter(track => track.kind === kind);
-        target.getTracks().forEach(track => { if (!desired.includes(track)) target.removeTrack(track); });
-        desired.forEach(track => { if (!target.getTracks().includes(track)) target.addTrack(track); });
+export function syncPlaybackTracks(
+    audio: MediaStream,
+    video: MediaStream,
+    tracks: MediaStreamTrack[],
+    preview = false,
+): void {
+    const live = tracks.filter((track) => track.readyState !== 'ended');
+    for (const [target, kind] of [
+        [audio, 'audio'],
+        [video, 'video'],
+    ] as const) {
+        const desired =
+            kind === 'audio' && preview ? [] : live.filter((track) => track.kind === kind);
+        target.getTracks().forEach((track) => {
+            if (!desired.includes(track)) target.removeTrack(track);
+        });
+        desired.forEach((track) => {
+            if (!target.getTracks().includes(track)) target.addTrack(track);
+        });
     }
 }
