@@ -206,8 +206,8 @@ For a hosted build, open **Actions → Linux standalone builds → Run workflow*
 - Own-message editing/deletion, over 200 standard emojis and custom emoji reactions, typing indicators, session unread badges, search, and manager-pinned messages.
 - Voice channels with microphone mute/deafen, webcam video and local preview, screen/window sharing, per-person Watch/Stop watching controls, and separate voice/stream volume.
 - Focused-app push-to-talk with Space, browser noise suppression/echo cancellation, and call sounds.
-- Role creation/editing, colors, chat/voice/management permissions, owner-only role assignment, and server naming.
-- Channel renaming/deletion with permanent text/voice anchors, editable text-channel descriptions (up to 200 characters), per-role text access (full/read-only/hidden), and voice visibility. Owners and roles with server-management permission edit descriptions under Settings → Channels & access; an empty description hides it from the header.
+- Owner-managed roles with colors, 22 granular permissions, per-role channel-access tables, owner-only assignment, and server naming.
+- Channel renaming/deletion with permanent text/voice anchors, editable text-channel descriptions (up to 200 characters), per-role text access (full/read-only/hidden), and voice visibility. Owners and roles with Edit channel names and descriptions edit descriptions under Settings → Channels; an empty description hides it from the header.
 - Avatar positioning with drag, zoom, sliders and a fit-whole-image option.
 - Settings for notifications, audio input/output, and 360p/720p/1080p requested streaming resolution.
 
@@ -215,23 +215,32 @@ History starts with the latest 100 messages and automatically fetches older page
 
 Moderation/ban UI, custom server icons, saved multi-server sessions, threads, bots, password recovery, mobile clients, code-signed desktop releases, auto-updates, and a large-call media server are future work. Message text supports clickable HTTP(S) links and custom emoji tokens, with no HTML or Markdown execution. DMs are access-controlled on the server; they are **not end-to-end encrypted** against the server owner. WebRTC encrypts media transport, and TURN can relay that media.
 
-## Channel management and access
+## Channels, roles, and permissions
 
-Open **Settings → Channels & access**, or use the settings icon beside the channel categories. Managers can rename channels and delete additional channels after confirming. Each server keeps one permanent text channel and one permanent voice channel; these can be renamed but not deleted. Existing servers protect `general` and `lounge` when present, otherwise an existing channel of each type. Deleted channels stay deleted after restart. Deleting a text channel removes its messages and attachments; deleting a voice channel disconnects its participants.
+**Settings → Channels** manages channel names/descriptions, ordering, and deletion. Each action has its own role permission. There are no role-access controls on this page. Each server retains one permanent text and one permanent voice channel; these can be edited and reordered but cannot be deleted. Deleting another text channel removes its messages and attachments; deleting a voice channel disconnects participants.
 
-Access is configured per role (group) and per channel:
+Open **Settings → Roles & permissions → Edit role** to configure:
 
-| Text channel | Behavior |
+- **General permissions:** 22 controls grouped into Messaging, Message moderation, Calls, Channels, Custom emojis, and Server. Owners alone create/edit/delete roles and assign them to members. Owner and Member remain permanent roles.
+- **Channel access:** a table of channels and that role's access. Select Full access / Read only / Hidden for text channels, or Visible / Hidden for voice channels. Save role saves both sections together. The owner always retains all permissions and full channel access.
+
+Roles with **Change role access to channels** can open another role's editor and change only its channel-access table, limited to channels the editor can already see. They cannot modify general permissions, assign roles, change the Owner role, or discover/expose hidden channels. The owner's registration mode and invitation controls remain owner-only, independently of Edit general server settings.
+
+| Text channel access | Behavior |
 | --- | --- |
-| Full access | View and write, subject to the role's global permissions and message ownership |
-| Read only | View messages, reactions, pins and downloads; no posting, reacting, editing, deleting or pinning |
-| Hidden | No channel listing, history, downloads, typing notices or message events |
+| Full access | Actions enabled by the role's general permissions, subject to message ownership |
+| Read only | Read messages, reactions, pins and downloads; no posting, reacting, editing, pinning, or deleting others' messages |
+| Hidden | No channel listing, history, downloads, typing notices, moderation, or message events |
 
-Voice channels are **Visible** or **Hidden**. A role also needs the global voice permission to see/join them. Hidden voice channels do not expose participant rosters or signaling. Revoking voice access disconnects active participants. Private friend calls retain their separate invitation rules.
+Deleting your own messages requires **Delete own messages**, independently of posting permission and read-only mode; the channel must still be visible. Editing another author's messages is never allowed. Moderators cannot delete another author's DM, including in DMs they participate in. Attaching files requires both Send messages and Attach files. The first reply creates a thread and requires Send messages, Create threads, and Reply in threads; subsequent replies require Send messages and Reply in threads.
 
-The owner always retains full access. Managers can configure channels they can see; management permission does not bypass a channel's read-only restrictions. Missing per-role overrides default to full access for compatibility, including newly created roles. Global send/voice permissions remain an upper limit. The minimum-channel rule applies to the server; a role may have every channel hidden.
+Visible voice channels remain listed when Join calls is disabled, but joining and rosters/signaling require Join calls and channel visibility. Starting direct calls or inviting friends also requires Start direct calls. Speaking, camera, and screen/audio sharing have separate permissions. Listen-only joining does not request a microphone. Revoking Join calls ends the call; revoking publishing permissions stops the official client's active capture. If Speak is newly granted during a listen-only call, use Unmute microphone to activate capture.
 
-Back up the database, restart the updated backend for migration 3, then update/rebuild desktop clients. Existing channel names and histories are preserved. The new schema requires restoring the backup when rolling back to older server code.
+**Peer-to-peer media limitation:** the server validates call admission, speaking/share announcements, and declared camera/share signaling. The official client enforces microphone/camera/screen capture restrictions and responds to revocation. The server does not inspect the actual encrypted peer-to-peer RTP tracks; these publishing controls are not strict media isolation against modified clients. That would require an enforcing media-server architecture. This work did not add such a server or validate real multi-client media transmission.
+
+Missing channel overrides default to Full access/Visible, including newly created roles. General permissions still determine what actions are allowed. Role/channel changes apply to active API requests and socket events; affected clients refresh without signing in again.
+
+On upgrade, database migration 9 expands the old Send/Voice/Manage flags into their equivalent detailed feature permissions while preserving channel overrides and role assignments. General role administration is now owner-only. Unknown or legacy permission names are rejected by the new API. Update the server and all desktop clients together; older clients do not understand the new permission names. Back up the SQLite database before upgrading.
 
 ## Position a profile picture
 
@@ -326,7 +335,7 @@ See [IMPLEMENTATION.md](IMPLEMENTATION.md) for architecture, data model, event/A
 
 ## Channel order, mentions, and notification preferences
 
-In **Settings → Channels & access**, text channels appear before voice channels. Select a channel to expand its name/access settings; use its up/down buttons to reorder channels within that type. Reordering requires **Manage server, channels, roles & messages**, is saved on the server, and appears for other clients. Clicking the name of a voice channel you have already joined shows/hides call details without leaving the call.
+In **Settings → Channels**, text channels appear before voice channels. Select a channel to expand its name/description settings; use its up/down buttons to reorder channels within that type. Reordering requires **Reorder channels**, is saved on the server, and appears for other clients. Clicking the name of a voice channel you have already joined shows/hides call details without leaving the call.
 
 Type `@` followed by a permanent username in chat or a thread to see suggestions. Use Up/Down and Enter to complete a mention, click a suggestion, or press Escape to dismiss. Enter completion inserts the username; press Enter again to send. Nicknames appear in suggestions, but tags use usernames.
 

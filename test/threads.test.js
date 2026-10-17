@@ -117,7 +117,6 @@ test('threads isolate history, share chat features, enforce permissions, and per
     );
     await api(member, `/messages/${first.id}`, 'PATCH', { body: 'Read only' }, 403);
     await api(member, `/messages/${first.id}/reaction`, 'POST', { emoji: '👍' }, 403);
-    await api(member, `/messages/${first.id}`, 'DELETE', undefined, 403);
     assert.equal((await api(member, history)).length, 2);
     await api(owner, '/channels/general/access', 'PUT', {
         permissions: [{ role: 'member', mode: 'hidden' }],

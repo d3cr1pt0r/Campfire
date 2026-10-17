@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ArrowUp, ArrowDown, ChevronDown, Hash, Volume2 } from 'lucide-react';
-import type { State, Channel, ChannelAccess } from './types';
+import type { State, Channel } from './types';
 import type { ApiClient } from './api';
 
 type Props = {
@@ -8,6 +8,7 @@ type Props = {
     api: ApiClient;
     refresh: () => Promise<void>;
     busy: boolean;
+    permission: (name: string) => boolean;
     act: (fn: () => Promise<unknown>) => Promise<void>;
 };
 export function ChannelSettings(props: Props) {
@@ -20,8 +21,9 @@ export function ChannelSettings(props: Props) {
     return (
         <div className="channel-settings-list">
             <p className="muted">
-                Select a channel to edit its name, description, and role access. Use the arrows to
-                reorder channels within each type. Permanent channels can be renamed and reordered.
+                Select a channel to edit its name and description. Channel access is configured in
+                Roles & permissions. Use the arrows to reorder channels within each type. Permanent
+                channels can be renamed and reordered.
             </p>
             {(['text', 'voice'] as const).map((kind) => {
                 const channels = props.state.channels.filter((channel) => channel.kind === kind);
@@ -51,7 +53,11 @@ export function ChannelSettings(props: Props) {
                                     <button
                                         title="Move up"
                                         aria-label={`Move ${channel.name} up`}
-                                        disabled={props.busy || index === 0}
+                                        disabled={
+                                            props.busy ||
+                                            !props.permission('channels.reorder') ||
+                                            index === 0
+                                        }
                                         onClick={() => move(channel, 'up')}
                                     >
                                         <ArrowUp size={16} />
@@ -59,7 +65,11 @@ export function ChannelSettings(props: Props) {
                                     <button
                                         title="Move down"
                                         aria-label={`Move ${channel.name} down`}
-                                        disabled={props.busy || index === channels.length - 1}
+                                        disabled={
+                                            props.busy ||
+                                            !props.permission('channels.reorder') ||
+                                            index === channels.length - 1
+                                        }
                                         onClick={() => move(channel, 'down')}
                                     >
                                         <ArrowDown size={16} />
@@ -79,22 +89,15 @@ export function ChannelSettings(props: Props) {
     );
 }
 
-function ChannelEditor({ state, channel, api, refresh, busy, act }: Props & { channel: Channel }) {
-    const serialized = JSON.stringify(
-        state.channelPermissions.filter((entry) => entry.channel === channel.id),
-    );
-    const [modes, setModes] = useState<Record<string, ChannelAccess['mode']>>({});
+function ChannelEditor({
+    channel,
+    api,
+    refresh,
+    busy,
+    act,
+    permission,
+}: Props & { channel: Channel }) {
     const [confirming, setConfirming] = useState(false);
-    useEffect(() => {
-        setModes(
-            Object.fromEntries(
-                (JSON.parse(serialized) as ChannelAccess[]).map((entry) => [
-                    entry.role,
-                    entry.mode,
-                ]),
-            ),
-        );
-    }, [serialized]);
     return (
         <section className="channel-settings-card" aria-label={`${channel.name} channel settings`}>
             <h3>
@@ -125,6 +128,7 @@ function ChannelEditor({ state, channel, api, refresh, busy, act }: Props & { ch
                         defaultValue={channel.name}
                         required
                         maxLength={32}
+                        disabled={!permission('channels.edit') || busy}
                     />
                 </label>
                 {channel.kind === 'text' && (
@@ -135,6 +139,7 @@ function ChannelEditor({ state, channel, api, refresh, busy, act }: Props & { ch
                             key={`${channel.id}:${channel.description}`}
                             defaultValue={channel.description}
                             maxLength={200}
+                            disabled={!permission('channels.edit') || busy}
                             placeholder="What is this channel for?"
                         />
                         <span className="field-help">
@@ -143,55 +148,12 @@ function ChannelEditor({ state, channel, api, refresh, busy, act }: Props & { ch
                         </span>
                     </label>
                 )}
-                <button className="secondary" disabled={busy}>
+                <button className="secondary" disabled={busy || !permission('channels.edit')}>
                     Save channel
                 </button>
             </form>
-            <form
-                onSubmit={(event) => {
-                    event.preventDefault();
-                    void act(async () => {
-                        await api(`/channels/${channel.id}/access`, 'PUT', {
-                            permissions: state.roles
-                                .filter((role) => role.id !== 'owner')
-                                .map((role) => ({ role: role.id, mode: modes[role.id] || 'full' })),
-                        });
-                        await refresh();
-                    });
-                }}
-            >
-                <p>Owner: full access</p>
-                {state.roles
-                    .filter((role) => role.id !== 'owner')
-                    .map((role) => (
-                        <label className="channel-access-row" key={role.id}>
-                            <span>{role.name}</span>
-                            <select
-                                aria-label={`${role.name} access to ${channel.name}`}
-                                value={modes[role.id] || 'full'}
-                                disabled={busy}
-                                onChange={(event) =>
-                                    setModes({
-                                        ...modes,
-                                        [role.id]: event.target.value as ChannelAccess['mode'],
-                                    })
-                                }
-                            >
-                                <option value="full">
-                                    {channel.kind === 'text' ? 'Full access' : 'Visible'}
-                                </option>
-                                {channel.kind === 'text' && (
-                                    <option value="read-only">Read only</option>
-                                )}
-                                <option value="hidden">Hidden</option>
-                            </select>
-                        </label>
-                    ))}
-                <button className="secondary" disabled={busy}>
-                    Save channel access
-                </button>
-            </form>
             {!channel.protected &&
+                permission('channels.delete') &&
                 (confirming ? (
                     <div className="channel-delete-confirm">
                         <p>

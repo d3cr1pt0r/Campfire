@@ -1,3 +1,4 @@
+import { hasRolePermission } from '../shared/permissions.js';
 import { randomBytes, scrypt, timingSafeEqual, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 const derive = promisify(scrypt);
@@ -31,7 +32,7 @@ export async function verifyPassword(password, stored) {
     return expected.length === actual.length && timingSafeEqual(actual, expected) && !!stored;
 }
 export function hasPermission(user, permissions, permission) {
-    return user.role === 'owner' || permissions.includes(permission);
+    return hasRolePermission(user.role, permissions, permission);
 }
 export function canReadRoom(userId, room, channelExists, userExists) {
     if (channelExists(room)) return true;

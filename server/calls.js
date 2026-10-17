@@ -85,7 +85,7 @@ export function registerCalls({
             'You can only call accepted friends',
             403,
         );
-        requirePermission(target, 'voice');
+        requirePermission(target, 'calls.join');
         check(
             [...io.sockets.sockets.values()].some((s) => s.data.user.id === id),
             'That friend is offline',
@@ -101,7 +101,8 @@ export function registerCalls({
     app.post(
         '/api/calls',
         route((req, res) => {
-            requirePermission(req.user, 'voice');
+            requirePermission(req.user, 'calls.join');
+            requirePermission(req.user, 'calls.start');
             check(typeof req.body.user === 'string', 'Choose a friend');
             check(
                 !callState().some((c) => c.user === req.user.id),
@@ -137,7 +138,8 @@ export function registerCalls({
     app.post(
         '/api/calls/:id/invite',
         route((req, res) => {
-            requirePermission(req.user, 'voice');
+            requirePermission(req.user, 'calls.join');
+            requirePermission(req.user, 'calls.start');
             const room = privateCalls.get(req.params.id);
             check(
                 room && callState().some((c) => c.channel === room.id && c.user === req.user.id),
@@ -169,10 +171,11 @@ export function registerCalls({
     const enforceCalls = () => {
         for (const s of io.sockets.sockets.values()) {
             const u = userFor(s.data.token);
+            if (u && !can(u, 'calls.share')) s.data.shareId = null;
             if (
                 s.data.call &&
                 (!u ||
-                    !can(u, 'voice') ||
+                    !can(u, 'calls.join') ||
                     (!s.data.call.startsWith('private:') &&
                         !canJoin(u, get('SELECT * FROM channels WHERE id=?', s.data.call))))
             ) {
@@ -209,6 +212,13 @@ export function registerCalls({
                     ))
             )
                 return;
+            if (
+                thread &&
+                (!can(socket.data.user, 'threads.reply') ||
+                    (!get('SELECT id FROM messages WHERE thread=? LIMIT 1', thread) &&
+                        !can(socket.data.user, 'threads.create')))
+            )
+                return;
             if (typeof room === 'string' && canWrite(socket.data.user, room))
                 emitRoom(room, 'typing', {
                     room,
@@ -219,7 +229,7 @@ export function registerCalls({
         socket.on('call:join', (channel, ack = () => {}) => {
             if (typeof ack !== 'function') return;
             try {
-                requirePermission(socket.data.user, 'voice');
+                requirePermission(socket.data.user, 'calls.join');
                 check(
                     typeof channel === 'string' &&
                         (canJoin(
@@ -261,7 +271,7 @@ export function registerCalls({
             const user = peer && userFor(peer.data.token);
             return (
                 !!user &&
-                can(user, 'voice') &&
+                can(user, 'calls.join') &&
                 !!peer.data.call &&
                 (peer.data.call.startsWith('private:')
                     ? privateCalls.get(peer.data.call)?.allowed.has(user.id)
@@ -275,12 +285,19 @@ export function registerCalls({
                 (typeof shareId !== 'string' || !shareId.length || shareId.length > 80)
             )
                 return;
+            if (shareId !== null && !can(socket.data.user, 'calls.share')) return;
             if ((socket.data.shareId || null) === shareId) return;
             socket.data.shareId = shareId;
             broadcastCalls();
         });
         socket.on('call:speaking', (active) => {
-            if (typeof active !== 'boolean' || !socket.data.call || !allowedInCall(socket)) return;
+            if (
+                typeof active !== 'boolean' ||
+                !socket.data.call ||
+                !allowedInCall(socket) ||
+                !can(socket.data.user, 'calls.speak')
+            )
+                return;
             const now = Date.now();
             if (now - (socket.data.lastActivity || 0) < 50) return;
             socket.data.lastActivity = now;
@@ -302,6 +319,8 @@ export function registerCalls({
             if (!payload || typeof payload !== 'object') return;
             const { to, data } = payload;
             const target = io.sockets.sockets.get(to);
+            if (data?.media?.camera && !can(socket.data.user, 'calls.camera')) return;
+            if (data?.media?.sharing && !can(socket.data.user, 'calls.share')) return;
             if (
                 data &&
                 typeof data === 'object' &&

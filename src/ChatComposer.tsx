@@ -11,6 +11,7 @@ type Props = {
     setDraft: React.Dispatch<React.SetStateAction<string>>;
     busy: boolean;
     canPost: boolean;
+    canAttach: boolean;
     connected: boolean;
     fileInput: React.RefObject<HTMLInputElement | null>;
     lastTyping: React.RefObject<number>;
@@ -32,6 +33,7 @@ export function ChatComposer({
     setDraft,
     busy,
     canPost,
+    canAttach,
     connected,
     fileInput,
     lastTyping,
@@ -125,14 +127,19 @@ export function ChatComposer({
             <form className="composer" onSubmit={send}>
                 <button
                     type="button"
-                    title="Attach files (up to 10 files, 5 MB total)"
-                    disabled={busy || !canPost}
+                    title={
+                        canAttach
+                            ? 'Attach files (up to 10 files, 5 MB total)'
+                            : 'You do not have permission to attach files'
+                    }
+                    disabled={busy || !canAttach}
                     onClick={() => fileInput.current?.click()}
                 >
                     <Plus size={22} />
                 </button>
                 <input
                     type="file"
+                    disabled={!canAttach}
                     multiple
                     hidden
                     ref={fileInput}

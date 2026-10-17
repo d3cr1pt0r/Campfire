@@ -1,3 +1,4 @@
+import { permissionIds } from '../shared/permissions.js';
 export function check(ok, message, status = 400) {
     if (!ok) throw Object.assign(new Error(message), { status });
 }
@@ -18,7 +19,7 @@ export function validateRole({ name, color, permissions }) {
             typeof color === 'string' &&
             /^#[0-9a-f]{6}$/i.test(color) &&
             Array.isArray(permissions) &&
-            permissions.every((p) => ['send', 'voice', 'manage'].includes(p)),
+            permissions.every((p) => permissionIds.includes(p)),
         'Invalid role',
     );
     return { name: name.trim(), color, permissions: [...new Set(permissions)] };

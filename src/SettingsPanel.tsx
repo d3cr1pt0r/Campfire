@@ -1,3 +1,4 @@
+import { permissionGroups } from '../shared/permissions.js';
 import { RegistrationSettings } from './RegistrationSettings';
 import { notificationKey } from './notifications';
 import { canonicalRoom } from '../shared/rooms.js';
@@ -68,7 +69,11 @@ export function SettingsPanel({
         ['notifications', 'Notifications'],
         ['server', 'Server settings'],
         ['roles', 'Roles & permissions'],
-        ...(permission('manage') ? [['channels', 'Channels & access']] : []),
+        ...(['channels.edit', 'channels.create', 'channels.delete', 'channels.reorder'].some(
+            permission,
+        )
+            ? [['channels', 'Channels']]
+            : []),
         ['emojis', 'Custom emojis'],
     ];
     return (
@@ -447,7 +452,10 @@ export function SettingsPanel({
                                     required
                                 />
                             </label>
-                            <button className="primary" disabled={busy || !permission('send')}>
+                            <button
+                                className="primary"
+                                disabled={busy || !permission('emojis.upload')}
+                            >
                                 Upload emoji
                             </button>
                         </form>
@@ -456,7 +464,8 @@ export function SettingsPanel({
                                 <div key={e.id}>
                                     <Emoji value={`:${e.name}:`} custom={state.emojis} />
                                     <span>:{e.name}:</span>
-                                    {(e.author === state.me.id || permission('manage')) &&
+                                    {(e.author === state.me.id ||
+                                        permission('emojis.deleteOthers')) &&
                                         (deleteEmoji === e.id ? (
                                             <div className="emoji-delete-actions">
                                                 <span>Delete :{e.name}:?</span>
@@ -632,10 +641,13 @@ export function SettingsPanel({
                                     defaultValue={state.name}
                                     required
                                     maxLength={64}
-                                    disabled={!permission('manage')}
+                                    disabled={!permission('server.edit')}
                                 />
                             </label>
-                            <button className="primary" disabled={!permission('manage') || busy}>
+                            <button
+                                className="primary"
+                                disabled={!permission('server.edit') || busy}
+                            >
                                 Save changes
                             </button>
                         </form>
@@ -650,69 +662,73 @@ export function SettingsPanel({
                         </p>
                     </>
                 )}
-                {settingsTab === 'channels' && permission('manage') && (
-                    <ChannelSettings
-                        state={state}
-                        api={api}
-                        refresh={refresh}
-                        busy={busy}
-                        act={act}
-                    />
-                )}
+                {settingsTab === 'channels' &&
+                    [
+                        'channels.edit',
+                        'channels.create',
+                        'channels.delete',
+                        'channels.reorder',
+                    ].some(permission) && (
+                        <ChannelSettings
+                            permission={permission}
+                            state={state}
+                            api={api}
+                            refresh={refresh}
+                            busy={busy}
+                            act={act}
+                        />
+                    )}
                 {settingsTab === 'roles' && (
                     <>
                         <p className="muted">
-                            Roles define name color, chat, voice, and server management access.
-                            Server owners always retain access. Owner and Member are permanent
-                            roles: they can be edited but cannot be deleted. Deleting a custom role
-                            moves its users to the default Member role, using that role’s current
-                            name and permissions.
+                            Roles define general permissions and channel access. Only the owner
+                            manages roles and assignments. Roles with Change role access to channels
+                            can edit access for visible channels. Server owners always retain
+                            access. Owner and Member are permanent roles: they can be edited but
+                            cannot be deleted. Deleting a custom role moves its users to the default
+                            Member role, using that role’s current name and permissions.
                         </p>
                         {state.roles.map((r) => (
                             <div className="role-row" key={r.id}>
                                 <i style={{ background: r.color }} />
                                 <strong>{r.name}</strong>
                                 <small>
-                                    {r.permissions
-                                        .map(
-                                            (permission) =>
-                                                ({
-                                                    send: 'Messages',
-                                                    voice: 'Voice & video',
-                                                    manage: 'Server management',
-                                                })[permission as 'send' | 'voice' | 'manage'] ||
-                                                permission,
-                                        )
-                                        .join(' · ') || 'No permissions'}
+                                    {r.id === 'owner'
+                                        ? 'All permissions · All channels'
+                                        : permissionGroups
+                                              .map((group) => {
+                                                  const count = group.permissions.filter(([id]) =>
+                                                      r.permissions.includes(id),
+                                                  ).length;
+                                                  return count ? `${group.name}: ${count}` : '';
+                                              })
+                                              .filter(Boolean)
+                                              .join(' · ') || 'No permissions'}
                                 </small>
                                 <button
                                     title={`Edit ${r.name} role`}
                                     aria-label={`Edit ${r.name} role`}
                                     disabled={
                                         busy ||
-                                        !permission('manage') ||
                                         (state.me.role !== 'owner' &&
-                                            (r.id === 'owner' || r.permissions.includes('manage')))
+                                            (r.id === 'owner' || !permission('channels.access')))
                                     }
                                     onClick={() => setModal(`role:${r.id}`)}
                                 >
                                     <Pencil size={15} />
                                 </button>
-                                {r.id !== 'owner' && r.id !== 'member' && permission('manage') && (
-                                    <button
-                                        title={`Delete ${r.name} role`}
-                                        aria-label={`Delete ${r.name} role`}
-                                        disabled={
-                                            busy ||
-                                            (state.me.role !== 'owner' &&
-                                                (r.permissions.includes('manage') ||
-                                                    state.users.some((u) => u.role === r.id)))
-                                        }
-                                        onClick={() => setDeleteRole(r.id)}
-                                    >
-                                        <Trash2 size={15} />
-                                    </button>
-                                )}
+                                {r.id !== 'owner' &&
+                                    r.id !== 'member' &&
+                                    state.me.role === 'owner' && (
+                                        <button
+                                            title={`Delete ${r.name} role`}
+                                            aria-label={`Delete ${r.name} role`}
+                                            disabled={busy}
+                                            onClick={() => setDeleteRole(r.id)}
+                                        >
+                                            <Trash2 size={15} />
+                                        </button>
+                                    )}
                                 {deleteRole === r.id && (
                                     <div className="role-delete-confirm" role="alert">
                                         <p>
@@ -742,7 +758,7 @@ export function SettingsPanel({
                                 )}
                             </div>
                         ))}
-                        {permission('manage') && (
+                        {state.me.role === 'owner' && (
                             <button className="secondary" onClick={() => setModal('role:new')}>
                                 <Plus size={16} /> Create role
                             </button>

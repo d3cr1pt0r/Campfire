@@ -1,3 +1,4 @@
+import { migratePermissions } from '../shared/permissions.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -70,7 +71,7 @@ test('only the owner controls registration and invitations, including managers',
     const member = (await f.signup('Member', { inviteCode: invitation.code })).data;
     f.service.db
         .prepare('INSERT INTO roles VALUES(?,?,?,?)')
-        .run('manager', 'Manager', '#ffffff', JSON.stringify(['manage']));
+        .run('manager', 'Manager', '#ffffff', JSON.stringify(migratePermissions(['manage'])));
     for (const role of ['member', 'manager']) {
         f.service.db.prepare('UPDATE users SET role=? WHERE id=?').run(role, member.user.id);
         for (const [endpoint, method, body] of [

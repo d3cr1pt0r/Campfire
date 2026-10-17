@@ -82,11 +82,16 @@ export function CallPanel({
                 ))}
             </div>
             <div className="call-controls">
-                {call.channel?.startsWith('private:') && (
-                    <button onClick={() => setModal('invite-call')}>Invite friend</button>
-                )}
+                {call.channel?.startsWith('private:') &&
+                    (state.me.role === 'owner' ||
+                        state.roles
+                            .find((r) => r.id === state.me.role)
+                            ?.permissions.includes('calls.start')) && (
+                        <button onClick={() => setModal('invite-call')}>Invite friend</button>
+                    )}
                 <button
                     className={call.muted ? 'danger-bg' : ''}
+                    disabled={!call.canSpeak}
                     title={call.muted ? 'Unmute microphone' : 'Mute microphone'}
                     aria-label={call.muted ? 'Unmute microphone' : 'Mute microphone'}
                     aria-pressed={!call.muted}
@@ -96,6 +101,7 @@ export function CallPanel({
                 </button>
                 <button
                     className={call.camera ? 'enabled' : ''}
+                    disabled={!call.canCamera}
                     title={call.camera ? 'Turn off camera' : 'Turn on camera'}
                     aria-label={call.camera ? 'Turn off camera' : 'Turn on camera'}
                     aria-pressed={call.camera}
@@ -105,6 +111,7 @@ export function CallPanel({
                 </button>
                 <button
                     className={call.sharing ? 'enabled' : ''}
+                    disabled={!call.canShare}
                     title={call.sharing ? 'Stop screen sharing' : 'Share screen or window'}
                     aria-label={call.sharing ? 'Stop screen sharing' : 'Share screen or window'}
                     aria-pressed={call.sharing}
@@ -127,13 +134,15 @@ export function CallPanel({
                 <div className="call-details">
                     <p>
                         Microphone:{' '}
-                        {call.muted
-                            ? 'muted'
-                            : call.deafened
-                              ? 'deafened'
-                              : prefs.pushToTalk
-                                ? 'push-to-talk enabled'
-                                : 'enabled'}
+                        {!call.canSpeak
+                            ? 'listen only (speaking not permitted)'
+                            : call.muted
+                              ? 'muted'
+                              : call.deafened
+                                ? 'deafened'
+                                : prefs.pushToTalk
+                                  ? 'push-to-talk enabled'
+                                  : 'enabled'}
                         . Speak while checking whether audio levels and packet counts change.
                     </p>
                     {call.details.length ? (

@@ -14,15 +14,14 @@ export function registerMessages({
     run,
     hasRoom,
     requirePermission,
-    can,
-    canWrite,
+    isWritable,
     messageView,
     emitRoom,
     maxStoredUploadBytes,
 }) {
     const thumbnails = createThumbnails({ get, all, run });
     const requireWrite = (user, room) =>
-        check(canWrite(user, room), 'This conversation is read-only', 403);
+        check(isWritable(user, room), 'This conversation is read-only', 403);
     const threadParent = (user, room, thread) => {
         check(
             typeof thread === 'string' && thread.length > 0 && thread.length <= 100,
@@ -108,13 +107,18 @@ export function registerMessages({
     app.post(
         '/api/messages',
         route((req, res) => {
-            requirePermission(req.user, 'send');
+            requirePermission(req.user, 'messages.send');
             const { body = '', attachment, attachments } = req.body;
             const room = canonicalRoom(req.body.room);
             check(typeof room === 'string' && hasRoom(req.user, room), 'Unknown conversation', 403);
             requireWrite(req.user, room);
             const thread = req.body.thread ?? null;
-            if (thread !== null) threadParent(req.user, room, thread);
+            if (thread !== null) {
+                const parent = threadParent(req.user, room, thread);
+                requirePermission(req.user, 'threads.reply');
+                if (!get('SELECT id FROM messages WHERE thread=? LIMIT 1', parent.id))
+                    requirePermission(req.user, 'threads.create');
+            }
             check(
                 typeof body === 'string' && body.length <= 4000,
                 'Messages can contain up to 4,000 characters',
@@ -125,6 +129,7 @@ export function registerMessages({
                 Array.isArray(files) && files.length <= maxUploadFiles,
                 'Attach up to 10 files per message',
             );
+            if (files.length) requirePermission(req.user, 'files.attach');
             check(body.trim() || files.length, 'Write a message or attach a file');
             let total = 0;
             const validated = files.map((file) => {
@@ -187,8 +192,10 @@ export function registerMessages({
             const m = get('SELECT * FROM messages WHERE id=?', req.params.id);
             check(m && hasRoom(req.user, m.room), 'Message not found', 404);
             if (!m.room.startsWith('dm:')) requireWrite(req.user, m.room);
-            if ('pinned' in req.body) requirePermission(req.user, 'manage');
-            if ('body' in req.body) requirePermission(req.user, 'send');
+            if ('pinned' in req.body) requirePermission(req.user, 'messages.pin');
+            if ('body' in req.body) requirePermission(req.user, 'messages.editOwn');
+            if ('pinned' in req.body)
+                check(typeof req.body.pinned === 'boolean', 'Invalid pin value');
             if ('body' in req.body) {
                 check(m.author === req.user.id, 'Only the author can edit this message', 403);
                 check(
@@ -220,8 +227,16 @@ export function registerMessages({
         route((req, res) => {
             const m = get('SELECT * FROM messages WHERE id=?', req.params.id);
             check(m && hasRoom(req.user, m.room), 'Message not found', 404);
-            if (!m.room.startsWith('dm:')) requireWrite(req.user, m.room);
-            check(m.author === req.user.id || can(req.user, 'manage'), 'Permission denied', 403);
+            if (m.author === req.user.id) requirePermission(req.user, 'messages.deleteOwn');
+            else {
+                check(
+                    !m.room.startsWith('dm:'),
+                    'Only the author can delete a direct message',
+                    403,
+                );
+                requireWrite(req.user, m.room);
+                requirePermission(req.user, 'messages.deleteOthers');
+            }
             run('DELETE FROM messages WHERE id=?', m.id);
             updateParent(m.thread);
             emitRoom(m.room, 'message:delete', { id: m.id, room: m.room });
@@ -235,7 +250,7 @@ export function registerMessages({
             check(m && hasRoom(req.user, m.room), 'Message not found', 404);
             if (!m.room.startsWith('dm:')) requireWrite(req.user, m.room);
             const emoji = req.body.emoji;
-            requirePermission(req.user, 'send');
+            requirePermission(req.user, 'reactions.add');
             check(
                 typeof emoji === 'string' &&
                     (emojis.includes(emoji) ||

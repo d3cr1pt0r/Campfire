@@ -113,11 +113,12 @@ export function createApp({
                     permissions: JSON.parse(role.permissions),
                 })),
                 channels,
-                channelPermissions: sessions.can(req.user, 'manage')
-                    ? all('SELECT * FROM channel_access').filter((entry) =>
-                          visible.has(entry.channel),
-                      )
-                    : [],
+                channelPermissions:
+                    req.user.role === 'owner' || sessions.can(req.user, 'channels.access')
+                        ? all('SELECT * FROM channel_access').filter((entry) =>
+                              visible.has(entry.channel),
+                          )
+                        : [],
                 friends: all(
                     'SELECT * FROM friends WHERE sender=? OR recipient=?',
                     req.user.id,

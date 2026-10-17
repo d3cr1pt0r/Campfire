@@ -1,3 +1,4 @@
+import { migratePermissions } from '../shared/permissions.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -100,13 +101,13 @@ test('protected channels can be renamed; additional channel deletion cascades an
     await api(member, `/attachments/${msg.attachments[0].id}`, 'GET', undefined, 404);
 });
 
-test('read-only channels enforce every message mutation even for a manager; hidden denies history and files', async (t) => {
+test('read-only channels block posting, editing and moderation; hidden denies history and files', async (t) => {
     const f = await fixture(t);
     const { owner, member, api, access } = f;
     const managerRole = await api(owner, '/roles', 'POST', {
         name: 'Managers',
         color: '#abcdef',
-        permissions: ['send', 'voice', 'manage'],
+        permissions: migratePermissions(['send', 'voice', 'manage']),
     });
     await api(owner, `/users/${member.user.id}/role`, 'PATCH', { role: managerRole.id });
     const msg = await api(member, '/messages', 'POST', {
@@ -126,7 +127,6 @@ test('read-only channels enforce every message mutation even for a manager; hidd
         [`/messages/${msg.id}/reaction`, 'POST', { emoji: '👍' }],
         [`/messages/${msg.id}`, 'PATCH', { body: 'blocked' }],
         [`/messages/${msg.id}`, 'PATCH', { pinned: true }],
-        [`/messages/${msg.id}`, 'DELETE', undefined],
     ])
         await api(member, endpoint, method, body, 403);
     await api(owner, `/messages/${msg.id}`, 'PATCH', { pinned: true });
@@ -154,6 +154,8 @@ test('read-only channels enforce every message mutation even for a manager; hidd
         'read-only',
     );
     await api(member, `/messages/${msg.id}`, 'PATCH', { body: 'Still denied after restart' }, 403);
+    // Deleting your own content is independent of posting permission and read-only mode.
+    await api(member, `/messages/${msg.id}`, 'DELETE');
 });
 
 test('channel permissions validate roles/modes atomically and do not override global permissions', async (t) => {
@@ -210,9 +212,9 @@ test('channel permissions validate roles/modes atomically and do not override gl
     const state = await api(member, '/state');
     assert.equal(
         state.channels.some((c) => c.kind === 'voice'),
-        false,
+        true,
     );
-    assert.equal(state.channels.find((c) => c.id === 'general').access, 'read-only');
+    assert.equal(state.channels.find((c) => c.id === 'general').access, 'full');
     await api(member, '/messages', 'POST', { room: 'general', body: 'denied' }, 403);
 });
 
@@ -278,7 +280,7 @@ test('channel ordering is type-specific, manager-only, persistent and preserves 
     const role = await api(owner, '/roles', 'POST', {
         name: 'Manager',
         color: '#123456',
-        permissions: ['manage', 'send', 'voice'],
+        permissions: migratePermissions(['manage', 'send', 'voice']),
     });
     await api(owner, `/users/${member.user.id}/role`, 'PATCH', { role: role.id });
     await api(owner, `/channels/general/access`, 'PUT', {
@@ -315,7 +317,7 @@ test('channel descriptions are owner/manager editable, persisted, and independen
     const moderator = await api(owner, '/roles', 'POST', {
         name: 'Moderator',
         color: '#abcdef',
-        permissions: ['manage', 'send', 'voice'],
+        permissions: migratePermissions(['manage', 'send', 'voice']),
     });
     await api(owner, `/users/${member.user.id}/role`, 'PATCH', { role: moderator.id });
     await api(member, '/channels/general', 'PATCH', { description: 'Moderator update' });

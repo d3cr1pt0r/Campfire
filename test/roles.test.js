@@ -1,3 +1,4 @@
+import { migratePermissions } from '../shared/permissions.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -72,7 +73,7 @@ test('custom role deletion moves users to Member, cascades access, and survives 
     const role = await f.api(f.owner, '/roles', 'POST', {
         name: 'Custom',
         color: '#abcdef',
-        permissions: ['send', 'voice'],
+        permissions: migratePermissions(['send', 'voice']),
     });
     for (const account of [f.member, f.manager])
         await f.api(f.owner, `/users/${account.user.id}/role`, 'PATCH', { role: role.id });
@@ -107,7 +108,7 @@ test('deletion enforces management and assignment authority without partial chan
     const management = await f.api(f.owner, '/roles', 'POST', {
         name: 'Manager',
         color: '#abcdef',
-        permissions: ['manage'],
+        permissions: migratePermissions(['manage']),
     });
     const custom = await f.api(f.owner, '/roles', 'POST', {
         name: 'Custom',
@@ -133,7 +134,8 @@ test('deletion enforces management and assignment authority without partial chan
     await f.api(f.manager, `/roles/${custom.id}`, 'DELETE', undefined, 403);
     assert.equal((await f.api(f.member, '/state')).me.role, custom.id);
     await f.api(f.owner, `/users/${f.member.user.id}/role`, 'PATCH', { role: 'member' });
-    await f.api(f.manager, `/roles/${custom.id}`, 'DELETE');
+    await f.api(f.manager, `/roles/${custom.id}`, 'DELETE', undefined, 403);
+    await f.api(f.owner, `/roles/${custom.id}`, 'DELETE');
     await f.api(f.owner, `/roles/${management.id}`, 'DELETE');
     await f.api(
         f.manager,

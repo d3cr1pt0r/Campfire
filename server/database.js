@@ -1,3 +1,4 @@
+import { migratePermissions, permissionIds, memberPermissions } from '../shared/permissions.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -91,6 +92,18 @@ export function migrate(db) {
             db.exec(`ALTER TABLE channels ADD COLUMN description TEXT NOT NULL DEFAULT '';
                 UPDATE channels SET description='A place for everyday conversations.' WHERE kind='text';`);
         },
+        () => {
+            for (const role of db.prepare('SELECT id,permissions FROM roles').all()) {
+                db.prepare('UPDATE roles SET permissions=? WHERE id=?').run(
+                    JSON.stringify(
+                        role.id === 'owner'
+                            ? permissionIds
+                            : migratePermissions(JSON.parse(role.permissions)),
+                    ),
+                    role.id,
+                );
+            }
+        },
     ];
     migrations.forEach((apply, index) => {
         const version = index + 1;
@@ -128,14 +141,14 @@ export function openDatabase(dataDir, name) {
             'owner',
             'Owner',
             '#f3be57',
-            JSON.stringify(['manage', 'send', 'voice']),
+            JSON.stringify(permissionIds),
         );
         run(
             'INSERT OR IGNORE INTO roles VALUES(?,?,?,?)',
             'member',
             'Member',
             '#a5a8b5',
-            JSON.stringify(['send', 'voice']),
+            JSON.stringify(memberPermissions),
         );
         run('INSERT OR IGNORE INTO settings VALUES(?,?)', 'name', name);
         return { db, run, get, all };

@@ -339,7 +339,7 @@ export function ChatMessages({
                                                                     r.emoji === emoji &&
                                                                     r.user === state.me.id,
                                                             )}
-                                                            disabled={!permission('send')}
+                                                            disabled={!permission('reactions.add')}
                                                             onClick={() =>
                                                                 void act(() =>
                                                                     api(
@@ -373,7 +373,12 @@ export function ChatMessages({
                                                 <button
                                                     title="Reply in thread"
                                                     aria-label="Reply in thread"
-                                                    disabled={!permission('send')}
+                                                    disabled={
+                                                        !permission('threads.reply') ||
+                                                        !permission('messages.send') ||
+                                                        (!m.replyCount &&
+                                                            !permission('threads.create'))
+                                                    }
                                                     onClick={() => onReply(m)}
                                                 >
                                                     <Reply size={16} />
@@ -381,23 +386,24 @@ export function ChatMessages({
                                             )}
                                             <button
                                                 title="React"
-                                                disabled={!permission('send')}
+                                                disabled={!permission('reactions.add')}
                                                 onClick={() => setModal(`reaction:${m.id}`)}
                                             >
                                                 <Smile size={16} />
                                             </button>
-                                            {m.author === state.me.id && permission('send') && (
-                                                <button
-                                                    title="Edit"
-                                                    onClick={() => {
-                                                        setEdit(m);
-                                                        setModal('edit');
-                                                    }}
-                                                >
-                                                    <Pencil size={16} />
-                                                </button>
-                                            )}
-                                            {permission('manage') && (
+                                            {m.author === state.me.id &&
+                                                permission('messages.editOwn') && (
+                                                    <button
+                                                        title="Edit"
+                                                        onClick={() => {
+                                                            setEdit(m);
+                                                            setModal('edit');
+                                                        }}
+                                                    >
+                                                        <Pencil size={16} />
+                                                    </button>
+                                                )}
+                                            {permission('messages.pin') && (
                                                 <button
                                                     title={m.pinned ? 'Unpin' : 'Pin'}
                                                     onClick={() =>
@@ -411,16 +417,16 @@ export function ChatMessages({
                                                     <Pin size={16} />
                                                 </button>
                                             )}
-                                            {permission('send') &&
-                                                (m.author === state.me.id ||
-                                                    permission('manage')) && (
-                                                    <button
-                                                        title="Delete"
-                                                        onClick={() => setModal(`delete:${m.id}`)}
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                )}
+                                            {(m.author === state.me.id
+                                                ? permission('messages.deleteOwn')
+                                                : permission('messages.deleteOthers')) && (
+                                                <button
+                                                    title="Delete"
+                                                    onClick={() => setModal(`delete:${m.id}`)}
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            )}
                                         </div>
                                     </article>
                                 </div>

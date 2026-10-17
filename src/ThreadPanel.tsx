@@ -47,7 +47,10 @@ export function ThreadPanel(props: Props) {
     const mounted = useRef(true);
     const close = useRef(onClose);
     close.current = onClose;
-    const canPost = permission('send');
+    const canPost =
+        permission('messages.send') &&
+        permission('threads.reply') &&
+        (!!root.replyCount || permission('threads.create'));
     const conversation = useConversation(api, socket, parent.room, true, search, pins, parent.id);
 
     useEffect(() => {
@@ -119,7 +122,7 @@ export function ThreadPanel(props: Props) {
     }, [api, socket, parent.id, parent.room, state.me.id]);
 
     const addFiles = (files: File[]) => {
-        if (!mounted.current || !canPost || sending.current) return;
+        if (!mounted.current || !canPost || !permission('files.attach') || sending.current) return;
         try {
             const next = [...selectedFiles.current, ...files];
             validateFileSelection(next);
@@ -295,6 +298,7 @@ export function ThreadPanel(props: Props) {
                 </div>
             )}
             <ChatComposer
+                canAttach={canPost && permission('files.attach')}
                 users={state.users}
                 attachments={attachments}
                 setAttachments={setAttachments}

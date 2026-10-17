@@ -122,7 +122,8 @@ export function FriendsPanel({
                                     title={
                                         call.channel
                                             ? 'Leave your current call to start another'
-                                            : !permission('voice')
+                                            : !permission('calls.join') ||
+                                                !permission('calls.start')
                                               ? 'Your role cannot make calls'
                                               : !state.online.includes(id)
                                                 ? 'This friend is offline'
@@ -130,7 +131,8 @@ export function FriendsPanel({
                                     }
                                     disabled={
                                         !!call.channel ||
-                                        !permission('voice') ||
+                                        !permission('calls.join') ||
+                                        !permission('calls.start') ||
                                         !state.online.includes(id)
                                     }
                                     onClick={() => void startDirectCall(id)}

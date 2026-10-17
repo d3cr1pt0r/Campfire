@@ -75,7 +75,7 @@ export function registerProfiles({
     app.post(
         '/api/emojis',
         route((req, res) => {
-            requirePermission(req.user, 'send');
+            requirePermission(req.user, 'emojis.upload');
             const name = req.body.name;
             check(
                 typeof name === 'string' && /^[a-z0-9_]{2,32}$/.test(name),
@@ -120,7 +120,7 @@ export function registerProfiles({
             const emoji = get('SELECT author,name FROM emojis WHERE id=?', req.params.id);
             check(emoji, 'Emoji not found', 404);
             check(
-                emoji.author === req.user.id || can(req.user, 'manage'),
+                emoji.author === req.user.id || can(req.user, 'emojis.deleteOthers'),
                 'Permission denied',
                 403,
             );

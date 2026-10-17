@@ -33,7 +33,14 @@ export function useCall(
     iceServers: RTCIceServer[],
     report: (s: string) => void,
     onInputFallback: () => void,
+    permission: (name: string) => boolean,
 ) {
+    const permissionRef = useRef(permission);
+    permissionRef.current = permission;
+    const canJoin = permission('calls.join'),
+        canSpeak = permission('calls.speak'),
+        canCamera = permission('calls.camera'),
+        canShare = permission('calls.share');
     const [channel, setChannel] = useState<string | null>(null);
     const [muted, setMuted] = useState(false),
         [deafened, setDeafened] = useState(false),
@@ -74,7 +81,7 @@ export function useCall(
     const operation = useRef(0);
     const shareId = useRef<string | null>(null);
     const incompatible = useRef(new Set<string>());
-    const captureBusy = useRef({ camera: false, share: false });
+    const captureBusy = useRef({ camera: false, share: false, microphone: false });
     const audioFlags = useRef({ muted, deafened });
     audioFlags.current = { muted, deafened };
     const peers = useRef(new Map<string, Peer>()),
@@ -519,6 +526,10 @@ export function useCall(
         };
     }, [channel, showDetails]);
     const join = async (id: string, target?: { socket: string; shareId: string }) => {
+        if (!permissionRef.current('calls.join')) {
+            report('You do not have permission to join calls.');
+            return;
+        }
         if (!socket?.connected) {
             report('Connect to the server before joining a call.');
             return;
@@ -527,8 +538,10 @@ export function useCall(
         if (target) queueWatch({ ...target, channel: id });
         const attempt = operation.current;
         try {
-            const { stream, usedDefault } = await openMicrophone(prefs);
-            if (attempt !== operation.current) {
+            const { stream, usedDefault } = permissionRef.current('calls.speak')
+                ? await openMicrophone(prefs)
+                : { stream: new MediaStream(), usedDefault: false };
+            if (attempt !== operation.current || !permissionRef.current('calls.join')) {
                 stream.getTracks().forEach((t) => t.stop());
                 return;
             }
@@ -538,7 +551,9 @@ export function useCall(
                     'The saved microphone is unavailable. Using System default for this call; your saved selection is kept for next time.',
                 );
             }
+            if (!permissionRef.current('calls.speak')) stream.getTracks().forEach((t) => t.stop());
             audio.current = stream;
+            if (!permissionRef.current('calls.speak')) setMuted(true);
             callChannel.current = id;
             socket
                 .timeout(10000)
@@ -573,8 +588,53 @@ export function useCall(
             report(`Cannot open microphone: ${formatMicrophoneError(e)}`);
         }
     };
+    const setMicrophoneMuted = async (value: boolean) => {
+        if (value) {
+            setMuted(true);
+            return;
+        }
+        if (!permissionRef.current('calls.speak') || captureBusy.current.microphone) return;
+        if (
+            callChannel.current &&
+            !audio.current?.getAudioTracks().some((track) => track.readyState === 'live')
+        ) {
+            captureBusy.current.microphone = true;
+            const attempt = operation.current;
+            let captured: MediaStream | null = null;
+            try {
+                const result = await openMicrophone(prefsRef.current);
+                captured = result.stream;
+                if (
+                    attempt !== operation.current ||
+                    !permissionRef.current('calls.speak') ||
+                    !permissionRef.current('calls.join')
+                ) {
+                    captured.getTracks().forEach((track) => track.stop());
+                    return;
+                }
+                captured.getAudioTracks().forEach((track) => {
+                    track.enabled = false;
+                });
+                audio.current = captured;
+                if (result.usedDefault) onInputFallback();
+                await syncMedia();
+            } catch (error) {
+                captured?.getTracks().forEach((track) => track.stop());
+                report(`Cannot open microphone: ${formatMicrophoneError(error)}`);
+                return;
+            } finally {
+                captureBusy.current.microphone = false;
+            }
+        }
+        setMuted(false);
+    };
     const toggleCamera = async () => {
-        if (!callChannel.current || captureBusy.current.camera) return;
+        if (
+            !callChannel.current ||
+            captureBusy.current.camera ||
+            !permissionRef.current('calls.camera')
+        )
+            return;
         captureBusy.current.camera = true;
         const attempt = operation.current;
         try {
@@ -586,7 +646,7 @@ export function useCall(
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { height: { ideal: Number(prefs.quality) }, frameRate: { ideal: 30 } },
                 });
-                if (attempt !== operation.current) {
+                if (attempt !== operation.current || !permissionRef.current('calls.camera')) {
                     stream.getTracks().forEach((t) => t.stop());
                     return;
                 }
@@ -601,7 +661,12 @@ export function useCall(
         }
     };
     const toggleShare = async () => {
-        if (!callChannel.current || captureBusy.current.share) return;
+        if (
+            !callChannel.current ||
+            captureBusy.current.share ||
+            !permissionRef.current('calls.share')
+        )
+            return;
         captureBusy.current.share = true;
         const attempt = operation.current;
         let captured: MediaStream | null = null;
@@ -621,7 +686,7 @@ export function useCall(
                     restrictOwnAudio: true,
                 } as MediaTrackConstraints,
             }));
-            if (attempt !== operation.current) {
+            if (attempt !== operation.current || !permissionRef.current('calls.share')) {
                 stream.getTracks().forEach((t) => t.stop());
                 return;
             }
@@ -709,7 +774,35 @@ export function useCall(
             if (!peer.watching) watch(id, true);
         } else queueWatch({ socket: id, shareId: expectedShare, channel });
     };
+    useEffect(() => {
+        if (!channel) return;
+        if (!canJoin) {
+            leave();
+            return;
+        }
+        let changed = false;
+        if (!canSpeak && audio.current?.getAudioTracks().length) {
+            audio.current.getTracks().forEach((track) => track.stop());
+            audio.current = null;
+            setMuted(true);
+            changed = true;
+        }
+        if (!canCamera && video.current) {
+            video.current.getTracks().forEach((track) => track.stop());
+            video.current = null;
+            setCamera(false);
+            changed = true;
+        }
+        if (!canShare && screen.current) {
+            stopShare();
+            changed = true;
+        }
+        if (changed) void syncMedia().catch((error) => report(error.message));
+    }, [canJoin, canSpeak, canCamera, canShare, channel]);
     return {
+        canSpeak,
+        canCamera,
+        canShare,
         panelOpen,
         setPanelOpen,
         watchStream,
@@ -722,7 +815,7 @@ export function useCall(
         join,
         leave,
         muted,
-        setMuted,
+        setMuted: setMicrophoneMuted,
         deafened,
         setDeafened,
         camera,

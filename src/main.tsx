@@ -1,3 +1,4 @@
+import { hasRolePermission } from '../shared/permissions.js';
 import { shouldNotify, createNotificationSound } from './notifications';
 import { version as appVersion } from '../package.json';
 import { ChatComposer } from './ChatComposer';
@@ -235,10 +236,22 @@ function App() {
     const refresh = stateRefresh.refresh;
     useEffect(() => () => stateRefresh.cancel(), [stateRefresh]);
     const callPanelToggle = useRef<HTMLButtonElement>(null);
-    const call = useCall(socket, prefs, state?.iceServers || [], notify, () =>
-        notify(
-            'Saved microphone unavailable; using System default for this call. Your selection is kept for next time.',
-        ),
+    const call = useCall(
+        socket,
+        prefs,
+        state?.iceServers || [],
+        notify,
+        () =>
+            notify(
+                'Saved microphone unavailable; using System default for this call. Your selection is kept for next time.',
+            ),
+        (p) =>
+            !!state &&
+            hasRolePermission(
+                state.me.role,
+                state.roles.find((r) => r.id === state.me.role)?.permissions || [],
+                p,
+            ),
     );
     const speaking = useSpeaking(socket, call.microphone, state?.me.id || '', call.channel);
     useEffect(() => {
@@ -413,15 +426,22 @@ function App() {
     };
     const permission = (p: string) =>
         !!state &&
-        (state.me.role === 'owner' ||
-            !!state.roles.find((r) => r.id === state.me.role)?.permissions.includes(p));
+        hasRolePermission(
+            state.me.role,
+            state.roles.find((r) => r.id === state.me.role)?.permissions || [],
+            p,
+        );
     const canPost =
-        permission('send') &&
+        permission('messages.send') &&
         (room.startsWith('dm:') ||
             state?.channels.find((channel) => channel.id === room)?.access === 'full');
-    const conversationPermission = (name: string) => permission(name) && canPost;
+    const conversationPermission = (name: string) =>
+        permission(name) &&
+        (name === 'messages.deleteOwn' ||
+            ((!currentChannel || currentChannel.access === 'full') &&
+                !(dmUser && name === 'messages.deleteOthers')));
     useEffect(() => {
-        if (!canPost)
+        if (!roomVisible)
             setModal((previous) =>
                 previous === 'edit' ||
                 previous?.startsWith('reaction:') ||
@@ -430,7 +450,7 @@ function App() {
                     : previous,
             );
         if (!roomVisible) setEdit(null);
-    }, [canPost, roomVisible]);
+    }, [roomVisible]);
     const user = (id: string) => state?.users.find((u) => u.id === id);
     const color = (u?: User) => state?.roles.find((r) => r.id === u?.role)?.color;
     const dm = (id: string) => {
@@ -484,8 +504,8 @@ function App() {
     const uploadBusy = useRef(busy);
     uploadBusy.current = busy;
     const addFiles = (files: File[]) => {
-        if (!canPost) {
-            notify('This conversation is read-only. Files cannot be uploaded.');
+        if (!canPost || !permission('files.attach')) {
+            notify('You do not have permission to attach files in this conversation.');
             return;
         }
         if (uploadBusy.current) {
@@ -918,15 +938,17 @@ function App() {
                             </button>
                             <div className="category">
                                 <span>TEXT CHANNELS</span>
-                                {permission('manage') && (
+                                {['channels.edit', 'channels.reorder', 'channels.delete'].some(
+                                    permission,
+                                ) && (
                                     <button
-                                        title="Manage channels and access"
+                                        title="Manage channels"
                                         onClick={() => openSettings('channels')}
                                     >
                                         <Settings size={15} />
                                     </button>
                                 )}
-                                {permission('manage') && (
+                                {permission('channels.create') && (
                                     <button
                                         title="Create text channel"
                                         onClick={() => setModal('channel:text')}
@@ -955,15 +977,17 @@ function App() {
                                 ))}
                             <div className="category">
                                 <span>VOICE CHANNELS</span>
-                                {permission('manage') && (
+                                {['channels.edit', 'channels.reorder', 'channels.delete'].some(
+                                    permission,
+                                ) && (
                                     <button
-                                        title="Manage voice channels and access"
+                                        title="Manage voice channels"
                                         onClick={() => openSettings('channels')}
                                     >
                                         <Settings size={15} />
                                     </button>
                                 )}
-                                {permission('manage') && (
+                                {permission('channels.create') && (
                                     <button
                                         title="Create voice channel"
                                         onClick={() => setModal('channel:voice')}
@@ -978,6 +1002,7 @@ function App() {
                                     <React.Fragment key={c.id}>
                                         <button
                                             className={`nav-item channel ${call.channel === c.id ? 'in-call' : ''}`}
+                                            disabled={!permission('calls.join')}
                                             onClick={() => {
                                                 if (call.channel !== c.id) void call.join(c.id);
                                                 else {
@@ -1014,7 +1039,7 @@ function App() {
                                                                     ? 'Open your screen share'
                                                                     : `Watch ${displayName(user(p.user))}’s stream`
                                                             }
-                                                            disabled={!permission('voice')}
+                                                            disabled={!permission('calls.join')}
                                                             onClick={() => {
                                                                 if (p.socket === socket?.id)
                                                                     call.setPanelOpen(true);
@@ -1165,6 +1190,7 @@ function App() {
                             <button
                                 title={call.muted ? 'Unmute' : 'Mute microphone'}
                                 aria-pressed={call.muted}
+                                disabled={!permission('calls.speak')}
                                 onClick={() => call.setMuted(!call.muted)}
                             >
                                 {call.muted ? <MicOff size={18} /> : <Mic size={18} />}
@@ -1255,7 +1281,11 @@ function App() {
                                     {dmUser && (
                                         <button
                                             title="Call friend"
-                                            disabled={!!call.channel || !permission('voice')}
+                                            disabled={
+                                                !!call.channel ||
+                                                !permission('calls.join') ||
+                                                !permission('calls.start')
+                                            }
                                             onClick={() => void startDirectCall(dmUser.id)}
                                         >
                                             <Phone size={20} />
@@ -1435,6 +1465,7 @@ function App() {
                                     }}
                                 />
                                 <ChatComposer
+                                    canAttach={canPost && permission('files.attach')}
                                     users={state.users}
                                     attachments={attachments}
                                     setAttachments={setAttachments}
@@ -1736,15 +1767,24 @@ function App() {
                                 </>
                             ) : modal.startsWith('role:') ? (
                                 <RoleForm
+                                    key={modal}
                                     role={state.roles.find((r) => r.id === modal.split(':')[1])}
                                     busy={busy}
+                                    state={state}
+                                    canEditAccess={permission('channels.access')}
                                     owner={state.me.role === 'owner'}
                                     onSave={(data) =>
                                         act(async () => {
                                             const id = modal.split(':')[1];
                                             await api(
-                                                id === 'new' ? '/roles' : `/roles/${id}`,
-                                                id === 'new' ? 'POST' : 'PATCH',
+                                                id === 'new'
+                                                    ? '/roles'
+                                                    : `/roles/${id}${state.me.role === 'owner' ? '' : '/access'}`,
+                                                id === 'new'
+                                                    ? 'POST'
+                                                    : state.me.role === 'owner'
+                                                      ? 'PATCH'
+                                                      : 'PUT',
                                                 data,
                                             );
                                             setModal('settings');

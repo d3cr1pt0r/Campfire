@@ -38,9 +38,12 @@ test('password work has a bounded queue and reports overload without losing acce
     );
 });
 test('server owners retain control while other roles get only their permissions', () => {
-    assert.equal(hasPermission({ role: 'owner' }, [], 'manage'), true);
-    assert.equal(hasPermission({ role: 'member' }, ['send', 'voice'], 'manage'), false);
-    assert.equal(hasPermission({ role: 'member' }, ['voice'], 'voice'), true);
+    assert.equal(hasPermission({ role: 'owner' }, [], 'server.edit'), true);
+    assert.equal(
+        hasPermission({ role: 'member' }, ['messages.send', 'calls.join'], 'server.edit'),
+        false,
+    );
+    assert.equal(hasPermission({ role: 'member' }, ['calls.join'], 'calls.join'), true);
 });
 test('DM access requires exactly two existing distinct participants and membership', () => {
     const channelExists = (r) => r === 'general';
