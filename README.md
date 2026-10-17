@@ -122,6 +122,47 @@ The workflow uses a Windows runner, installs locked dependencies, runs type chec
 
 The executable is not code-signed, so Windows may show an unknown-publisher/SmartScreen warning. Signing certificates and a signing workflow are future work. Test launching the EXE, sign-in, microphone/camera, screen capture, relaunch and replacing the EXE for an update on a real Windows PC before giving the build to your group. The current target is Windows x64; ARM64-native builds are not configured.
 
+## Distribute a Linux standalone build
+
+Build on a Linux x64 machine with Node.js 24 LTS:
+
+```bash
+npm ci
+npm run dist:linux
+```
+
+This runs the type check, builds the interface, and packages two standalone clients with the same pinned electron-builder version used for Windows. With npm 12 or later, its default Git-dependency restriction may reject electron-builder’s pinned `@electron/node-gyp` dependency; use `npm run dist:linux --allow-git=all` to allow it for this invocation only.
+
+Outputs for version 0.1.4:
+
+```text
+release/Driskord-0.1.4-linux-x86_64.AppImage
+release/Driskord-0.1.4-linux-x64.tar.gz
+```
+
+Both include Electron; users do not need Node.js or a local server. AppImage names the x64 architecture `x86_64`. Send the AppImage and your shared server URL. After downloading, make it executable and launch it:
+
+```bash
+chmod +x Driskord-0.1.4-linux-x86_64.AppImage
+./Driskord-0.1.4-linux-x86_64.AppImage
+```
+
+If the distribution lacks working FUSE support, use the archive instead:
+
+```bash
+tar -xzf Driskord-0.1.4-linux-x64.tar.gz
+cd Driskord-0.1.4-linux-x64
+./driskord
+```
+
+Keep all extracted files together. Alternatively, AppImage supports `./Driskord-0.1.4-linux-x86_64.AppImage --appimage-extract-and-run` without FUSE; this extracts the runtime on each launch. See the [AppImage FUSE guide](https://docs.appimage.org/user-guide/troubleshooting/fuse.html).
+
+Settings and sign-in remain in Electron's user-data directory (normally `~/.config/Driskord`, or under `XDG_CONFIG_HOME`). To update, close Driskord and replace the AppImage or the entire extracted archive directory. The server remains separate and must be reachable. Builds target Linux x64 with desktop libraries supported by Electron; they are not universal binaries for ARM or every Linux distribution. Screen capture and device permissions depend on the desktop session and available portals. No sandbox-disabling flags are included in the launch commands.
+
+To prefill your public server URL, build with `VITE_DEFAULT_SERVER_URL=https://chat.example.com npm run dist:linux`. Saved connections take precedence, and the address remains editable.
+
+For a hosted build, open **Actions → Linux standalone builds → Run workflow**, optionally set the server URL, and download **Driskord-Linux-x64-Standalone** after it finishes. The workflow runs checks and tests and retains both packages for 14 days; it does not publish a release automatically.
+
 ## Implemented scope
 
 - In-app registration/sign-in, salted password hashes, expiring sessions, and server-local accounts.
