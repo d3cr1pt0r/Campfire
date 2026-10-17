@@ -6,6 +6,7 @@ import { SimpleForm, RoleForm } from './forms';
 import { Avatar, initials } from './Avatar';
 import { createStateRefresh } from './stateRefresh';
 import { useDialog } from './useDialog';
+import { useModalNavigation } from './modalNavigation';
 import { createApiClient } from './api';
 import { useConversation } from './useConversation';
 import { canonicalRoom } from '../shared/rooms.js';
@@ -119,8 +120,8 @@ function App() {
     const dragDepth = useRef(0);
     const viewRef = useRef(view);
     viewRef.current = view;
-    const [modal, setModal] = useState<string | null>(null),
-        [edit, setEdit] = useState<Message | null>(null),
+    const { modal, setModal, resetModals } = useModalNavigation();
+    const [edit, setEdit] = useState<Message | null>(null),
         [devices, setDevices] = useState<MediaDeviceInfo[]>([]),
         [settingsTab, setSettingsTab] = useState('account');
     const fileInput = useRef<HTMLInputElement>(null),
@@ -161,7 +162,7 @@ function App() {
                     if ((error as Error & { status?: number }).status === 401) {
                         setToken('');
                         setState(null);
-                        setModal(null);
+                        resetModals();
                         setUnread({});
                         setRoom('general');
                         storage.removeItem('connection');
@@ -484,7 +485,7 @@ function App() {
             call.leave();
             setToken('');
             setState(null);
-            setModal(null);
+            resetModals();
             setUnread({});
             setRoom('general');
             storage.removeItem('connection');
@@ -1486,7 +1487,7 @@ function App() {
                                                 setState(null);
                                                 setUnread({});
                                                 setRoom('general');
-                                                setModal(null);
+                                                resetModals();
                                                 storage.removeItem('connection');
                                             })
                                         }
