@@ -374,6 +374,7 @@ label,
     transition: none;
 }
 .call-dock .call-panel {
+    position: relative;
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -407,6 +408,10 @@ label,
 }
 .call-identity {
     flex: 1;
+    max-width: calc(50% - 152px);
+}
+.call-heading-actions {
+    margin-left: auto;
 }
 .call-identity > svg,
 .call-heading-actions > * {
@@ -526,31 +531,14 @@ label,
     color: var(--muted);
     font-size: 11px;
 }
-.call-dock.compact .call-panel {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    align-items: center;
-    position: relative;
-}
-.call-dock.compact .call-heading,
-.call-dock.compact .call-panel-body {
-    display: contents;
-}
-.call-dock.compact .call-identity {
-    grid-column: 1;
-    grid-row: 1;
-    padding-left: 24px;
-    padding-right: 12px;
-}
-.call-dock.compact .call-heading-actions {
-    grid-column: 3;
-    grid-row: 1;
-    justify-content: flex-end;
-    padding-right: 24px;
-}
 .call-dock.compact .call-toolbar {
-    grid-column: 2;
-    grid-row: 1;
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    height: 64px;
+    display: flex;
+    align-items: center;
     padding: 0;
 }
 .call-dock.compact .call-stage {
@@ -561,7 +549,6 @@ label,
     visibility: hidden;
 }
 .call-dock.compact .call-push-hint,
-.call-dock.compact .call-summary-kind,
 .call-dock.compact .call-details {
     display: none;
 }
@@ -611,27 +598,27 @@ label,
     opacity: 1;
 }
 @media (max-width: 800px) {
-    .call-dock.compact .call-identity {
-        padding-inline: 12px 8px;
+    .call-identity {
+        max-width: calc(50% - 106px);
     }
-    .call-dock.compact .call-identity > svg,
-    .call-dock.compact .live-badge {
+    .call-identity > svg,
+    .call-summary-kind {
         display: none;
     }
-    .call-dock.compact .call-summary-copy strong {
+    .call-summary-copy strong {
         font-size: 12px;
     }
-    .call-dock.compact .call-heading-actions {
-        padding-right: 8px;
+    .call-heading-actions {
+        gap: 4px;
     }
     .call-dock.compact .call-controls {
         gap: 4px;
     }
     .call-dock.compact .call-controls > button {
-        width: 32px;
-        min-width: 32px;
-        height: 32px;
-        min-height: 32px;
+        width: 28px;
+        min-width: 28px;
+        height: 28px;
+        min-height: 28px;
         padding: 6px;
     }
     .call-dock .call-heading {
