@@ -51,6 +51,8 @@ export type State = {
     iceServers: RTCIceServer[];
 };
 export type Message = {
+    thread?: string | null;
+    replyCount?: number;
     id: string;
     room: string;
     author: string;
@@ -100,7 +102,7 @@ export interface ServerEvents {
     message: (message: Message) => void;
     'message:update': (message: Message) => void;
     'message:delete': (event: { id: string; room: string }) => void;
-    typing: (event: { room: string; user: string }) => void;
+    typing: (event: { room: string; user: string; thread?: string | null }) => void;
     calls: (members: CallMember[]) => void;
     'call:invite': (event: { id: string; from: string }) => void;
     'call:revoked': (reason?: string) => void;
@@ -111,7 +113,7 @@ export interface ServerEvents {
 export interface ClientEvents {
     'call:media': (shareId: string | null) => void;
     'presence:idle': (idle: boolean) => void;
-    typing: (room: string) => void;
+    typing: (room: string, thread?: string) => void;
     'call:join': (channel: string, ack: (result: JoinResult) => void) => void;
     'call:leave': () => void;
     'call:speaking': (active: boolean) => void;

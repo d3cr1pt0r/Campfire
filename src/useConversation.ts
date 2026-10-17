@@ -11,6 +11,7 @@ export function useConversation(
     enabled: boolean,
     search: string,
     pins: boolean,
+    thread: string | null = null,
 ) {
     const conversation = useMemo(
         () =>
@@ -18,16 +19,18 @@ export function useConversation(
                 room,
                 (before, signal) => {
                     const params = new URLSearchParams({ room, page: '1', limit: '100' });
+                    if (thread) params.set('thread', thread);
                     if (before) params.set('before', before);
                     if (search) params.set('search', search);
                     if (pins) params.set('pinned', '1');
                     return api<MessagePage>(`/messages?${params}`, 'GET', undefined, signal);
                 },
                 (message) =>
+                    (message.thread ?? null) === thread &&
                     (!pins || !!message.pinned) &&
                     (!search || message.body.toLowerCase().includes(search.toLowerCase())),
             ),
-        [api, room, search, pins],
+        [api, room, search, pins, thread],
     );
     const snapshot = useSyncExternalStore(conversation.subscribe, conversation.getSnapshot);
     useEffect(() => {

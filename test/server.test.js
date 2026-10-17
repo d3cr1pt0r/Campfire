@@ -165,6 +165,28 @@ test(
             await api(bob, `/messages/${textMessage.id}/reaction`, 'POST', { emoji: '👍' });
             assert.equal((await api(bob, '/messages?room=general'))[0].reactions.length, 0);
         });
+        await t.test('thread replies and parent counts reach live Socket.IO clients', async () => {
+            const received = once(bs, 'message');
+            const updated = once(bs, 'message:update');
+            const reply = await api(alice, '/messages', 'POST', {
+                room: textMessage.room,
+                thread: textMessage.id,
+                body: 'A threaded reply',
+            });
+            assert.equal((await received)[0].thread, textMessage.id);
+            const parent = (await updated)[0];
+            assert.equal(parent.id, textMessage.id);
+            assert.equal(parent.replyCount, 1);
+            assert.equal((await api(bob, '/messages?room=general')).length, 1);
+            const typing = once(bs, 'typing');
+            as.emit('typing', textMessage.room, textMessage.id);
+            assert.equal((await typing)[0].thread, textMessage.id);
+            const removed = once(bs, 'message:delete');
+            const recounted = once(bs, 'message:update');
+            await api(alice, `/messages/${reply.id}`, 'DELETE');
+            assert.equal((await removed)[0].id, reply.id);
+            assert.equal((await recounted)[0].replyCount, 0);
+        });
         await t.test('attachments enforce conversation access and a size limit', async () => {
             const message = await api(alice, '/messages', 'POST', {
                 room: dmMessage.room,

@@ -47,13 +47,13 @@ The UI is shared by browser and Electron. No Node.js primitives are exposed to r
 
 ## Data model
 
-SQLite runs in WAL mode with foreign keys. All SQL inputs use bound parameters. The schema is idempotent for fresh/repeated startup; there is no versioned migration framework yet. Before changing existing tables, introduce a schema-version table and transactional migrations rather than editing only CREATE TABLE IF NOT EXISTS.
+SQLite runs in WAL mode with foreign keys. All SQL inputs use bound parameters. The base schema is idempotent for fresh/repeated startup. `server/database.js` applies versioned, transactional migrations recorded in the `migrations` table.
 
 - `roles`: ID, name, hex name color, JSON permission array.
 - `users`: UUID, unique case-insensitive username, salted scrypt hash, role FK, reserved banned flag.
 - `sessions`: SHA-256 hash of a random 256-bit bearer token, user FK, expiration. Tokens last 30 days. Expired rows are cleaned during authentication requests.
 - `channels`: ID, normalized lowercase text-channel name or case-preserving voice display name, `text` or `voice` kind.
-- `messages`: UUID, conversation key, author FK, plain-text body, creation/edit timestamps, pinned flag.
+- `messages`: UUID, conversation key, author FK, plain-text body, creation/edit timestamps, pinned flag, nullable `thread` FK to a top-level parent message.
 - `attachments`: UUID, message FK, original filename, sniffed raster MIME (otherwise binary), base64 payload. Cascade deletion with the message.
 - `reactions`: message/user/emoji primary key. Cascade deletion with the message.
 - `friends`: sender/recipient primary key, accepted flag. A reverse request accepts an incoming request.
@@ -314,3 +314,16 @@ The additive profiles table stores one nickname per user. Idempotent startup bac
 The nickname-first displayName helper is used for chat authors, avatars, friends/DMs, voice members, call titles/controls, member roles, typing notices and notifications. Friend acceptance/lookup and login continue using the account username. Settings shows a read-only username and editable nickname. Identity tooltips/friend rows also expose @username to distinguish duplicate nicknames. Older messages resolve the author's current nickname, matching the existing user-ID-based author model. A profile update does not reconnect the call or change account identifiers.
 
 Schema tests exercise legacy backfill, restart preservation and immutable/case-sensitive username rejection. Request-handler tests cover defaults, nickname-only updates, caller isolation, invalid values, immutable username attempts, and login by the original username after display-name changes. Display-name fallback has a helper test. Current type check, production build and all 70 non-network checks pass. Live multi-client nickname refresh, watch/stop bandwidth behavior and independent audio/output playback still need testing. Update the backend and all clients; no dependency or extra port changes. Version remains 0.1.3.
+
+
+## Message threads
+
+Hover a top-level message and choose **Reply in thread** to open the right panel. The first reply creates the thread; a reply-count button then appears beneath the parent and opens the same panel. On narrow windows the panel overlays the right side of chat. Closing it or changing rooms closes the thread view. The member list is hidden while a thread is open.
+
+`src/ThreadPanel.tsx` uses the shared virtualized `ChatMessages` and `ChatComposer` components. Replies support text and links, standard/custom emoji, attachments and image previews, file paste/drop, desktop clipboard attachments, editing, deletion, reactions, pins, search, history pagination, and thread-scoped typing. The panel shows the parent above the unfiltered reply history. Search and pinned views filter replies. Replies have no Reply action; the API and database also reject nested threads.
+
+Migration 5 adds `messages.thread`, a cursor/count index, and parent validation triggers; existing messages remain top-level. Normal room history returns top-level messages, and `GET /api/messages?room=...&thread=<parent-id>` returns replies with the same search, pinned, limit, page, and before parameters. `POST /api/messages` accepts an optional `thread` parent ID. `GET /api/messages/:id` reads the parent independently of the current main-chat history or filters. Message payloads include `thread` and `replyCount`.
+
+Replies inherit their room's access and posting permissions, including private DM access. Existing message actions and attachment endpoints work for replies. Live reply creation/deletion emits a parent update with its current count. Typing accepts an optional thread ID and is displayed only in that conversation. Reconnect reloads both parent and replies. Deleting a parent deletes all replies, reactions, attachments, previews, and their storage accounting through foreign-key cascades; an open panel closes on parent deletion.
+
+Validation: `test/threads.test.js` covers API behavior, pagination, permissions, persistence, nesting rejection, and cleanup; `test/thread-events.test.js` covers event routing/counts/typing; `test/conversation.test.js` checks client history isolation and concurrent updates. `test/server.test.js` also exercises thread messages, counts, deletion, and typing through real Socket.IO clients. Browser layout and desktop clipboard behavior still require interactive validation.

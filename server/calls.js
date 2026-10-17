@@ -197,10 +197,24 @@ export function registerCalls({
         socket.join(`user:${socket.data.user.id}`);
         io.emit('refresh');
         attach(socket);
-        socket.on('typing', (rawRoom) => {
+        socket.on('typing', (rawRoom, thread) => {
             const room = canonicalRoom(rawRoom);
+            if (
+                thread !== undefined &&
+                (typeof thread !== 'string' ||
+                    !get(
+                        'SELECT id FROM messages WHERE id=? AND room=? AND thread IS NULL',
+                        thread,
+                        room,
+                    ))
+            )
+                return;
             if (typeof room === 'string' && canWrite(socket.data.user, room))
-                emitRoom(room, 'typing', { room, user: socket.data.user.id });
+                emitRoom(room, 'typing', {
+                    room,
+                    user: socket.data.user.id,
+                    ...(thread ? { thread } : {}),
+                });
         });
         socket.on('call:join', (channel, ack = () => {}) => {
             if (typeof ack !== 'function') return;

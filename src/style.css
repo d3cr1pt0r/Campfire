@@ -3252,3 +3252,99 @@ button:active:not(:disabled) {
 button:disabled {
     filter: none;
 }
+
+.thread-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 clamp(340px, 38%, 560px);
+    min-width: 0;
+    min-height: 0;
+    border-left: 1px solid #ffffff12;
+    background: #202128;
+    overflow: hidden;
+}
+.thread-header,
+.thread-tools {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    flex-shrink: 0;
+    border-bottom: 1px solid #ffffff0c;
+}
+.thread-header span,
+.thread-context {
+    color: #a5a8b5;
+    font-size: 12px;
+}
+.thread-header button {
+    margin-left: auto;
+}
+.thread-tools {
+    padding: 8px 18px;
+}
+.thread-tools label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+.thread-tools input {
+    width: 100%;
+    min-width: 0;
+}
+.thread-tools button[aria-pressed='true'] {
+    color: #b6a8ff;
+}
+.thread-context {
+    margin: 0;
+    padding: 10px 18px;
+}
+.thread-panel .composer-wrap {
+    padding: 12px;
+}
+.thread-panel .composer-help > span:last-child {
+    display: none;
+}
+.thread-panel .message {
+    padding-left: 14px;
+    padding-right: 14px;
+}
+.thread-panel .attachment {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+.thread-replies {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: #b6a8ff;
+    margin-top: 8px;
+    font-size: 13px;
+}
+.thread-replies:hover {
+    text-decoration: underline;
+}
+.thread-emoji-picker {
+    padding: 8px 14px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+.thread-panel .emoji-picker {
+    grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+}
+@media (max-width: 1100px) {
+    .thread-panel {
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: min(480px, 100%);
+        z-index: 20;
+        box-shadow: -12px 0 32px #0005;
+    }
+    .main-columns {
+        position: relative;
+    }
+}

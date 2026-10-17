@@ -202,3 +202,39 @@ test('history failures preserve the reading data and cursor so retry can recover
     assert.equal(store.getSnapshot().error, '');
     assert.equal(store.getSnapshot().messages.length, 2);
 });
+
+test('room and thread histories stay isolated while parent counts update during loading', async () => {
+    const root = message('parent');
+    const reply = { ...message('reply'), thread: root.id };
+    const otherReply = { ...message('other'), thread: 'other-parent' };
+    const pending = deferred();
+    const room = createConversation(
+        'general',
+        () => pending.promise,
+        (m) => !m.thread,
+    );
+    const thread = createConversation(
+        'general',
+        async () => ({ messages: [reply], next: null }),
+        (m) => m.thread === root.id,
+    );
+    const loading = room.reload();
+    room.receive({ type: 'upsert', message: reply });
+    room.receive({ type: 'upsert', message: { ...root, replyCount: 2 } });
+    pending.resolve({ messages: [{ ...root, replyCount: 0 }, reply], next: null });
+    await loading;
+    await thread.reload();
+    thread.receive({ type: 'upsert', message: otherReply });
+    thread.receive({ type: 'upsert', message: { ...root, replyCount: 2 } });
+    thread.receive({ type: 'upsert', message: { ...reply, body: 'Edited live' } });
+    assert.deepEqual(
+        room.getSnapshot().messages.map((m) => [m.id, m.replyCount]),
+        [['parent', 2]],
+    );
+    assert.deepEqual(
+        thread.getSnapshot().messages.map((m) => [m.id, m.body]),
+        [['reply', 'Edited live']],
+    );
+    thread.receive({ type: 'delete', id: reply.id });
+    assert.deepEqual(thread.getSnapshot().messages, []);
+});

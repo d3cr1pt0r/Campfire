@@ -27,7 +27,7 @@ test('legacy migration merges DM histories and accounts for attachment bytes onc
         db.exec("INSERT INTO attachments VALUES('unpadded','first','hi','text/plain','aGk')");
         migrate(db);
         migrate(db);
-        assert.equal(db.prepare('SELECT COUNT(*) n FROM migrations').get().n, 4);
+        assert.equal(db.prepare('SELECT COUNT(*) n FROM migrations').get().n, 5);
         assert.equal(db.prepare("SELECT COUNT(*) n FROM messages WHERE room='dm:a:b'").get().n, 2);
         assert.equal(db.prepare('SELECT bytes FROM storage_usage').get().bytes, 7);
         assert.equal(db.prepare('SELECT COUNT(*) n FROM reactions').get().n, 1);
@@ -53,22 +53,22 @@ test('failed migrations roll back schema changes and can resume after the cause 
         assert.equal(db.prepare('SELECT MAX(version) version FROM migrations').get().version, 1);
         db.exec('DROP TABLE storage_usage');
         migrate(db);
-        assert.equal(db.prepare('SELECT MAX(version) version FROM migrations').get().version, 4);
+        assert.equal(db.prepare('SELECT MAX(version) version FROM migrations').get().version, 5);
     } finally {
         db.close();
     }
 });
 
-test('history enrichment uses two queries regardless of message count', () => {
+test('history enrichment uses three queries regardless of message count', () => {
     let queries = 0;
     const rows = Array.from({ length: 500 }, (_, i) => ({ id: String(i) }));
     const result = messageViews(() => {
         queries++;
         return [];
     }, rows);
-    assert.equal(queries, 2);
+    assert.equal(queries, 3);
     assert.equal(result.length, 500);
-    assert.deepEqual(result[0], { id: '0', attachments: [], reactions: [] });
+    assert.deepEqual(result[0], { id: '0', replyCount: 0, attachments: [], reactions: [] });
 });
 
 test('authentication limiter expires entries and fails closed at capacity', () => {

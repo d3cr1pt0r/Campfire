@@ -23,6 +23,29 @@ export function registerMessages({
     const thumbnails = createThumbnails({ get, all, run });
     const requireWrite = (user, room) =>
         check(canWrite(user, room), 'This conversation is read-only', 403);
+    const threadParent = (user, room, thread) => {
+        check(
+            typeof thread === 'string' && thread.length > 0 && thread.length <= 100,
+            'Invalid thread',
+        );
+        const parent = get('SELECT * FROM messages WHERE id=? AND room=?', thread, room);
+        check(parent && hasRoom(user, room), 'Thread not found', 404);
+        check(!parent.thread, 'Replies cannot have nested threads');
+        return parent;
+    };
+    const updateParent = (thread) => {
+        if (!thread) return;
+        const parent = get('SELECT * FROM messages WHERE id=?', thread);
+        if (parent) emitRoom(parent.room, 'message:update', messageView(parent));
+    };
+    app.get(
+        '/api/messages/:id',
+        route((req, res) => {
+            const message = get('SELECT * FROM messages WHERE id=?', req.params.id);
+            check(message && hasRoom(req.user, message.room), 'Message not found', 404);
+            res.json(messageView(message));
+        }),
+    );
     app.get(
         '/api/messages',
         route((req, res) => {
@@ -32,6 +55,11 @@ export function registerMessages({
             check(Number.isInteger(limit) && limit >= 1 && limit <= 500, 'Invalid page size');
             const clauses = ['room=?'],
                 params = [room];
+            if (req.query.thread !== undefined) {
+                threadParent(req.user, room, req.query.thread);
+                clauses.push('thread=?');
+                params.push(req.query.thread);
+            } else clauses.push('thread IS NULL');
             if (req.query.search) {
                 check(
                     typeof req.query.search === 'string' && req.query.search.length <= 4000,
@@ -85,6 +113,8 @@ export function registerMessages({
             const room = canonicalRoom(req.body.room);
             check(typeof room === 'string' && hasRoom(req.user, room), 'Unknown conversation', 403);
             requireWrite(req.user, room);
+            const thread = req.body.thread ?? null;
+            if (thread !== null) threadParent(req.user, room, thread);
             check(
                 typeof body === 'string' && body.length <= 4000,
                 'Messages can contain up to 4,000 characters',
@@ -126,12 +156,13 @@ export function registerMessages({
                     413,
                 );
                 run(
-                    'INSERT INTO messages(id,room,author,body,created) VALUES(?,?,?,?,?)',
+                    'INSERT INTO messages(id,room,author,body,created,thread) VALUES(?,?,?,?,?,?)',
                     id,
                     room,
                     req.user.id,
                     body.trim(),
                     Date.now(),
+                    thread,
                 );
                 for (const file of validated)
                     run(
@@ -146,6 +177,7 @@ export function registerMessages({
             });
             const m = messageView(get('SELECT * FROM messages WHERE id=?', id));
             emitRoom(room, 'message', m);
+            updateParent(thread);
             res.json(m);
         }),
     );
@@ -191,6 +223,7 @@ export function registerMessages({
             if (!m.room.startsWith('dm:')) requireWrite(req.user, m.room);
             check(m.author === req.user.id || can(req.user, 'manage'), 'Permission denied', 403);
             run('DELETE FROM messages WHERE id=?', m.id);
+            updateParent(m.thread);
             emitRoom(m.room, 'message:delete', { id: m.id, room: m.room });
             res.json({ ok: true });
         }),

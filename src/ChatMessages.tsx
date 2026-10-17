@@ -17,6 +17,7 @@ import {
     Smile,
     Pencil,
     Trash2,
+    Reply,
 } from 'lucide-react';
 import { ChatContent, AuthImage, Emoji } from './ChatContent';
 
@@ -38,7 +39,11 @@ export function ChatMessages({
     setModal,
     setEdit,
     clearFilters,
+    onReply,
+    thread = false,
 }: {
+    onReply?: (message: Message) => void;
+    thread?: boolean;
     permission: (permission: string) => boolean;
     conversation: ReturnType<typeof useConversation>;
     search: string;
@@ -159,7 +164,7 @@ export function ChatMessages({
                                     Loading messages…
                                 </p>
                             )}
-                            {!search && !pins && !conversation.next && (
+                            {!thread && !search && !pins && !conversation.next && (
                                 <div className="channel-welcome">
                                     <div className="welcome-hash">
                                         {dmUser ? <MessageCircle size={40} /> : <Hash size={43} />}
@@ -303,6 +308,16 @@ export function ChatMessages({
                                                     </button>
                                                 </React.Fragment>
                                             ))}
+                                            {!thread && !!m.replyCount && (
+                                                <button
+                                                    className="thread-replies"
+                                                    onClick={() => onReply?.(m)}
+                                                >
+                                                    <MessageCircle size={15} />
+                                                    {m.replyCount}{' '}
+                                                    {m.replyCount === 1 ? 'reply' : 'replies'}
+                                                </button>
+                                            )}
                                             <div className="reactions">
                                                 {[...new Set(m.reactions.map((r) => r.emoji))].map(
                                                     (emoji) => (
@@ -353,6 +368,16 @@ export function ChatMessages({
                                             </div>
                                         </div>
                                         <div className="message-actions">
+                                            {!thread && !m.thread && onReply && (
+                                                <button
+                                                    title="Reply in thread"
+                                                    aria-label="Reply in thread"
+                                                    disabled={!permission('send')}
+                                                    onClick={() => onReply(m)}
+                                                >
+                                                    <Reply size={16} />
+                                                </button>
+                                            )}
                                             <button
                                                 title="React"
                                                 disabled={!permission('send')}

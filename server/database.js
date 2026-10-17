@@ -62,6 +62,17 @@ export function migrate(db) {
                 WHEN OLD.id IN ('owner','member') AND NEW.id IS NOT OLD.id
                 BEGIN SELECT RAISE(ABORT,'Default role IDs cannot change'); END;`);
         },
+        () => {
+            db.exec(`ALTER TABLE messages ADD COLUMN thread TEXT REFERENCES messages(id) ON DELETE CASCADE;
+                CREATE INDEX messages_thread_cursor ON messages(thread,room,created,id);
+                CREATE TRIGGER valid_message_thread BEFORE INSERT ON messages
+                WHEN NEW.thread IS NOT NULL AND NOT EXISTS(
+                    SELECT 1 FROM messages WHERE id=NEW.thread AND room=NEW.room AND thread IS NULL
+                ) BEGIN SELECT RAISE(ABORT,'Invalid thread parent'); END;
+                CREATE TRIGGER immutable_message_thread BEFORE UPDATE OF thread,room ON messages
+                WHEN NEW.thread IS NOT OLD.thread OR NEW.room IS NOT OLD.room
+                BEGIN SELECT RAISE(ABORT,'Message conversation cannot change'); END;`);
+        },
     ];
     migrations.forEach((apply, index) => {
         const version = index + 1;
@@ -136,8 +147,15 @@ export function messageViews(all, messages) {
         if (!reactions.has(message)) reactions.set(message, []);
         reactions.get(message).push(value);
     }
+    const counts = new Map(
+        all(
+            `SELECT thread,COUNT(*) count FROM messages WHERE thread IN (${placeholders}) GROUP BY thread`,
+            ...ids,
+        ).map(({ thread, count }) => [thread, count]),
+    );
     return messages.map((m) => ({
         ...m,
+        replyCount: counts.get(m.id) || 0,
         attachments: attachments.get(m.id) || [],
         reactions: reactions.get(m.id) || [],
     }));

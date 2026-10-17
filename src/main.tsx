@@ -1,3 +1,5 @@
+import { ChatComposer } from './ChatComposer';
+import { ThreadPanel } from './ThreadPanel';
 import { ChatMessages } from './ChatMessages';
 import { CallPanel } from './CallPanel';
 import { FriendsPanel } from './FriendsPanel';
@@ -31,8 +33,6 @@ import {
     Search,
     Pin,
     Paperclip,
-    Send,
-    Smile,
     ChevronDown,
     X,
     Server,
@@ -100,6 +100,8 @@ function App() {
         [view, setView] = useState<'chat' | 'friends'>('chat'),
         [draft, setDraft] = useState(''),
         [attachments, setAttachments] = useState<File[]>([]);
+    const [thread, setThread] = useState<Message | null>(null);
+    useEffect(() => setThread(null), [room, url, token, view]);
     const [search, setSearch] = useState(''),
         [pins, setPins] = useState(false),
         [members, setMembers] = useState(() => window.innerWidth > 1100),
@@ -245,8 +247,8 @@ function App() {
                     silent: !prefsRef.current.sounds,
                 });
         });
-        s.on('typing', ({ room: r, user }: { room: string; user: string }) => {
-            if (r === roomRef.current && user !== stateRef.current?.me.id)
+        s.on('typing', ({ room: r, user, thread }) => {
+            if (!thread && r === roomRef.current && user !== stateRef.current?.me.id)
                 setTyping((prev) => ({ ...prev, [user]: Date.now() + 3500 }));
         });
         return () => {
@@ -1275,6 +1277,7 @@ function App() {
                                 )}
                                 <ChatMessages
                                     key={`${url}:${state.me.id}:${room}:${search}:${pins}`}
+                                    onReply={setThread}
                                     permission={conversationPermission}
                                     conversation={conversation}
                                     search={search}
@@ -1296,145 +1299,47 @@ function App() {
                                         setPins(false);
                                     }}
                                 />
-                                <div className="composer-wrap">
-                                    {attachments.map((file, index) => (
-                                        <div
-                                            className="attachment-preview"
-                                            key={`${index}:${file.name}`}
-                                        >
-                                            <Paperclip size={15} />
-                                            {file.name}
-                                            <small>{Math.ceil(file.size / 1024)} KB</small>
-                                            <button
-                                                disabled={busy}
-                                                onClick={() =>
-                                                    setAttachments((previous) =>
-                                                        previous.filter((_, i) => i !== index),
-                                                    )
-                                                }
-                                                aria-label={`Remove ${file.name}`}
-                                            >
-                                                <X size={15} />
-                                            </button>
-                                        </div>
-                                    ))}
-                                    <form className="composer" onSubmit={send}>
-                                        <button
-                                            type="button"
-                                            title="Attach files (up to 10 files, 5 MB total)"
-                                            disabled={busy || !canPost}
-                                            onClick={() => fileInput.current?.click()}
-                                        >
-                                            <Plus size={22} />
-                                        </button>
-                                        <input
-                                            type="file"
-                                            multiple
-                                            hidden
-                                            ref={fileInput}
-                                            onChange={(e) => {
-                                                addFiles(Array.from(e.target.files || []));
-                                                e.target.value = '';
-                                            }}
-                                        />
-                                        <textarea
-                                            aria-label="Message"
-                                            placeholder={
-                                                canPost
-                                                    ? `Message ${dmUser ? '@' + displayName(dmUser) : '#' + (currentChannel?.name || 'general')}`
-                                                    : 'This conversation is read-only'
-                                            }
-                                            value={draft}
-                                            disabled={!canPost}
-                                            maxLength={4000}
-                                            rows={1}
-                                            style={!draft ? { height: 'auto' } : undefined}
-                                            onChange={(e) => {
-                                                setDraft(e.target.value);
-                                                e.target.style.height = 'auto';
-                                                e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
-                                                if (Date.now() - lastTyping.current > 2000) {
-                                                    socket?.emit('typing', room);
-                                                    lastTyping.current = Date.now();
-                                                }
-                                            }}
-                                            onPaste={(event) => {
-                                                const files = Array.from(event.clipboardData.files);
-                                                if (files.length) {
-                                                    event.preventDefault();
-                                                    addFiles(files);
-                                                }
-                                            }}
-                                            onKeyDown={(e) => {
-                                                if (
-                                                    (e.ctrlKey || e.metaKey) &&
-                                                    !e.altKey &&
-                                                    !e.shiftKey &&
-                                                    e.key.toLowerCase() === 'v' &&
-                                                    window.driskord?.readClipboardAttachments
-                                                ) {
-                                                    e.preventDefault();
-                                                    void pasteDesktop(e.currentTarget);
-                                                    return;
-                                                }
-
-                                                if (
-                                                    e.key === 'Enter' &&
-                                                    !e.shiftKey &&
-                                                    !e.nativeEvent.isComposing
-                                                ) {
-                                                    e.preventDefault();
-                                                    if (!busy && !e.nativeEvent.isComposing)
-                                                        void send(e);
-                                                }
-                                            }}
-                                        />
-                                        <button
-                                            type="button"
-                                            title="Add emoji"
-                                            disabled={!canPost || busy}
-                                            onClick={() => setModal('emoji')}
-                                        >
-                                            <Smile size={21} />
-                                        </button>
-                                        <button
-                                            className="send-button"
-                                            type="submit"
-                                            title="Send message"
-                                            disabled={
-                                                busy ||
-                                                !connected ||
-                                                !canPost ||
-                                                (!draft.trim() && !attachments.length)
-                                            }
-                                        >
-                                            <Send size={18} />
-                                        </button>
-                                    </form>
-                                    <div className="composer-help">
-                                        {Object.keys(typing).length ? (
-                                            <span>
-                                                {Object.keys(typing)
-                                                    .map((id) => displayName(user(id)))
-                                                    .join(', ')}{' '}
-                                                is typing…
-                                            </span>
-                                        ) : (
-                                            <span>
-                                                <strong>Enter</strong> to send ·{' '}
-                                                <strong>Shift + Enter</strong> for a new line
-                                            </span>
-                                        )}
-                                        <span>
-                                            {draft.length > 3500
-                                                ? `${draft.length}/4000`
-                                                : 'A little hello can go a long way.'}
-                                        </span>
-                                    </div>
-                                </div>
+                                <ChatComposer
+                                    attachments={attachments}
+                                    setAttachments={setAttachments}
+                                    draft={draft}
+                                    setDraft={setDraft}
+                                    busy={busy}
+                                    canPost={canPost}
+                                    connected={connected}
+                                    fileInput={fileInput}
+                                    lastTyping={lastTyping}
+                                    addFiles={addFiles}
+                                    send={send}
+                                    pasteDesktop={pasteDesktop}
+                                    onEmoji={() => setModal('emoji')}
+                                    onTyping={() => socket?.emit('typing', room)}
+                                    typing={typing}
+                                    user={user}
+                                    placeholder={`Message ${dmUser ? '@' + displayName(dmUser) : '#' + (currentChannel?.name || 'general')}`}
+                                />
                             </section>
                         )}
-                        {members && (
+                        {thread && thread.room === room && view === 'chat' && roomVisible && (
+                            <ThreadPanel
+                                key={`${url}:${state.me.id}:${room}:${thread.id}`}
+                                parent={thread}
+                                api={api}
+                                socket={socket}
+                                state={state}
+                                permission={conversationPermission}
+                                user={user}
+                                color={color}
+                                dm={dm}
+                                download={download}
+                                act={act}
+                                setModal={setModal}
+                                setEdit={setEdit}
+                                connected={connected}
+                                onClose={() => setThread(null)}
+                            />
+                        )}
+                        {members && !thread && (
                             <aside
                                 className="member-list"
                                 id="community-members"
@@ -1784,7 +1689,7 @@ function App() {
                                     </h2>
                                     <p className="muted">
                                         {modal.startsWith('delete:')
-                                            ? 'This will permanently delete the message and any attachment.'
+                                            ? 'This will permanently delete the message, its thread replies, and their attachments.'
                                             : 'You can send another friend request later.'}
                                     </p>
                                     <div className="dialog-actions">
