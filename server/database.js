@@ -55,6 +55,13 @@ export function migrate(db) {
                 CREATE TRIGGER preserve_channels BEFORE DELETE ON channels WHEN OLD.protected=1 OR (SELECT COUNT(*) FROM channels WHERE kind=OLD.kind)<=1 BEGIN SELECT RAISE(ABORT,'Keep the protected text and voice channels'); END;
                 CREATE TRIGGER preserve_channel_kind BEFORE UPDATE OF kind,protected ON channels WHEN NEW.kind IS NOT OLD.kind OR NEW.protected IS NOT OLD.protected BEGIN SELECT RAISE(ABORT,'Channel type and protection cannot change'); END;`);
         },
+        () => {
+            db.exec(`CREATE TRIGGER preserve_default_roles BEFORE DELETE ON roles
+                WHEN OLD.id IN ('owner','member') BEGIN SELECT RAISE(ABORT,'Default roles cannot be deleted'); END;
+                CREATE TRIGGER preserve_default_role_ids BEFORE UPDATE OF id ON roles
+                WHEN OLD.id IN ('owner','member') AND NEW.id IS NOT OLD.id
+                BEGIN SELECT RAISE(ABORT,'Default role IDs cannot change'); END;`);
+        },
     ];
     migrations.forEach((apply, index) => {
         const version = index + 1;

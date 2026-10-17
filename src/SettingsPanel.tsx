@@ -58,6 +58,7 @@ export function SettingsPanel({
 }) {
     const [avatarFile, setAvatarFile] = useState<File | null>(null);
     const [deleteEmoji, setDeleteEmoji] = useState<string | null>(null);
+    const [deleteRole, setDeleteRole] = useState<string | null>(null);
     const sections = [
         ['account', 'My account'],
         ['audio', 'Voice & video'],
@@ -519,7 +520,10 @@ export function SettingsPanel({
                     <>
                         <p className="muted">
                             Roles define name color, chat, voice, and server management access.
-                            Server owners always retain access.
+                            Server owners always retain access. Owner and Member are permanent
+                            roles: they can be edited but cannot be deleted. Deleting a custom role
+                            moves its users to the default Member role, using that role’s current
+                            name and permissions.
                         </p>
                         {state.roles.map((r) => (
                             <div className="role-row" key={r.id}>
@@ -540,11 +544,59 @@ export function SettingsPanel({
                                 </small>
                                 <button
                                     title={`Edit ${r.name} role`}
-                                    disabled={!permission('manage') || r.id === 'owner'}
+                                    aria-label={`Edit ${r.name} role`}
+                                    disabled={
+                                        busy ||
+                                        !permission('manage') ||
+                                        (state.me.role !== 'owner' &&
+                                            (r.id === 'owner' || r.permissions.includes('manage')))
+                                    }
                                     onClick={() => setModal(`role:${r.id}`)}
                                 >
                                     <Pencil size={15} />
                                 </button>
+                                {r.id !== 'owner' && r.id !== 'member' && permission('manage') && (
+                                    <button
+                                        title={`Delete ${r.name} role`}
+                                        aria-label={`Delete ${r.name} role`}
+                                        disabled={
+                                            busy ||
+                                            (state.me.role !== 'owner' &&
+                                                (r.permissions.includes('manage') ||
+                                                    state.users.some((u) => u.role === r.id)))
+                                        }
+                                        onClick={() => setDeleteRole(r.id)}
+                                    >
+                                        <Trash2 size={15} />
+                                    </button>
+                                )}
+                                {deleteRole === r.id && (
+                                    <div className="role-delete-confirm" role="alert">
+                                        <p>
+                                            Delete {r.name}? All users with this role will move to{' '}
+                                            {state.roles.find((role) => role.id === 'member')
+                                                ?.name || 'Member'}{' '}
+                                            with its current permissions. This role’s channel access
+                                            settings will be removed. This cannot be undone.
+                                        </p>
+                                        <button disabled={busy} onClick={() => setDeleteRole(null)}>
+                                            Cancel
+                                        </button>
+                                        <button
+                                            className="danger-bg"
+                                            disabled={busy}
+                                            onClick={() =>
+                                                void act(async () => {
+                                                    await api(`/roles/${r.id}`, 'DELETE');
+                                                    setDeleteRole(null);
+                                                    await refresh();
+                                                })
+                                            }
+                                        >
+                                            Confirm deletion
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         ))}
                         {permission('manage') && (

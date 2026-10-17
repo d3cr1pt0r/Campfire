@@ -138,11 +138,12 @@ export function registerAdministration({
         route((req, res) => {
             requirePermission(req.user, 'manage');
             const role = get('SELECT * FROM roles WHERE id=?', req.params.id);
-            check(role && role.id !== 'owner', 'The owner role cannot be changed', 403);
+            check(role, 'Role not found', 404);
             const { name, color, permissions } = validateRole(req.body);
             check(
                 req.user.role === 'owner' ||
-                    (!permissions.includes('manage') &&
+                    (role.id !== 'owner' &&
+                        !permissions.includes('manage') &&
                         !JSON.parse(role.permissions).includes('manage')),
                 'Only the owner can change management roles',
                 403,
@@ -154,6 +155,37 @@ export function registerAdministration({
                 JSON.stringify(permissions),
                 role.id,
             );
+            enforceCalls();
+            publishChannels();
+            res.json({ ok: true });
+        }),
+    );
+    app.delete(
+        '/api/roles/:id',
+        route((req, res) => {
+            requirePermission(req.user, 'manage');
+            const role = get('SELECT * FROM roles WHERE id=?', req.params.id);
+            check(role, 'Role not found', 404);
+            check(
+                role.id !== 'owner' && role.id !== 'member',
+                'The default owner and member roles cannot be deleted',
+                409,
+            );
+            check(
+                req.user.role === 'owner' || !JSON.parse(role.permissions).includes('manage'),
+                'Only the owner can delete management roles',
+                403,
+            );
+            check(
+                req.user.role === 'owner' ||
+                    !get('SELECT id FROM users WHERE role=? LIMIT 1', role.id),
+                'Only the owner can delete assigned roles and move their users to Member',
+                403,
+            );
+            transaction(db, () => {
+                run('UPDATE users SET role=? WHERE role=?', 'member', role.id);
+                run('DELETE FROM roles WHERE id=?', role.id);
+            });
             enforceCalls();
             publishChannels();
             res.json({ ok: true });

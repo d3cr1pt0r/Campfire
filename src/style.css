@@ -1411,6 +1411,14 @@ small {
     margin: 8px 0;
     font-size: 13px;
 }
+.role-delete-confirm {
+    flex-basis: 100%;
+    order: 2;
+}
+.role-delete-confirm button {
+    padding: 8px 12px;
+    margin-right: 8px;
+}
 .role-member > span {
     flex: 1;
 }
