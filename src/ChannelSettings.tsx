@@ -92,7 +92,7 @@ function ChannelEditor({ state, channel, api, refresh, busy, act }: Props & { ch
                     .filter((role) => role.id !== 'owner')
                     .map((role) => (
                         <label className="channel-access-row" key={role.id}>
-                            {role.name}
+                            <span>{role.name}</span>
                             <select
                                 aria-label={`${role.name} access to ${channel.name}`}
                                 value={modes[role.id] || 'full'}

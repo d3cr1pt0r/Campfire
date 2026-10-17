@@ -1246,12 +1246,37 @@ small {
 .settings-modal {
     width: 850px;
     padding: 0;
-    display: flex;
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
     height: min(720px, 88dvh);
     min-height: 0;
     overflow: hidden;
 }
+.settings-header {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 24px 20px 28px;
+    border-bottom: 1px solid var(--border);
+    min-width: 0;
+}
+.settings-header h2 {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: 23px;
+    overflow-wrap: anywhere;
+}
+.settings-header > .modal-close {
+    position: static;
+    margin-left: auto;
+}
 .settings-nav {
+    grid-column: 1;
+    grid-row: 1 / 3;
     width: 215px;
     flex-shrink: 0;
     background: #202128;
@@ -1281,14 +1306,17 @@ small {
     margin-top: auto;
 }
 .settings-content {
-    padding: 26px 40px 32px 28px;
+    grid-column: 2;
+    grid-row: 2;
+    padding: 20px 28px 32px;
     flex: 1;
     min-width: 0;
     overflow: auto;
     min-height: 0;
+    scrollbar-gutter: stable;
 }
-.settings-content > h2 {
-    margin: 10px 0 25px;
+.settings-content > :first-child {
+    margin-top: 0;
 }
 .settings-hero {
     color: #b0a0ee;
@@ -1316,6 +1344,7 @@ small {
     margin: 25px 0;
 }
 .profile-card .avatar {
+    flex-shrink: 0;
     width: 56px;
     height: 56px;
     font-size: 19px;
@@ -1323,6 +1352,10 @@ small {
 }
 .profile-card h3 {
     margin: 0;
+}
+.profile-card > div {
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 .profile-card p {
     font-size: 12px;
@@ -1388,6 +1421,7 @@ small {
     margin: 8px 0;
 }
 .role-row > i {
+    flex-shrink: 0;
     width: 9px;
     height: 9px;
     border-radius: 50%;
@@ -1415,14 +1449,26 @@ small {
     flex-basis: 100%;
     order: 2;
 }
+.role-delete-confirm,
+.channel-delete-confirm {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.role-delete-confirm > p,
+.channel-delete-confirm > p {
+    flex-basis: 100%;
+    margin: 0 0 4px;
+    overflow-wrap: anywhere;
+}
 .role-delete-confirm button {
     padding: 8px 12px;
-    margin-right: 8px;
 }
 .role-member > span {
     flex: 1;
 }
 .role-member select {
+    margin-top: 0;
     width: 140px;
     font-size: 12px;
     padding: 9px;
@@ -2246,9 +2292,12 @@ small {
 }
 .channel-access-row {
     display: grid;
-    grid-template-columns: 1fr minmax(120px, 160px);
+    grid-template-columns: minmax(0, 1fr) minmax(120px, 160px);
     align-items: center;
     gap: 12px;
+}
+.channel-access-row > span {
+    overflow-wrap: anywhere;
 }
 .channel-access-row select {
     margin: 0;
@@ -2259,7 +2308,6 @@ small {
 }
 .channel-delete-confirm button {
     padding: 9px 12px;
-    margin-right: 10px;
 }
 
 /* Shared interaction and layout rules. Keep every feature reachable at every width. */
@@ -2609,10 +2657,6 @@ label textarea {
     padding: 0;
     width: 920px;
 }
-.settings-content > h2 {
-    padding-right: 18px;
-    font-size: 23px;
-}
 .settings-nav {
     width: 210px;
     min-height: 0;
@@ -2937,11 +2981,12 @@ label textarea {
         padding: 24px 20px;
     }
     .settings-modal {
-        flex-direction: column;
+        grid-template-columns: minmax(0, 1fr);
         height: calc(100dvh - 24px);
         padding: 0;
     }
     .settings-content {
+        grid-column: 1;
         padding: 16px 20px 24px;
     }
     .auth-art {
@@ -3025,9 +3070,11 @@ label textarea {
     gap: 8px;
     align-items: center;
     flex-wrap: wrap;
+    grid-column: 2 / -1;
 }
 .custom-emoji-list > div {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) auto;
     overflow-wrap: anywhere;
 }
 .category > span {
@@ -3044,9 +3091,8 @@ label textarea {
     }
     .settings-mobile-header {
         display: block;
-        padding: 12px 60px 12px 16px;
-        border-bottom: 1px solid var(--border);
-        flex-shrink: 0;
+        flex: 1;
+        min-width: 0;
     }
     .settings-mobile-header select {
         min-height: 40px;
@@ -3055,8 +3101,19 @@ label textarea {
         display: inline-flex;
         margin-top: 24px;
     }
-    .settings-modal > .modal-close {
-        top: 14px;
+    .settings-header {
+        grid-column: 1;
+        gap: 12px;
+        padding: 12px 20px;
+    }
+    .settings-header h2 {
+        display: none;
+    }
+}
+@media (max-width: 480px) {
+    .channel-access-row {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
     }
 }
 

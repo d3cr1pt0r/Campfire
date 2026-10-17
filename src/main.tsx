@@ -1391,14 +1391,16 @@ function App() {
                                 modal !== 'settings' ? 'action-dialog-title' : undefined
                             }
                         >
-                            <button
-                                className="modal-close"
-                                aria-label="Close dialog"
-                                disabled={busy}
-                                onClick={() => setModal(null)}
-                            >
-                                <X size={21} />
-                            </button>
+                            {modal !== 'settings' && (
+                                <button
+                                    className="modal-close"
+                                    aria-label="Close dialog"
+                                    disabled={busy}
+                                    onClick={() => setModal(null)}
+                                >
+                                    <X size={21} />
+                                </button>
+                            )}
                             {modal === 'settings' ? (
                                 <SettingsPanel
                                     state={state}

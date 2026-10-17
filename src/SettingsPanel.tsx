@@ -1,7 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { AvatarCropper } from './AvatarCropper';
 import { ChannelSettings } from './ChannelSettings';
-import { ArrowRight, Bell, LogOut, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowRight, Bell, LogOut, Pencil, Plus, Trash2, X } from 'lucide-react';
 import type { State, Preferences, User } from './types';
 import type { ApiClient } from './api';
 import type { useCall } from './useCall';
@@ -70,22 +70,33 @@ export function SettingsPanel({
     ];
     return (
         <>
-            <div className="settings-mobile-header">
-                <label className="sr-only" htmlFor="settings-section">
-                    Settings section
-                </label>
-                <select
-                    id="settings-section"
-                    value={settingsTab}
-                    onChange={(event) => setSettingsTab(event.target.value)}
+            <header className="settings-header">
+                <h2>{sections.find(([id]) => id === settingsTab)?.[1]}</h2>
+                <div className="settings-mobile-header">
+                    <label className="sr-only" htmlFor="settings-section">
+                        Settings section
+                    </label>
+                    <select
+                        id="settings-section"
+                        value={settingsTab}
+                        onChange={(event) => setSettingsTab(event.target.value)}
+                    >
+                        {sections.map(([id, label]) => (
+                            <option key={id} value={id}>
+                                {label}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                <button
+                    className="modal-close"
+                    aria-label="Close dialog"
+                    disabled={busy}
+                    onClick={() => setModal(null)}
                 >
-                    {sections.map(([id, label]) => (
-                        <option key={id} value={id}>
-                            {label}
-                        </option>
-                    ))}
-                </select>
-            </div>
+                    <X size={21} />
+                </button>
+            </header>
             <nav className="settings-nav" aria-label="Settings sections">
                 <span className="mini-label">SETTINGS</span>
                 {sections.map(([id, label]) => (
@@ -104,21 +115,6 @@ export function SettingsPanel({
                 </button>
             </nav>
             <div className="settings-content" key={settingsTab}>
-                <h2>
-                    {
-                        (
-                            {
-                                account: 'My account',
-                                audio: 'Voice & video',
-                                notifications: 'Notifications',
-                                server: 'Server settings',
-                                roles: 'Roles & permissions',
-                                channels: 'Channels & access',
-                                emojis: 'Custom emojis',
-                            } as Record<string, string>
-                        )[settingsTab]
-                    }
-                </h2>
                 {['audio', 'notifications'].includes(settingsTab) && (
                     <p className="field-help">Preferences save automatically on this device.</p>
                 )}
