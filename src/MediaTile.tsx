@@ -5,6 +5,7 @@ import { AuthImage } from './ChatContent';
 import { ExpandedVideo } from './ExpandedVideo';
 import { AudioPlayback, type AudioPlaybackHandle } from './AudioPlayback';
 import { syncPlaybackTracks } from './playback';
+import { initials } from './profiles';
 
 export function MediaTile({
     stream,
@@ -15,6 +16,7 @@ export function MediaTile({
     watchPending = false,
     onWatch,
     name,
+    avatarName = name,
     muted = false,
     preview = false,
     output = '',
@@ -31,6 +33,7 @@ export function MediaTile({
     watchPending?: boolean;
     onWatch?: (enabled: boolean) => void;
     name: string;
+    avatarName?: string;
     muted?: boolean;
     preview?: boolean;
     output?: string;
@@ -95,12 +98,6 @@ export function MediaTile({
             video.srcObject = null;
         };
     }, [stream, preview, allowVideo, audible, visibleStream]);
-    const initials = name
-        .split(/[ -]/)
-        .map((word) => word[0])
-        .join('')
-        .slice(0, 2)
-        .toUpperCase();
     const retryAudio = () => {
         void voice.current?.play();
         void program.current?.play();
@@ -111,7 +108,7 @@ export function MediaTile({
                 {avatar ? (
                     <AuthImage path={`/avatars/${avatar}`} alt={name} className="call-avatar" />
                 ) : (
-                    initials
+                    initials(avatarName)
                 )}
                 <small>
                     {preview

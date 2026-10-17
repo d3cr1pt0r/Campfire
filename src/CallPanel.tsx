@@ -51,6 +51,7 @@ export function CallPanel({
                 <MediaTile
                     stream={call.local}
                     name={`${displayName(state.me)} (you)`}
+                    avatarName={displayName(state.me)}
                     avatar={state.me.avatar}
                     speaking={speaking.has(state.me.id)}
                     muted

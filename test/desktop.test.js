@@ -165,3 +165,70 @@ test('renderer origin reuses its saved port and falls back only for an occupied 
     await listenRendererServer(invalid, -1);
     assert.deepEqual(invalid.attempts, [0]);
 });
+
+test('clipboard file formats decode multiple Windows paths and local Linux file URLs', () => {
+    const { pathsFromFormat } = require('../electron/clipboard-files.cjs');
+    assert.deepEqual(
+        pathsFromFormat('FileNameW', Buffer.from('C:\\one.txt\0C:\\two.png\0\0', 'utf16le')),
+        ['C:\\one.txt', 'C:\\two.png'],
+    );
+    const header = Buffer.alloc(20);
+    header.writeUInt32LE(20, 0);
+    header.writeUInt32LE(1, 16);
+    assert.deepEqual(
+        pathsFromFormat(
+            'CF_HDROP',
+            Buffer.concat([header, Buffer.from('C:\\one.txt\0C:\\two.png\0\0', 'utf16le')]),
+        ),
+        ['C:\\one.txt', 'C:\\two.png'],
+    );
+    const filename = path.join(tmpdir(), 'my file.txt');
+    const { pathToFileURL } = require('node:url');
+    assert.deepEqual(
+        pathsFromFormat(
+            'text/uri-list',
+            Buffer.from(`# comment\n${pathToFileURL(filename)}\r\nhttps://example.com\n`),
+        ),
+        [filename],
+    );
+});
+
+test('clipboard attachment reads are bounded, copy-only, and ignore ordinary path text', async () => {
+    const { clipboardAttachments } = require('../electron/clipboard-files.cjs');
+    const { pathToFileURL } = await import('node:url');
+    const directory = mkdtempSync(path.join(tmpdir(), 'driskord-clipboard-'));
+    const filename = path.join(directory, 'hello.txt');
+    writeFileSync(filename, 'clipboard file');
+    const raw = 'electron application/osclipboard;format="x-special/gnome-copied-files"';
+    const clipboard = (text) => ({
+        read: async () => [{ types: [raw], getType: async () => new Blob([text]) }],
+        readText: async () => '',
+    });
+    try {
+        const result = await clipboardAttachments(clipboard(`cut\n${pathToFileURL(filename)}\n`));
+        assert.equal(result.files[0].name, 'hello.txt');
+        assert.equal(Buffer.from(result.files[0].data).toString(), 'clipboard file');
+        assert.equal(readFileSync(filename, 'utf8'), 'clipboard file');
+        await assert.rejects(
+            clipboardAttachments(clipboard(`copy\n${pathToFileURL(directory)}\n`)),
+            /Folders/,
+        );
+        writeFileSync(filename, Buffer.alloc(5 * 1024 * 1024 + 1));
+        await assert.rejects(
+            clipboardAttachments(clipboard(`copy\n${pathToFileURL(filename)}\n`)),
+            /5 MB/,
+        );
+        const plain = await clipboardAttachments({
+            read: async () => [],
+            readText: async () => filename,
+        });
+        assert.equal(plain.files.length, 0);
+        assert.equal(plain.text, filename);
+        const image = await clipboardAttachments({
+            read: async () => [{ types: ['image/png'], getType: async () => new Blob(['png']) }],
+        });
+        assert.equal(image.files[0].type, 'image/png');
+    } finally {
+        rmSync(directory, { recursive: true, force: true });
+    }
+});

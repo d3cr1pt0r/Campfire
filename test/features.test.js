@@ -97,3 +97,12 @@ test('display names prefer nicknames while preserving the permanent username as 
     assert.equal(displayName({ nickname: '', username: 'account' }), 'account');
     assert.equal(displayName(undefined, 'Former member'), 'Former member');
 });
+
+test('avatar initials handle single names, hyphens, extra spaces and Unicode names', async () => {
+    const { initials } = await import('../src/profiles.ts');
+    assert.equal(initials('Icy'), 'I');
+    assert.equal(initials(' Alex  Rivera '), 'AR');
+    assert.equal(initials('Jean-Luc'), 'JL');
+    assert.equal(initials('Žiga Čop'), 'ŽČ');
+    assert.equal(initials(''), '?');
+});

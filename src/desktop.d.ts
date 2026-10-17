@@ -1,6 +1,10 @@
 /// <reference types="vite/client" />
 interface Window {
     driskord?: {
+        readClipboardAttachments?: () => Promise<{
+            files: { name: string; data: Uint8Array; type: string }[];
+            text: string;
+        }>;
         getIdleState?: () => Promise<{ seconds: number; locked: boolean } | null>;
         storage: {
             getItem(key: string): string | null;

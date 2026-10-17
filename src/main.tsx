@@ -402,12 +402,16 @@ function App() {
             setError('');
         });
     };
+    const attachmentsRef = useRef(attachments);
+    attachmentsRef.current = attachments;
+    const uploadBusy = useRef(busy);
+    uploadBusy.current = busy;
     const addFiles = (files: File[]) => {
         if (!canPost) {
             notify('This conversation is read-only. Files cannot be uploaded.');
             return;
         }
-        if (busy) {
+        if (uploadBusy.current) {
             notify('Wait for the current upload to finish.');
             return;
         }
@@ -416,9 +420,41 @@ function App() {
             return;
         }
         try {
-            const selected = [...attachments, ...files];
+            const selected = [...attachmentsRef.current, ...files];
             validateFileSelection(selected);
+            attachmentsRef.current = selected;
             setAttachments(selected);
+        } catch (error) {
+            notify((error as Error).message);
+        }
+    };
+    const pasteDesktop = async (textarea: HTMLTextAreaElement) => {
+        if (!window.driskord?.readClipboardAttachments || !canPost) return;
+        const targetRoom = room;
+        const account = state?.me.id;
+        try {
+            const clipboard = await window.driskord.readClipboardAttachments();
+            if (
+                !textarea.isConnected ||
+                document.activeElement !== textarea ||
+                textarea.disabled ||
+                roomRef.current !== targetRoom ||
+                stateRef.current?.me.id !== account
+            )
+                return;
+            if (clipboard.files.length) {
+                addFiles(
+                    clipboard.files.map(
+                        (file) =>
+                            new File([new Uint8Array(file.data)], file.name, { type: file.type }),
+                    ),
+                );
+            } else if (clipboard.text) {
+                // Chromium's text-edit command preserves selection, undo, and
+                // the same React input path as ordinary typing.
+                textarea.focus();
+                document.execCommand('insertText', false, clipboard.text);
+            }
         } catch (error) {
             notify((error as Error).message);
         }
@@ -1322,7 +1358,26 @@ function App() {
                                                     lastTyping.current = Date.now();
                                                 }
                                             }}
+                                            onPaste={(event) => {
+                                                const files = Array.from(event.clipboardData.files);
+                                                if (files.length) {
+                                                    event.preventDefault();
+                                                    addFiles(files);
+                                                }
+                                            }}
                                             onKeyDown={(e) => {
+                                                if (
+                                                    (e.ctrlKey || e.metaKey) &&
+                                                    !e.altKey &&
+                                                    !e.shiftKey &&
+                                                    e.key.toLowerCase() === 'v' &&
+                                                    window.driskord?.readClipboardAttachments
+                                                ) {
+                                                    e.preventDefault();
+                                                    void pasteDesktop(e.currentTarget);
+                                                    return;
+                                                }
+
                                                 if (
                                                     e.key === 'Enter' &&
                                                     !e.shiftKey &&

@@ -8,8 +8,10 @@ const {
     safeStorage,
     shell,
     powerMonitor,
+    clipboard,
 } = require('electron');
 const path = require('node:path');
+const { clipboardAttachments } = require('./clipboard-files.cjs');
 const { createRendererServer, listenRendererServer } = require('./renderer-server.cjs');
 const { createClientState } = require('./client-state.cjs');
 app.setAppUserModelId('org.driskord.desktop');
@@ -40,6 +42,17 @@ else {
                     return false;
                 }
             };
+            let readingClipboard = false;
+            ipcMain.handle('clipboard:attachments', async (event) => {
+                if (!trusted(event.senderFrame?.url)) throw Error('Untrusted clipboard request');
+                if (readingClipboard) throw Error('Wait for the previous paste to finish');
+                readingClipboard = true;
+                try {
+                    return await clipboardAttachments(clipboard);
+                } finally {
+                    readingClipboard = false;
+                }
+            });
             ipcMain.handle('presence:idle-state', (event) => {
                 if (!trusted(event.senderFrame?.url)) return null;
                 const state = powerMonitor.getSystemIdleState(60);

@@ -242,3 +242,65 @@ test('camera/screen changes preserve the audible track and preview never plays l
     assert.deepEqual(audio.getTracks(), [mic]);
     assert.equal(video.getTracks().length, 0);
 });
+
+test('default and already-selected outputs do not trigger redundant device switches', async () => {
+    let attempts = 0;
+    const element = {
+        sinkId: '',
+        setSinkId: async () => {
+            attempts++;
+            throw new DOMException('Backend failed', 'AbortError');
+        },
+    };
+    assert.equal(await selectAudioOutput(element, ''), false);
+    assert.equal(await selectAudioOutput(element, 'default'), false);
+    assert.equal(attempts, 0);
+    element.sinkId = 'headset';
+    assert.equal(await selectAudioOutput(element, 'headset'), false);
+    assert.equal(attempts, 0);
+});
+
+test('failed device switches use default output without retrying a default that is already active', async () => {
+    const calls = [];
+    assert.equal(
+        await selectAudioOutput(
+            {
+                sinkId: '',
+                setSinkId: async (id) => {
+                    calls.push(id);
+                    throw new DOMException('', 'AbortError');
+                },
+            },
+            'broken',
+        ),
+        true,
+    );
+    assert.deepEqual(calls, ['broken']);
+    calls.length = 0;
+    assert.equal(
+        await selectAudioOutput(
+            {
+                sinkId: 'old',
+                setSinkId: async (id) => {
+                    calls.push(id);
+                    if (id) throw new DOMException('', 'AbortError');
+                },
+            },
+            'broken',
+        ),
+        true,
+    );
+    assert.deepEqual(calls, ['broken', '']);
+    await assert.rejects(
+        selectAudioOutput(
+            {
+                sinkId: 'old',
+                setSinkId: async () => {
+                    throw new DOMException('', 'AbortError');
+                },
+            },
+            '',
+        ),
+        { name: 'AbortError' },
+    );
+});

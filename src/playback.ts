@@ -1,14 +1,23 @@
 export async function selectAudioOutput(
-    element: Pick<HTMLMediaElement, 'setSinkId'>,
+    element: Pick<HTMLMediaElement, 'setSinkId'> & { readonly sinkId?: string },
     output: string,
 ): Promise<boolean> {
     if (typeof element.setSinkId !== 'function') return false;
+    const requested = output === 'default' ? '' : output;
+    // Fresh media elements already use the system output. Some backends fail
+    // even a redundant switch, particularly before a source starts playing.
+    if ((element.sinkId === 'default' ? '' : (element.sinkId ?? '')) === requested) return false;
     try {
-        await element.setSinkId(output);
+        await element.setSinkId(requested);
         return false;
     } catch (error) {
         const name = (error as { name?: string })?.name;
-        if (!output || !['NotFoundError', 'OverconstrainedError'].includes(name || '')) throw error;
+        if (
+            !requested ||
+            !['NotFoundError', 'OverconstrainedError', 'AbortError'].includes(name || '')
+        )
+            throw error;
+        if (element.sinkId === '' || element.sinkId === 'default') return true;
         await element.setSinkId('');
         return true;
     }

@@ -83,6 +83,10 @@ export const AudioPlayback = forwardRef<
         if (element.current) element.current.volume = volume;
     }, [volume]);
     useEffect(() => {
+        if (!track) {
+            setNotice('');
+            return;
+        }
         let cancelled = false;
         queue.current = queue.current
             .catch(() => {})
@@ -90,7 +94,7 @@ export const AudioPlayback = forwardRef<
                 const audio = element.current;
                 if (cancelled || !audio) return;
                 try {
-                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const devices = output ? await navigator.mediaDevices.enumerateDevices() : [];
                     if (cancelled) return;
                     const reset = await selectAudioOutput(
                         audio,
@@ -109,7 +113,7 @@ export const AudioPlayback = forwardRef<
         return () => {
             cancelled = true;
         };
-    }, [output, outputLabel, label]);
+    }, [output, outputLabel, label, track]);
     return (
         <>
             <audio ref={element} autoPlay muted={muted} />

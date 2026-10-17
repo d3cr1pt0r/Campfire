@@ -1,13 +1,7 @@
 import type { User } from './types';
-import { displayName } from './profiles';
+import { displayName, initials } from './profiles';
+export { initials } from './profiles';
 import { AuthImage } from './ChatContent';
-export const initials = (s: string) =>
-    s
-        .split(/[ -]/)
-        .map((w) => w[0])
-        .join('')
-        .slice(0, 2)
-        .toUpperCase();
 export function Avatar({
     user,
     color,
