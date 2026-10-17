@@ -532,6 +532,36 @@ small {
     color: #a5a4b7;
     font-size: 12px;
 }
+.voice-member > span:not(.avatar) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+.voice-stream-indicator {
+    flex-shrink: 0;
+    min-height: 28px;
+    gap: 4px;
+    padding: 4px 6px;
+    color: #e4b0ff;
+    background: #ac63df22;
+    font-size: 10px;
+}
+.voice-connected .call-panel-toggle {
+    margin: 8px 0 0;
+    padding: 6px 8px;
+    min-height: 32px;
+    font-size: 12px;
+    color: #bfb5f4;
+}
+.call-panel[hidden] {
+    display: none;
+}
+.call-heading > button {
+    min-width: var(--control-size);
+    min-height: var(--control-size);
+}
 .sidebar-hint {
     color: var(--muted);
     font-size: 12px;

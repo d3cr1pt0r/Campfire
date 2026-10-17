@@ -41,6 +41,7 @@ import {
     Radio,
     Globe,
     Copy,
+    MonitorPlay,
 } from 'lucide-react';
 import type { State, Message, Preferences, User } from './types';
 import { useCall } from './useCall';
@@ -179,6 +180,7 @@ function App() {
     );
     const refresh = stateRefresh.refresh;
     useEffect(() => () => stateRefresh.cancel(), [stateRefresh]);
+    const callPanelToggle = useRef<HTMLButtonElement>(null);
     const call = useCall(socket, prefs, state?.iceServers || [], notify, () =>
         notify(
             'Saved microphone unavailable; using System default for this call. Your selection is kept for next time.',
@@ -840,7 +842,36 @@ function App() {
                                                         small
                                                         speaking={speaking.has(p.user)}
                                                     />
-                                                    {displayName(user(p.user))}
+                                                    <span>{displayName(user(p.user))}</span>
+                                                    {p.shareId && (
+                                                        <button
+                                                            className="voice-stream-indicator"
+                                                            title={
+                                                                p.user === state.me.id
+                                                                    ? 'Open your screen share'
+                                                                    : `Watch ${displayName(user(p.user))}’s stream`
+                                                            }
+                                                            aria-label={
+                                                                p.user === state.me.id
+                                                                    ? 'Open your screen share'
+                                                                    : `Watch ${displayName(user(p.user))}’s stream`
+                                                            }
+                                                            disabled={!permission('voice')}
+                                                            onClick={() => {
+                                                                if (p.socket === socket?.id)
+                                                                    call.setPanelOpen(true);
+                                                                else
+                                                                    call.watchStream(
+                                                                        p.channel,
+                                                                        p.socket,
+                                                                        p.shareId!,
+                                                                    );
+                                                                setNavigationOpen(false);
+                                                            }}
+                                                        >
+                                                            <MonitorPlay size={14} /> LIVE
+                                                        </button>
+                                                    )}
                                                 </div>
                                             ))}
                                     </React.Fragment>
@@ -915,6 +946,19 @@ function App() {
                                 <small>
                                     {callName} / {state.name}
                                 </small>
+                                <button
+                                    className="call-panel-toggle"
+                                    aria-expanded={call.panelOpen}
+                                    aria-controls="call-panel"
+                                    onClick={() => {
+                                        call.setPanelOpen(!call.panelOpen);
+                                        if (call.panelOpen) call.setShowDetails(false);
+                                        setNavigationOpen(false);
+                                    }}
+                                >
+                                    <MonitorPlay size={15} />
+                                    {call.panelOpen ? 'Hide call details' : 'Show call details'}
+                                </button>
                             </div>
                         )}
                         <div className="user-bar">
@@ -1016,6 +1060,25 @@ function App() {
                             </span>
                         </div>
                         <div className="top-actions">
+                            {call.channel && (
+                                <button
+                                    ref={callPanelToggle}
+                                    title={
+                                        call.panelOpen ? 'Hide call details' : 'Show call details'
+                                    }
+                                    aria-label={
+                                        call.panelOpen ? 'Hide call details' : 'Show call details'
+                                    }
+                                    aria-expanded={call.panelOpen}
+                                    aria-controls="call-panel"
+                                    onClick={() => {
+                                        call.setPanelOpen(!call.panelOpen);
+                                        if (call.panelOpen) call.setShowDetails(false);
+                                    }}
+                                >
+                                    <MonitorPlay size={20} />
+                                </button>
+                            )}
                             {view === 'chat' && (
                                 <>
                                     {dmUser && (
@@ -1076,6 +1139,11 @@ function App() {
                     )}
                     {call.channel && (
                         <CallPanel
+                            onHide={() => {
+                                call.setPanelOpen(false);
+                                call.setShowDetails(false);
+                                callPanelToggle.current?.focus();
+                            }}
                             state={state}
                             call={call}
                             prefs={prefs}

@@ -16,7 +16,12 @@ export function registerCalls({
     const callState = () =>
         [...io.sockets.sockets.values()]
             .filter((s) => s.data.call)
-            .map((s) => ({ socket: s.id, user: s.data.user.id, channel: s.data.call }));
+            .map((s) => ({
+                socket: s.id,
+                user: s.data.user.id,
+                channel: s.data.call,
+                shareId: s.data.shareId || null,
+            }));
     // Private call authorization and invitations live only for the active session.
     const privateCalls = new Map();
     const visibleCalls = (user) =>
@@ -223,6 +228,7 @@ export function registerCalls({
                 const peers = callState().filter(
                     (c) => c.channel === channel && c.socket !== socket.id,
                 );
+                if (socket.data.call !== channel) socket.data.shareId = null;
                 socket.data.call = channel;
                 const room = privateCalls.get(channel);
                 if (room) {
@@ -248,6 +254,17 @@ export function registerCalls({
                     : canJoin(user, get('SELECT * FROM channels WHERE id=?', peer.data.call)))
             );
         };
+        socket.on('call:media', (shareId) => {
+            if (!socket.data.call || !allowedInCall(socket)) return;
+            if (
+                shareId !== null &&
+                (typeof shareId !== 'string' || !shareId.length || shareId.length > 80)
+            )
+                return;
+            if ((socket.data.shareId || null) === shareId) return;
+            socket.data.shareId = shareId;
+            broadcastCalls();
+        });
         socket.on('call:speaking', (active) => {
             if (typeof active !== 'boolean' || !socket.data.call || !allowedInCall(socket)) return;
             const now = Date.now();
@@ -263,6 +280,7 @@ export function registerCalls({
         });
         socket.on('call:leave', () => {
             socket.data.call = null;
+            socket.data.shareId = null;
             prunePrivateCalls();
             broadcastCalls();
         });

@@ -53,6 +53,9 @@ export function useCall(
             }[]
         >([]);
     const [showDetails, setShowDetails] = useState(false);
+    const [panelOpen, setPanelOpen] = useState(false);
+    const pendingWatch = useRef<{ socket: string; shareId: string; channel: string } | null>(null);
+    const pendingWatchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const [details, setDetails] = useState<
         {
             id: string;
@@ -130,6 +133,10 @@ export function useCall(
     const leave = () => {
         const wasInCall = !!callChannel.current;
         operation.current++;
+        pendingWatch.current = null;
+        clearTimeout(pendingWatchTimer.current);
+        setPanelOpen(false);
+        setShowDetails(false);
         socket?.emit('call:leave');
         callChannel.current = null;
         setChannel(null);
@@ -167,6 +174,7 @@ export function useCall(
             .forEach((track) => (track.enabled = p.media.sharing && p.watching));
     };
     const syncMedia = async () => {
+        socket?.emit('call:media', shareId.current);
         const track = currentVideo();
         setLocal(track ? new MediaStream([track]) : null);
         await Promise.all(
@@ -295,6 +303,14 @@ export function useCall(
                     }
                     peer.media = data.media;
                     receivedTrackGate(peer);
+                    const target = pendingWatch.current;
+                    if (target?.socket === from && target.channel === callChannel.current) {
+                        pendingWatch.current = null;
+                        clearTimeout(pendingWatchTimer.current);
+                        if (target.shareId === peer.media.shareId && peer.media.sharing)
+                            watch(from, true);
+                        else report('That screen share has ended.');
+                    }
                     updateRemote();
                 }
                 if (acceptsWatch(data.watch, shareId.current, peer.watchRevision)) {
@@ -333,6 +349,20 @@ export function useCall(
             }
         };
         const calls = (members: CallMember[]) => {
+            const target = pendingWatch.current;
+            if (
+                target &&
+                !members.some(
+                    (member) =>
+                        member.socket === target.socket &&
+                        member.channel === target.channel &&
+                        member.shareId === target.shareId,
+                )
+            ) {
+                pendingWatch.current = null;
+                clearTimeout(pendingWatchTimer.current);
+                report('That screen share has ended.');
+            }
             const ids = new Set(
                 members.filter((c) => c.channel === callChannel.current).map((c) => c.socket),
             );
@@ -488,12 +518,13 @@ export function useCall(
             clearInterval(timer);
         };
     }, [channel, showDetails]);
-    const join = async (id: string) => {
+    const join = async (id: string, target?: { socket: string; shareId: string }) => {
         if (!socket?.connected) {
             report('Connect to the server before joining a call.');
             return;
         }
         leave();
+        if (target) queueWatch({ ...target, channel: id });
         const attempt = operation.current;
         try {
             const { stream, usedDefault } = await openMicrophone(prefs);
@@ -522,6 +553,7 @@ export function useCall(
                             return;
                         }
                         setChannel(id);
+                        setPanelOpen(!!target);
                         audio.current
                             ?.getTracks()
                             .forEach(
@@ -655,7 +687,32 @@ export function useCall(
         }, 10000);
         send(id, { watch: { shareId: peer.media.shareId, enabled, revision } });
     };
+    const queueWatch = (target: { socket: string; shareId: string; channel: string }) => {
+        clearTimeout(pendingWatchTimer.current);
+        pendingWatch.current = target;
+        pendingWatchTimer.current = setTimeout(() => {
+            if (!pendingWatch.current) return;
+            pendingWatch.current = null;
+            report(
+                'Could not start watching the screen share. Open the call details to try again.',
+            );
+        }, 20000);
+    };
+    const watchStream = (channel: string, id: string, expectedShare: string) => {
+        if (callChannel.current !== channel) {
+            void join(channel, { socket: id, shareId: expectedShare });
+            return;
+        }
+        setPanelOpen(true);
+        const peer = peers.current.get(id);
+        if (peer?.media.sharing && peer.media.shareId === expectedShare) {
+            if (!peer.watching) watch(id, true);
+        } else queueWatch({ socket: id, shareId: expectedShare, channel });
+    };
     return {
+        panelOpen,
+        setPanelOpen,
+        watchStream,
         watch,
         microphone: audio.current,
         showDetails,

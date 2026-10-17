@@ -3,11 +3,12 @@ import type { State, User, Preferences } from './types';
 import type { useCall } from './useCall';
 
 import { displayName } from './profiles';
-import { Volume2, MicOff, Mic, Video, VideoOff, MonitorUp, PhoneOff } from 'lucide-react';
+import { Volume2, MicOff, Mic, Video, VideoOff, MonitorUp, PhoneOff, X } from 'lucide-react';
 import { MediaTile } from './MediaTile';
 
 export function CallPanel({
     state,
+    onHide,
     call,
     prefs,
     speaking,
@@ -17,6 +18,7 @@ export function CallPanel({
     user,
 }: {
     state: State;
+    onHide: () => void;
     call: ReturnType<typeof useCall>;
     prefs: Preferences;
     speaking: Set<string>;
@@ -26,7 +28,12 @@ export function CallPanel({
     user: (id: string) => User | undefined;
 }) {
     return (
-        <section className="call-panel">
+        <section
+            id="call-panel"
+            className="call-panel"
+            hidden={!call.panelOpen}
+            aria-label="Call details"
+        >
             <div className="call-heading">
                 <span>
                     <Volume2 size={17} />
@@ -36,6 +43,9 @@ export function CallPanel({
                 <small>
                     {state.calls.filter((c) => c.channel === call.channel).length} / 8 connected
                 </small>
+                <button aria-label="Hide call details" title="Hide call details" onClick={onHide}>
+                    <X size={18} />
+                </button>
             </div>
             <div className="video-grid">
                 <MediaTile
@@ -109,7 +119,7 @@ export function CallPanel({
                     aria-expanded={call.showDetails}
                     onClick={() => call.setShowDetails(!call.showDetails)}
                 >
-                    Call details
+                    Connection diagnostics
                 </button>
             </div>
             {call.showDetails && (

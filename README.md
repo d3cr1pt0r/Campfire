@@ -238,7 +238,7 @@ Joining a call does not subscribe you to screen shares. Each streamer has a **Wa
 
 Subscriptions control the sender's actual WebRTC tracks: a non-subscriber has no screen video or system-audio track attached to their outgoing connection. On unsubscribe, the sender detaches both tracks and acknowledges completion. The UI shows **Stopping stream…** until confirmed; previously sent packets can finish arriving during that transition. Small signaling/connection-maintenance traffic and voice continue. A missing confirmation closes that peer connection after ten seconds rather than leaving an unconfirmed subscription running. Other viewers remain subscribed.
 
-Every new screen share starts with zero subscribers, even after restarting a share or reconnecting. Webcam video keeps its existing automatic behavior. Voice and Stream volumes are independent and local to each participant tile; they reset when reconnecting. Stream volume does not subscribe/unsubscribe: use Watch/Stop watching to control bandwidth. Call details exposes cumulative video/system-audio bytes sent/received to help verify that stream counters stop increasing after unsubscribe.
+Every new screen share starts with zero subscribers, even after restarting a share or reconnecting. Webcam video keeps its existing automatic behavior. Voice and Stream volumes are independent and local to each participant tile; they reset when reconnecting. Stream volume does not subscribe/unsubscribe: use Watch/Stop watching to control bandwidth. Connection diagnostics exposes cumulative video/system-audio bytes sent/received to help verify that stream counters stop increasing after unsubscribe.
 
 **Update all participants' clients before calling.** The new media protocol separates voice and system audio and rejects older clients that mix them. Restart the updated server for nickname support, then restart Linux clients / rebuild the Windows EXE. No new ports are required.
 
@@ -257,6 +257,14 @@ Every new screen share starts with zero subscribers, even after restarting a sha
 - Voice channel names accept capitals and spaces, such as `Test Room`; text channel names normalize to lowercase and hyphens.
 
 Restart the updated server with `npm run server` and update/restart all clients (`npm start` on Linux; rebuild/download the Windows portable EXE). New profile/avatar/emoji tables are created automatically without changing existing messages/accounts. No new dependency or port forward is required. Keep your normal database backup before updating.
+
+## Call panel and stream indicators
+
+Joining a voice channel or private call keeps the large call panel hidden by default. Use **Show call details** in the sidebar’s Voice connected area, or the monitor/play button in the top bar, to open it. Close it with the panel’s **Hide call details** button or either toggle. Hiding preserves the call, audio playback, participant volumes, and any active stream subscription. Use **Stop watching** to unsubscribe. Packet/ICE diagnostics are available separately under **Connection diagnostics** inside the panel.
+
+A **LIVE** button appears beside each screen-sharing participant in a voice channel, including before you join. Clicking it joins that channel if necessary, opens the panel, and subscribes to that participant’s current share. Joining another channel leaves your previous call. Clicking your own LIVE button opens your preview. Stopping a share, leaving/disconnecting, or losing channel access removes its indicator; a restarted share requires a new Watch action. Hidden channels and private calls retain their existing roster visibility restrictions.
+
+Update/restart the server and rebuild/restart clients for the new share-availability roster event. The indicator carries availability metadata only; screen media remains sender-gated to explicit subscribers.
 
 ## Large message histories and previews
 

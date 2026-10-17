@@ -29,6 +29,7 @@ export type CallMember = {
     socket: string;
     user: string;
     channel: string;
+    shareId?: string | null;
 };
 export type State = {
     me: User;
@@ -108,6 +109,7 @@ export interface ServerEvents {
     signal: (event: { from: string; user: string; data: CallSignal }) => void;
 }
 export interface ClientEvents {
+    'call:media': (shareId: string | null) => void;
     'presence:idle': (idle: boolean) => void;
     typing: (room: string) => void;
     'call:join': (channel: string, ack: (result: JoinResult) => void) => void;
