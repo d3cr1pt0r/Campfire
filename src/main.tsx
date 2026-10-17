@@ -1,3 +1,4 @@
+import { shouldNotify, createNotificationSound } from './notifications';
 import { version as appVersion } from '../package.json';
 import { ChatComposer } from './ChatComposer';
 import { ThreadPanel } from './ThreadPanel';
@@ -230,29 +231,46 @@ function App() {
             ),
         );
         s.on('calls', (calls) => setState((prev) => (prev ? { ...prev, calls } : null)));
+        const messageSound = createNotificationSound();
+        const seenMessages = new Set<string>();
         s.on('message', (m: Message) => {
+            if (seenMessages.has(m.id)) return;
+            seenMessages.add(m.id);
+            if (seenMessages.size > 1000) seenMessages.delete(seenMessages.values().next().value!);
             if (m.room !== roomRef.current || viewRef.current !== 'chat')
                 setUnread((prev) => ({ ...prev, [m.room]: (prev[m.room] || 0) + 1 }));
+            const me = stateRef.current?.me;
+            const preferences = prefsRef.current;
+            if (!me || !shouldNotify(m, me, preferences, url, stateRef.current?.users)) return;
+            if (preferences.messageSounds !== false) messageSound.play();
             if (
-                m.author !== stateRef.current?.me.id &&
-                prefsRef.current.notifications &&
-                stateRef.current?.me.status !== 'dnd' &&
-                document.visibilityState === 'hidden' &&
+                preferences.notifications &&
+                (document.visibilityState === 'hidden' || !document.hasFocus()) &&
+                'Notification' in window &&
                 Notification.permission === 'granted'
-            )
-                new Notification(stateRef.current?.name || 'Driskord', {
-                    body: `${displayName(
+            ) {
+                try {
+                    const sender = displayName(
                         stateRef.current?.users.find((u) => u.id === m.author),
                         'Someone',
-                    )} sent a message`,
-                    silent: !prefsRef.current.sounds,
-                });
+                    );
+                    new Notification(stateRef.current?.name || 'Driskord', {
+                        body: m.room.startsWith('dm:')
+                            ? `${sender} sent you a direct message`
+                            : `${sender} mentioned you`,
+                        silent: true,
+                    });
+                } catch {
+                    /* OS notifications are optional; do not interrupt message handling. */
+                }
+            }
         });
         s.on('typing', ({ room: r, user, thread }) => {
             if (!thread && r === roomRef.current && user !== stateRef.current?.me.id)
                 setTyping((prev) => ({ ...prev, [user]: Date.now() + 3500 }));
         });
         return () => {
+            messageSound.close();
             s.disconnect();
             setSocket(null);
             setConnected(false);
@@ -865,6 +883,10 @@ function App() {
                                             className={`nav-item channel ${call.channel === c.id ? 'in-call' : ''}`}
                                             onClick={() => {
                                                 if (call.channel !== c.id) void call.join(c.id);
+                                                else {
+                                                    call.setPanelOpen(!call.panelOpen);
+                                                    if (call.panelOpen) call.setShowDetails(false);
+                                                }
                                             }}
                                         >
                                             <Volume2 size={20} />
@@ -924,6 +946,10 @@ function App() {
                                         disabled={!!call.channel && call.channel !== c.id}
                                         onClick={() => {
                                             if (call.channel !== c.id) void call.join(c.id);
+                                            else {
+                                                call.setPanelOpen(!call.panelOpen);
+                                                if (call.panelOpen) call.setShowDetails(false);
+                                            }
                                         }}
                                     >
                                         <Phone size={18} />
@@ -1161,7 +1187,9 @@ function App() {
                             )}
                             <span
                                 className={`connection-status ${connected ? '' : 'disconnected'}`}
-                                title={connected ? 'Connected' : 'Disconnected'}
+                                title={
+                                    connected ? 'Connected to server' : 'Disconnected from server'
+                                }
                             >
                                 <i />
                                 <span className="sr-only">
@@ -1301,6 +1329,7 @@ function App() {
                                     }}
                                 />
                                 <ChatComposer
+                                    users={state.users}
                                     attachments={attachments}
                                     setAttachments={setAttachments}
                                     draft={draft}

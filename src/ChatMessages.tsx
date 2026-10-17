@@ -273,6 +273,7 @@ export function ChatMessages({
                                             </div>
                                             <p>
                                                 <ChatContent
+                                                    users={state.users}
                                                     text={m.body}
                                                     custom={state.emojis || []}
                                                 />

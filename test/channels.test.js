@@ -238,3 +238,64 @@ test('legacy custom channel names are retained and one channel of each type beco
         db.close();
     }
 });
+
+test('channel ordering is type-specific, manager-only, persistent and preserves hidden channels', async (t) => {
+    const f = await fixture(t),
+        { owner, member, api } = f;
+    const text = await api(owner, '/channels', 'POST', { name: 'another-text', kind: 'text' });
+    const voice = await api(owner, '/channels', 'POST', { name: 'Another voice', kind: 'voice' });
+    await api(member, `/channels/${text.id}/move`, 'POST', { direction: 'up' }, 403);
+    await api(owner, `/channels/${text.id}/move`, 'POST', { direction: 'sideways' }, 400);
+    await api(owner, `/channels/${text.id}/move`, 'POST', { direction: 'up' });
+    let state = await api(owner, '/state');
+    assert.deepEqual(
+        state.channels.filter((c) => c.kind === 'text').map((c) => c.id),
+        ['general', text.id, 'introductions'],
+    );
+    assert.deepEqual(
+        state.channels.filter((c) => c.kind === 'voice').map((c) => c.id),
+        ['lounge', voice.id],
+    );
+    assert.deepEqual(
+        state.channels.map((c) => c.kind),
+        ['text', 'text', 'text', 'voice', 'voice'],
+    );
+    await api(owner, '/channels/general/move', 'POST', { direction: 'down' });
+    await api(owner, `/channels/${voice.id}/move`, 'POST', { direction: 'up' });
+    await f.restart();
+    state = await api(owner, '/state');
+    assert.deepEqual(
+        state.channels.filter((c) => c.kind === 'text').map((c) => c.id),
+        [text.id, 'general', 'introductions'],
+    );
+    assert.deepEqual(
+        state.channels.filter((c) => c.kind === 'voice').map((c) => c.id),
+        [voice.id, 'lounge'],
+    );
+    // An edge move is a successful no-op.
+    await api(owner, `/channels/${voice.id}/move`, 'POST', { direction: 'up' });
+    const role = await api(owner, '/roles', 'POST', {
+        name: 'Manager',
+        color: '#123456',
+        permissions: ['manage', 'send', 'voice'],
+    });
+    await api(owner, `/users/${member.user.id}/role`, 'PATCH', { role: role.id });
+    await api(owner, `/channels/general/access`, 'PUT', {
+        permissions: [{ role: role.id, mode: 'hidden' }],
+    });
+    await api(member, '/channels/general/move', 'POST', { direction: 'up' }, 404);
+    const before = (await api(owner, '/state')).channels.find((c) => c.id === 'general').position;
+    await api(member, '/channels/introductions/move', 'POST', { direction: 'up' });
+    state = await api(owner, '/state');
+    assert.equal(state.channels.find((c) => c.id === 'general').position, before);
+    assert.deepEqual(
+        state.channels.filter((c) => c.kind === 'text').map((c) => c.id),
+        ['introductions', 'general', text.id],
+    );
+    // New channels append after existing channels of their type.
+    const last = await api(owner, '/channels', 'POST', { name: 'last', kind: 'text' });
+    assert.equal(
+        (await api(owner, '/state')).channels.filter((c) => c.kind === 'text').at(-1).id,
+        last.id,
+    );
+});

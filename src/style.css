@@ -3348,3 +3348,104 @@ button:disabled {
         position: relative;
     }
 }
+
+/* Compact channel management: expand only the channel being edited. */
+.channel-settings-list > section {
+    margin: 14px 0;
+}
+.channel-settings-list > section > h3 {
+    margin: 12px 0 6px;
+}
+.channel-settings-item {
+    border-bottom: 1px solid var(--border);
+}
+.channel-settings-summary {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 0;
+}
+.channel-settings-summary > button {
+    min-width: 32px;
+    min-height: 32px;
+}
+.channel-settings-summary .channel-settings-expand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+}
+.channel-settings-expand > span {
+    overflow-wrap: anywhere;
+    flex: 1;
+}
+.channel-settings-expand small {
+    color: var(--muted);
+    font-size: 11px;
+}
+.channel-settings-expand[aria-expanded='true'] > svg:last-child {
+    transform: rotate(180deg);
+}
+.channel-settings-list .channel-settings-card {
+    margin: 0 0 8px;
+    padding: 12px;
+}
+.channel-settings-list .channel-settings-card h3 {
+    margin: 0 0 10px;
+}
+.channel-settings-list .channel-settings-card form {
+    margin: 0 0 12px;
+}
+.channel-settings-list .channel-settings-card label {
+    margin: 6px 0;
+}
+.channel-settings-list .channel-settings-card p {
+    margin: 6px 0;
+}
+.channel-settings-list .channel-settings-card input {
+    margin: 4px 0;
+}
+.channel-settings-list .channel-access-row {
+    gap: 8px;
+}
+.message-mention {
+    color: #d2c6ff;
+    background: #a58bf526;
+    border-radius: 3px;
+    padding: 0 2px;
+}
+.mention-suggestions {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px;
+    margin-bottom: 6px;
+    max-height: 190px;
+    overflow-y: auto;
+    background: #252630;
+}
+.mention-suggestions > button {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 8px 10px;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+.mention-suggestions > button span {
+    color: var(--muted);
+    font-size: 12px;
+}
+.mention-suggestions > button[aria-selected='true'] {
+    background: #a58bf526;
+    border-radius: 4px;
+}
+.dm-notification-settings {
+    margin-top: 16px;
+}
+.dm-notification-settings > summary {
+    cursor: pointer;
+    padding: 8px 0;
+}

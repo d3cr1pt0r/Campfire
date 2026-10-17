@@ -34,7 +34,9 @@ export function createChannelAccess({ get, all, can, userFor, io }) {
                 entry.mode,
             ]),
         );
-        return all('SELECT * FROM channels').flatMap((channel) => {
+        return all(
+            "SELECT * FROM channels ORDER BY CASE kind WHEN 'text' THEN 0 ELSE 1 END,position,rowid",
+        ).flatMap((channel) => {
             const access = user.role === 'owner' ? 'full' : overrides.get(channel.id) || 'full';
             if (access === 'hidden' || (channel.kind === 'voice' && (!voice || access !== 'full')))
                 return [];

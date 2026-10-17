@@ -305,3 +305,16 @@ The integration suite covers separate accounts/clients, live messages, DM isolat
 **Current environment result:** actual `npm run check` and `npm run build` now pass with installed dependencies; 70 tests pass in `npm run test:unit` across security, SQLite schema, desktop state, microphone capture, voice signaling/playback, stream subscriptions and separate audio, microphone metering, multi-file uploads, profiles, previews, custom reactions and private-call authorization. The new request-handler tests run without listening sockets; the existing real-socket integration tests are blocked here because the sandbox denies listening on localhost (`listen EPERM`). The portable build command completes checking/building but cannot download electron-builder because npm DNS is unavailable. No `.exe` has been produced or tested here. Electron launch, Docker build, live media, and Windows portable launch still need validation. The existing package lock pins application dependencies; the packaging tool is separately pinned in the build command.
 
 See [IMPLEMENTATION.md](IMPLEMENTATION.md) for architecture, data model, event/API contracts, extension guidance, and remaining work.
+
+
+## Channel order, mentions, and notification preferences
+
+In **Settings → Channels & access**, text channels appear before voice channels. Select a channel to expand its name/access settings; use its up/down buttons to reorder channels within that type. Reordering requires **Manage server, channels, roles & messages**, is saved on the server, and appears for other clients. Clicking the name of a voice channel you have already joined shows/hides call details without leaving the call.
+
+Type `@` followed by a permanent username in chat or a thread to see suggestions. Use Up/Down and Enter to complete a mention, click a suggestion, or press Escape to dismiss. Enter completion inserts the username; press Enter again to send. Nicknames appear in suggestions, but tags use usernames.
+
+**Settings → Notifications** controls a soft chime for incoming DMs and direct mentions, background desktop alerts, and per-channel/per-person opt-outs. Ordinary channel messages do not alert. Do not disturb silences message sounds and desktop alerts. Sounds and DM/mention subscriptions start enabled; desktop alerts require opt-in and OS permission. Sound playback needs an initial interaction with the app. Preferences are saved on this device; conversation overrides are scoped to the current account and server and also cover thread replies.
+
+The green dot beside message search indicates the server connection. Microphone noise processing uses Chromium's built-in suppression, echo cancellation, and automatic gain control, controlled together by the Voice & video toggle. It does not include a dedicated RNNoise/AI denoiser. Rejoin a call after changing microphone processing settings.
+
+Restart the backend and update/rebuild clients for persistent channel ordering and the new client controls. Existing channel order is retained within each type by migration 6.

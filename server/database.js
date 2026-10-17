@@ -73,6 +73,11 @@ export function migrate(db) {
                 WHEN NEW.thread IS NOT OLD.thread OR NEW.room IS NOT OLD.room
                 BEGIN SELECT RAISE(ABORT,'Message conversation cannot change'); END;`);
         },
+        () => {
+            db.exec(`ALTER TABLE channels ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+                UPDATE channels SET position=rowid;
+                CREATE INDEX channels_kind_position ON channels(kind,position);`);
+        },
     ];
     migrations.forEach((apply, index) => {
         const version = index + 1;

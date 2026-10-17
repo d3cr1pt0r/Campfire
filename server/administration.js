@@ -25,7 +25,16 @@ export function registerAdministration({
                 check(false, e.message);
             }
             const id = randomUUID();
-            run('INSERT INTO channels(id,name,kind) VALUES(?,?,?)', id, name, req.body.kind);
+            run(
+                'INSERT INTO channels(id,name,kind,position) VALUES(?,?,?,?)',
+                id,
+                name,
+                req.body.kind,
+                get(
+                    'SELECT COALESCE(MAX(position),0)+1 position FROM channels WHERE kind=?',
+                    req.body.kind,
+                ).position,
+            );
             publishChannels();
             res.json({ id });
         }),
@@ -40,6 +49,43 @@ export function registerAdministration({
         );
         return channel;
     };
+    app.post(
+        '/api/channels/:id/move',
+        route((req, res) => {
+            const channel = managedChannel(req);
+            check(['up', 'down'].includes(req.body.direction), 'Invalid move direction');
+            transaction(db, () => {
+                const channels = all(
+                    'SELECT * FROM channels WHERE kind=? ORDER BY position,rowid',
+                    channel.kind,
+                ).filter((entry) => canRead(req.user, entry) || canJoin(req.user, entry));
+                const index = channels.findIndex((entry) => entry.id === channel.id);
+                const other = channels[index + (req.body.direction === 'up' ? -1 : 1)];
+                if (other) {
+                    // Renumber first so even imported channels with tied positions move reliably.
+                    const ordered = all(
+                        'SELECT id FROM channels WHERE kind=? ORDER BY position,rowid',
+                        channel.kind,
+                    );
+                    ordered.forEach((entry, position) =>
+                        run('UPDATE channels SET position=? WHERE id=?', position, entry.id),
+                    );
+                    const first = get(
+                        'SELECT position FROM channels WHERE id=?',
+                        channel.id,
+                    ).position;
+                    const second = get(
+                        'SELECT position FROM channels WHERE id=?',
+                        other.id,
+                    ).position;
+                    run('UPDATE channels SET position=? WHERE id=?', second, channel.id);
+                    run('UPDATE channels SET position=? WHERE id=?', first, other.id);
+                }
+            });
+            publishChannels();
+            res.json({ ok: true });
+        }),
+    );
     app.patch(
         '/api/channels/:id',
         route((req, res) => {

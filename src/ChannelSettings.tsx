@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ArrowUp, ArrowDown, ChevronDown, Hash, Volume2 } from 'lucide-react';
 import type { State, Channel, ChannelAccess } from './types';
 import type { ApiClient } from './api';
 
@@ -10,21 +11,71 @@ type Props = {
     act: (fn: () => Promise<unknown>) => Promise<void>;
 };
 export function ChannelSettings(props: Props) {
+    const [expanded, setExpanded] = useState<string | null>(null);
+    const move = (channel: Channel, direction: 'up' | 'down') =>
+        void props.act(async () => {
+            await props.api(`/channels/${channel.id}/move`, 'POST', { direction });
+            await props.refresh();
+        });
     return (
-        <>
-            <p>
-                Each server keeps one permanent text channel and one permanent voice channel. You
-                can rename them. Additional channels can be deleted.
-            </p>
+        <div className="channel-settings-list">
             <p className="muted">
-                Role access applies below the role’s global permissions. The owner always retains
-                full access. Read-only channels allow viewing and downloading, without message
-                changes.
+                Select a channel to edit its name and role access. Use the arrows to reorder
+                channels within each type. Permanent channels can be renamed and reordered.
             </p>
-            {props.state.channels.map((channel) => (
-                <ChannelEditor key={channel.id} {...props} channel={channel} />
-            ))}
-        </>
+            {(['text', 'voice'] as const).map((kind) => {
+                const channels = props.state.channels.filter((channel) => channel.kind === kind);
+                return (
+                    <section key={kind} aria-label={`${kind} channel settings`}>
+                        <h3>{kind === 'text' ? 'Text channels' : 'Voice channels'}</h3>
+                        {channels.map((channel, index) => (
+                            <div className="channel-settings-item" key={channel.id}>
+                                <div className="channel-settings-summary">
+                                    <button
+                                        className="channel-settings-expand"
+                                        aria-expanded={expanded === channel.id}
+                                        aria-controls={`channel-editor-${channel.id}`}
+                                        onClick={() =>
+                                            setExpanded(expanded === channel.id ? null : channel.id)
+                                        }
+                                    >
+                                        {kind === 'text' ? (
+                                            <Hash size={17} />
+                                        ) : (
+                                            <Volume2 size={17} />
+                                        )}
+                                        <span>{channel.name}</span>
+                                        {channel.protected && <small>Permanent</small>}
+                                        <ChevronDown size={16} />
+                                    </button>
+                                    <button
+                                        title="Move up"
+                                        aria-label={`Move ${channel.name} up`}
+                                        disabled={props.busy || index === 0}
+                                        onClick={() => move(channel, 'up')}
+                                    >
+                                        <ArrowUp size={16} />
+                                    </button>
+                                    <button
+                                        title="Move down"
+                                        aria-label={`Move ${channel.name} down`}
+                                        disabled={props.busy || index === channels.length - 1}
+                                        onClick={() => move(channel, 'down')}
+                                    >
+                                        <ArrowDown size={16} />
+                                    </button>
+                                </div>
+                                {expanded === channel.id && (
+                                    <div id={`channel-editor-${channel.id}`}>
+                                        <ChannelEditor {...props} channel={channel} />
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </section>
+                );
+            })}
+        </div>
     );
 }
 

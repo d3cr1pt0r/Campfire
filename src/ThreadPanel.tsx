@@ -295,6 +295,7 @@ export function ThreadPanel(props: Props) {
                 </div>
             )}
             <ChatComposer
+                users={state.users}
                 attachments={attachments}
                 setAttachments={setAttachments}
                 draft={draft}

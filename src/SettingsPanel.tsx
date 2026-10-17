@@ -1,3 +1,5 @@
+import { notificationKey } from './notifications';
+import { canonicalRoom } from '../shared/rooms.js';
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { AvatarCropper } from './AvatarCropper';
 import { ChannelSettings } from './ChannelSettings';
@@ -139,8 +141,8 @@ export function SettingsPanel({
                             </select>
                         </label>
                         <p className="field-help">
-                            Do not disturb silences desktop message notifications. You can still
-                            receive messages and join calls.
+                            Do not disturb silences message sounds and desktop notifications. You
+                            can still receive messages and join calls.
                         </p>
                         <Toggle
                             title="Set Idle automatically when I’m away"
@@ -391,10 +393,15 @@ export function SettingsPanel({
                             </select>
                         </label>
                         <Toggle
-                            title="Noise suppression & echo cancellation"
+                            title="Built-in noise suppression, echo cancellation & auto gain"
                             value={prefs.noise}
                             set={(v) => setPrefs({ ...prefs, noise: v })}
                         />
+                        <p className="muted">
+                            Uses Chromium’s built-in WebRTC audio processing. No separate RNNoise or
+                            AI denoiser is installed. Quality depends on your microphone and audio
+                            backend; rejoin the call after changing this setting.
+                        </p>
                         <Toggle
                             title="Push-to-talk (hold Space while app is focused)"
                             value={prefs.pushToTalk}
@@ -492,7 +499,8 @@ export function SettingsPanel({
                         <Bell className="settings-hero" size={42} />
                         <p className="muted">
                             Get a desktop notification for new messages while the app is in the
-                            background. Message text stays out of notifications.
+                            background for DMs and direct @mentions. Message text stays out of
+                            notifications.
                         </p>
                         <Toggle
                             title="Desktop notifications"
@@ -514,6 +522,90 @@ export function SettingsPanel({
                                 })
                             }
                         />
+                        <Toggle
+                            title="Soft message notification sound"
+                            value={prefs.messageSounds !== false}
+                            set={(value) =>
+                                setPrefs((previous) => ({ ...previous, messageSounds: value }))
+                            }
+                        />
+                        <Toggle
+                            title="Notify for direct messages"
+                            value={prefs.dmNotifications !== false}
+                            set={(value) =>
+                                setPrefs((previous) => ({ ...previous, dmNotifications: value }))
+                            }
+                        />
+                        <Toggle
+                            title="Notify for direct @mentions"
+                            value={prefs.mentionNotifications !== false}
+                            set={(value) =>
+                                setPrefs((previous) => ({
+                                    ...previous,
+                                    mentionNotifications: value,
+                                }))
+                            }
+                        />
+                        <p className="muted">
+                            Do not disturb silences message sounds and desktop notifications. Sounds
+                            start after you interact with the app. These preferences are saved on
+                            this device; conversation overrides below apply to your current account
+                            on this server.
+                        </p>
+                        <h3>Text channels</h3>
+                        <p className="muted">
+                            Turn a channel off to silence its direct mentions, including thread
+                            replies. Ordinary channel messages do not trigger alerts.
+                        </p>
+                        {state.channels
+                            .filter((channel) => channel.kind === 'text')
+                            .map((channel) => {
+                                const key = notificationKey(url, state.me.id, channel.id);
+                                return (
+                                    <Toggle
+                                        key={key}
+                                        title={`#${channel.name} notifications`}
+                                        value={prefs.channelNotifications?.[key] !== false}
+                                        set={(value) =>
+                                            setPrefs((previous) => ({
+                                                ...previous,
+                                                channelNotifications: {
+                                                    ...previous.channelNotifications,
+                                                    [key]: value,
+                                                },
+                                            }))
+                                        }
+                                    />
+                                );
+                            })}
+                        <details className="dm-notification-settings">
+                            <summary>Individual direct messages</summary>
+                            {state.users
+                                .filter((candidate) => candidate.id !== state.me.id)
+                                .map((candidate) => {
+                                    const key = notificationKey(
+                                        url,
+                                        state.me.id,
+                                        canonicalRoom(`dm:${state.me.id}:${candidate.id}`),
+                                    );
+                                    return (
+                                        <Toggle
+                                            key={key}
+                                            title={`@${candidate.username} notifications`}
+                                            value={prefs.channelNotifications?.[key] !== false}
+                                            set={(value) =>
+                                                setPrefs((previous) => ({
+                                                    ...previous,
+                                                    channelNotifications: {
+                                                        ...previous.channelNotifications,
+                                                        [key]: value,
+                                                    },
+                                                }))
+                                            }
+                                        />
+                                    );
+                                })}
+                        </details>
                     </>
                 )}
                 {settingsTab === 'server' && (

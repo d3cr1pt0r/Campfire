@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { mentionQuery, completeMention } from './mentions';
 import { Paperclip, X, Plus, Smile, Send } from 'lucide-react';
 import { displayName } from './profiles';
 import type { User } from './types';
@@ -22,6 +23,7 @@ type Props = {
     user: (id: string) => User | undefined;
     placeholder: string;
     label?: string;
+    users: User[];
 };
 export function ChatComposer({
     attachments,
@@ -42,7 +44,42 @@ export function ChatComposer({
     user,
     placeholder,
     label = 'Message',
+    users,
 }: Props) {
+    const input = useRef<HTMLTextAreaElement>(null);
+    const listId = useId();
+    const [caret, setCaret] = useState(0);
+    const [active, setActive] = useState(0);
+    const [focused, setFocused] = useState(false);
+    const [composing, setComposing] = useState(false);
+    const [dismissed, setDismissed] = useState('');
+    const query = !composing && focused && canPost ? mentionQuery(draft, caret) : null;
+    const matches =
+        query && dismissed !== `${draft}:${caret}`
+            ? users
+                  .filter((candidate) =>
+                      candidate.username.toLowerCase().startsWith(query.query.toLowerCase()),
+                  )
+                  .sort((a, b) => a.username.localeCompare(b.username))
+                  .slice(0, 8)
+            : [];
+    const chosen = Math.min(active, Math.max(0, matches.length - 1));
+    useEffect(() => {
+        if (matches.length)
+            document.getElementById(`${listId}-${chosen}`)?.scrollIntoView({ block: 'nearest' });
+    }, [chosen, listId, matches.length]);
+    const complete = (candidate: User) => {
+        if (!query) return;
+        const result = completeMention(draft, query, candidate.username);
+        if (!result) return;
+        setDraft(result.text);
+        setCaret(result.caret);
+        setDismissed(`${result.text}:${result.caret}`);
+        requestAnimationFrame(() => {
+            input.current?.focus();
+            input.current?.setSelectionRange(result.caret, result.caret);
+        });
+    };
     return (
         <div className="composer-wrap">
             {attachments.map((file, index) => (
@@ -61,6 +98,30 @@ export function ChatComposer({
                     </button>
                 </div>
             ))}
+            {!!matches.length && (
+                <div
+                    className="mention-suggestions"
+                    id={listId}
+                    role="listbox"
+                    aria-label="Mention a user"
+                >
+                    {matches.map((candidate, index) => (
+                        <button
+                            type="button"
+                            key={candidate.id}
+                            id={`${listId}-${index}`}
+                            role="option"
+                            aria-selected={chosen === index}
+                            tabIndex={-1}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => complete(candidate)}
+                        >
+                            <strong>@{candidate.username}</strong>
+                            <span>{displayName(candidate)}</span>
+                        </button>
+                    ))}
+                </div>
+            )}
             <form className="composer" onSubmit={send}>
                 <button
                     type="button"
@@ -81,6 +142,23 @@ export function ChatComposer({
                     }}
                 />
                 <textarea
+                    ref={input}
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-expanded={!!matches.length}
+                    aria-controls={matches.length ? listId : undefined}
+                    aria-activedescendant={matches.length ? `${listId}-${chosen}` : undefined}
+                    onFocus={() => setFocused(true)}
+                    onBlur={() => setFocused(false)}
+                    onCompositionStart={() => setComposing(true)}
+                    onCompositionEnd={() => setComposing(false)}
+                    onSelect={(event) => {
+                        const next = event.currentTarget.selectionStart;
+                        if (next !== caret) {
+                            setCaret(next);
+                            setActive(0);
+                        }
+                    }}
                     aria-label={label}
                     placeholder={canPost ? placeholder : 'This conversation is read-only'}
                     value={draft}
@@ -90,6 +168,8 @@ export function ChatComposer({
                     style={!draft ? { height: 'auto' } : undefined}
                     onChange={(e) => {
                         setDraft(e.target.value);
+                        setCaret(e.target.selectionStart);
+                        setActive(0);
                         e.target.style.height = 'auto';
                         e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
                         if (Date.now() - lastTyping.current > 2000) {
@@ -105,6 +185,28 @@ export function ChatComposer({
                         }
                     }}
                     onKeyDown={(e) => {
+                        if (e.nativeEvent.isComposing || composing) return;
+                        if (matches.length) {
+                            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                setActive(
+                                    (chosen + (e.key === 'ArrowDown' ? 1 : -1) + matches.length) %
+                                        matches.length,
+                                );
+                                return;
+                            }
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                complete(matches[chosen]);
+                                return;
+                            }
+                            if (e.key === 'Escape') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setDismissed(`${draft}:${caret}`);
+                                return;
+                            }
+                        }
                         if (
                             (e.ctrlKey || e.metaKey) &&
                             !e.altKey &&

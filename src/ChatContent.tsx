@@ -1,3 +1,5 @@
+import { mentionSegments } from './mentions';
+import type { User } from './types';
 import { messageParts } from './messageText';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { ExpandedImage } from './ExpandedImage';
@@ -100,8 +102,10 @@ export function Emoji({
 export function ChatContent({
     text,
     custom,
+    users = [],
 }: {
     text: string;
+    users?: User[];
     custom: { id: string; name: string }[];
 }) {
     return (
@@ -112,7 +116,21 @@ export function ChatContent({
                         {part.text}
                     </a>
                 ) : (
-                    <Emoji key={i} value={part.text} custom={custom} />
+                    <span key={i}>
+                        {mentionSegments(part.text, users).map((segment, index) =>
+                            segment.user ? (
+                                <span
+                                    key={index}
+                                    className="message-mention"
+                                    title={`@${segment.user.username}`}
+                                >
+                                    {segment.text}
+                                </span>
+                            ) : (
+                                <Emoji key={index} value={segment.text} custom={custom} />
+                            ),
+                        )}
+                    </span>
                 ),
             )}
         </>

@@ -74,6 +74,10 @@ export type Preferences = {
     autoIdle?: boolean;
     idleMinutes?: number;
     notifications: boolean;
+    messageSounds?: boolean;
+    dmNotifications?: boolean;
+    mentionNotifications?: boolean;
+    channelNotifications?: Record<string, boolean>;
     input: string;
     inputLabel?: string;
     output: string;
