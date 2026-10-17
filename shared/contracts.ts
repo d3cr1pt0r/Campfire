@@ -17,6 +17,7 @@ export type Channel = {
     id: string;
     name: string;
     kind: 'text' | 'voice';
+    description: string;
     protected: boolean;
     access: 'full' | 'read-only';
 };

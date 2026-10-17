@@ -42,7 +42,6 @@ import {
     ArrowRight,
     Radio,
     Globe,
-    Copy,
     MonitorPlay,
 } from 'lucide-react';
 import type { State, Message, Preferences, User } from './types';
@@ -1213,13 +1212,22 @@ function App() {
                                       currentChannel?.name ||
                                       'Conversation'}
                             </strong>
-                            <span className="title-divider" />
-                            <span className="channel-description">
+                            {(view === 'friends' || dmUser || currentChannel?.description) && (
+                                <span className="title-divider" />
+                            )}
+                            <span
+                                className="channel-description"
+                                title={
+                                    view === 'chat' && !dmUser
+                                        ? currentChannel?.description
+                                        : undefined
+                                }
+                            >
                                 {view === 'friends'
                                     ? 'Better together.'
                                     : dmUser
                                       ? 'A space for the two of you.'
-                                      : 'A place for everyday conversations.'}
+                                      : currentChannel?.description}
                             </span>
                         </div>
                         <div className="top-actions">
@@ -1532,33 +1540,10 @@ function App() {
                                         </React.Fragment>
                                     ) : null;
                                 })}
-                                <div className="community-card">
-                                    <div className="community-card-icon">
-                                        <MessageCircle size={23} />
-                                        <span>✦</span>
-                                    </div>
-                                    <strong>Small server. Big possibilities.</strong>
-                                    <p>Make a little corner of the internet feel like home.</p>
-                                    <button
-                                        onClick={() =>
-                                            void act(async () => {
-                                                await navigator.clipboard.writeText(url);
-                                                notify(
-                                                    'Server address copied. Share it with your friends.',
-                                                );
-                                            })
-                                        }
-                                    >
-                                        Copy server address <Copy size={13} />
-                                    </button>
-                                </div>
                             </aside>
                         )}
                     </div>
                     <footer className="status-bar">
-                        <span>
-                            <Shield size={12} /> Your server. Your conversations.
-                        </span>
                         <span>
                             Driskord <i /> Early access
                         </span>

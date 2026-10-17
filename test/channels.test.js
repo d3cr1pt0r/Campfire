@@ -300,3 +300,72 @@ test('channel ordering is type-specific, manager-only, persistent and preserves 
         last.id,
     );
 });
+
+test('channel descriptions are owner/manager editable, persisted, and independent of renames', async (t) => {
+    const f = await fixture(t);
+    const { owner, member, api } = f;
+    const description = async () =>
+        (await api(owner, '/state')).channels.find((c) => c.id === 'general').description;
+    assert.equal(await description(), 'A place for everyday conversations.');
+    await api(member, '/channels/general', 'PATCH', { description: 'Not permitted' }, 403);
+    await api(owner, '/channels/general', 'PATCH', { description: '  News and daily updates  ' });
+    assert.equal(await description(), 'News and daily updates');
+    await api(owner, '/channels/general', 'PATCH', { name: 'Community' });
+    assert.equal(await description(), 'News and daily updates');
+    const moderator = await api(owner, '/roles', 'POST', {
+        name: 'Moderator',
+        color: '#abcdef',
+        permissions: ['manage', 'send', 'voice'],
+    });
+    await api(owner, `/users/${member.user.id}/role`, 'PATCH', { role: moderator.id });
+    await api(member, '/channels/general', 'PATCH', { description: 'Moderator update' });
+    await f.restart();
+    assert.equal(await description(), 'Moderator update');
+    for (const bad of [null, 12, 'x'.repeat(201), 'two\nlines', 'control\u0000'])
+        await api(
+            owner,
+            '/channels/general',
+            'PATCH',
+            { name: 'Should not change', description: bad },
+            400,
+        );
+    const channel = (await api(owner, '/state')).channels.find((c) => c.id === 'general');
+    assert.equal(channel.name, 'community');
+    assert.equal(channel.description, 'Moderator update');
+    await api(owner, '/channels/lounge', 'PATCH', { description: 'Voice description' }, 400);
+    await api(owner, '/channels/general', 'PATCH', {}, 400);
+    await api(member, '/channels/general', 'PATCH', { description: '   ' });
+    assert.equal(await description(), '');
+    const added = await api(owner, '/channels', 'POST', { name: 'new-topic', kind: 'text' });
+    assert.equal(
+        (await api(owner, '/state')).channels.find((c) => c.id === added.id).description,
+        'A place for everyday conversations.',
+    );
+});
+
+test('upgrading existing channels supplies descriptions once without overwriting edits', () => {
+    const db = new DatabaseSync(':memory:');
+    try {
+        db.exec(readFileSync(new URL('../server/schema.sql', import.meta.url), 'utf8'));
+        db.exec(
+            "INSERT INTO channels(id,name,kind) VALUES('text','Text','text'),('voice','Voice','voice')",
+        );
+        migrate(db);
+        assert.equal(
+            db.prepare("SELECT description FROM channels WHERE id='text'").get().description,
+            'A place for everyday conversations.',
+        );
+        assert.equal(
+            db.prepare("SELECT description FROM channels WHERE id='voice'").get().description,
+            '',
+        );
+        db.prepare("UPDATE channels SET description='Edited' WHERE id='text'").run();
+        migrate(db);
+        assert.equal(
+            db.prepare("SELECT description FROM channels WHERE id='text'").get().description,
+            'Edited',
+        );
+    } finally {
+        db.close();
+    }
+});

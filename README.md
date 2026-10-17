@@ -207,7 +207,7 @@ For a hosted build, open **Actions → Linux standalone builds → Run workflow*
 - Voice channels with microphone mute/deafen, webcam video and local preview, screen/window sharing, per-person Watch/Stop watching controls, and separate voice/stream volume.
 - Focused-app push-to-talk with Space, browser noise suppression/echo cancellation, and call sounds.
 - Role creation/editing, colors, chat/voice/management permissions, owner-only role assignment, and server naming.
-- Channel renaming/deletion with permanent text/voice anchors, per-role text access (full/read-only/hidden), and voice visibility.
+- Channel renaming/deletion with permanent text/voice anchors, editable text-channel descriptions (up to 200 characters), per-role text access (full/read-only/hidden), and voice visibility. Owners and roles with server-management permission edit descriptions under Settings → Channels & access; an empty description hides it from the header.
 - Avatar positioning with drag, zoom, sliders and a fit-whole-image option.
 - Settings for notifications, audio input/output, and 360p/720p/1080p requested streaming resolution.
 

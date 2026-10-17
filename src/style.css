@@ -703,7 +703,13 @@ small {
     color: #b2b3c2;
 }
 .top-actions > button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--control-size);
+    height: var(--control-size);
     padding: 0;
+    line-height: 1;
 }
 .search {
     display: flex;
@@ -712,6 +718,8 @@ small {
     margin: 0;
 }
 .search input {
+    margin: 0;
+    height: var(--control-size);
     padding: 7px 28px 7px 11px;
     width: 166px;
     border: 0;
@@ -721,12 +729,19 @@ small {
 }
 .search svg {
     position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
     right: 9px;
     color: #858592;
 }
 .connection-status {
     display: flex;
     align-items: center;
+    justify-content: center;
+    width: var(--control-size);
+    height: var(--control-size);
+    flex-shrink: 0;
 }
 .connection-status i {
     width: 6px;
@@ -1108,48 +1123,10 @@ small {
     color: #c8a361;
     flex-shrink: 0;
 }
-.community-card {
-    border: 1px solid #ffffff09;
-    border-radius: 10px;
-    background: linear-gradient(125deg, #afa1f008, transparent);
-    padding: 17px 13px;
-    margin: 45px 3px 0;
-}
-.community-card-icon {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    color: #a59acb;
-    margin-bottom: 13px;
-}
-.community-card-icon > span {
-    color: #c6ae8d;
-    font-size: 16px;
-}
-.community-card > strong {
-    font-size: 12px;
-    font-weight: 600;
-    color: #b6b2c8;
-    line-height: 1.5;
-    display: block;
-}
-.community-card p {
-    font-size: 11px;
-    color: var(--muted);
-    line-height: 1.8;
-    margin: 7px 0 15px;
-}
-.community-card > button {
-    justify-content: space-between;
-    font-size: 11px;
-    color: #b4a8dd;
-    padding: 0;
-    width: 100%;
-}
 .status-bar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     height: 28px;
     min-height: 28px;
     border-top: 1px solid #ffffff05;

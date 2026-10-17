@@ -26,7 +26,7 @@ export function registerAdministration({
             }
             const id = randomUUID();
             run(
-                'INSERT INTO channels(id,name,kind,position) VALUES(?,?,?,?)',
+                'INSERT INTO channels(id,name,kind,position,description) VALUES(?,?,?,?,?)',
                 id,
                 name,
                 req.body.kind,
@@ -34,6 +34,7 @@ export function registerAdministration({
                     'SELECT COALESCE(MAX(position),0)+1 position FROM channels WHERE kind=?',
                     req.body.kind,
                 ).position,
+                req.body.kind === 'text' ? 'A place for everyday conversations.' : '',
             );
             publishChannels();
             res.json({ id });
@@ -90,13 +91,33 @@ export function registerAdministration({
         '/api/channels/:id',
         route((req, res) => {
             const channel = managedChannel(req);
-            let name;
+            check(
+                req.body.name !== undefined || req.body.description !== undefined,
+                'No channel changes provided',
+            );
+            let name = channel.name;
             try {
-                name = channelName(req.body.name, channel.kind);
+                if (req.body.name !== undefined) name = channelName(req.body.name, channel.kind);
             } catch (error) {
                 check(false, error.message);
             }
-            run('UPDATE channels SET name=? WHERE id=?', name, channel.id);
+            let description = channel.description;
+            if (req.body.description !== undefined) {
+                check(channel.kind === 'text', 'Only text channels have descriptions');
+                check(
+                    typeof req.body.description === 'string' &&
+                        req.body.description.length <= 200 &&
+                        !/[\r\n\x00-\x1f\x7f]/.test(req.body.description),
+                    'Channel description must be a single line of at most 200 characters',
+                );
+                description = req.body.description.trim();
+            }
+            run(
+                'UPDATE channels SET name=?,description=? WHERE id=?',
+                name,
+                description,
+                channel.id,
+            );
             publishChannels();
             res.json({ ok: true });
         }),

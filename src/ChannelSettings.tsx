@@ -20,8 +20,8 @@ export function ChannelSettings(props: Props) {
     return (
         <div className="channel-settings-list">
             <p className="muted">
-                Select a channel to edit its name and role access. Use the arrows to reorder
-                channels within each type. Permanent channels can be renamed and reordered.
+                Select a channel to edit its name, description, and role access. Use the arrows to
+                reorder channels within each type. Permanent channels can be renamed and reordered.
             </p>
             {(['text', 'voice'] as const).map((kind) => {
                 const channels = props.state.channels.filter((channel) => channel.kind === kind);
@@ -104,9 +104,15 @@ function ChannelEditor({ state, channel, api, refresh, busy, act }: Props & { ch
             <form
                 onSubmit={(event) => {
                     event.preventDefault();
-                    const name = new FormData(event.currentTarget).get('name');
+                    const form = new FormData(event.currentTarget);
+                    const name = form.get('name');
                     void act(async () => {
-                        await api(`/channels/${channel.id}`, 'PATCH', { name });
+                        await api(`/channels/${channel.id}`, 'PATCH', {
+                            name,
+                            ...(channel.kind === 'text'
+                                ? { description: form.get('description') }
+                                : {}),
+                        });
                         await refresh();
                     });
                 }}
@@ -121,8 +127,24 @@ function ChannelEditor({ state, channel, api, refresh, busy, act }: Props & { ch
                         maxLength={32}
                     />
                 </label>
+                {channel.kind === 'text' && (
+                    <label>
+                        Channel description
+                        <input
+                            name="description"
+                            key={`${channel.id}:${channel.description}`}
+                            defaultValue={channel.description}
+                            maxLength={200}
+                            placeholder="What is this channel for?"
+                        />
+                        <span className="field-help">
+                            Shown next to the channel name. Leave empty to hide it. Up to 200
+                            characters.
+                        </span>
+                    </label>
+                )}
                 <button className="secondary" disabled={busy}>
-                    Rename channel
+                    Save channel
                 </button>
             </form>
             <form

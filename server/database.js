@@ -87,6 +87,10 @@ export function migrate(db) {
                     usedBy TEXT REFERENCES users(id), revoked INTEGER NOT NULL DEFAULT 0
                 );`);
         },
+        () => {
+            db.exec(`ALTER TABLE channels ADD COLUMN description TEXT NOT NULL DEFAULT '';
+                UPDATE channels SET description='A place for everyday conversations.' WHERE kind='text';`);
+        },
     ];
     migrations.forEach((apply, index) => {
         const version = index + 1;
