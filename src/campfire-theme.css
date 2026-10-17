@@ -67,6 +67,50 @@ body {
     min-height: 76px;
     height: 76px;
 }
+.conversation-section {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: var(--conversation-minimum, 76px);
+    overflow: hidden;
+}
+.conversation-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+}
+.conversation-section .top-actions > :not(.connection-status),
+.conversation-section .topbar > .navigation-toggle,
+.conversation-section .channel-title > svg {
+    opacity: var(--conversation-actions-opacity, 1);
+}
+.conversation-section.compact .top-actions > :not(.connection-status),
+.conversation-section.compact .topbar > .navigation-toggle,
+.conversation-section.compact .channel-title > svg {
+    display: none;
+}
+.conversation-section.compact .topbar {
+    flex: 0 0 var(--conversation-minimum);
+    height: var(--conversation-minimum);
+    min-height: var(--conversation-minimum);
+    flex-wrap: nowrap;
+}
+.conversation-section.compact .top-actions {
+    width: auto;
+}
+.conversation-section.compact .channel-title {
+    flex-basis: 0;
+}
+.conversation-section.compact .channel-description {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .channel-title > strong {
     font-size: 15px;
 }

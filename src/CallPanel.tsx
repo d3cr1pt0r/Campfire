@@ -47,7 +47,7 @@ export function CallPanel({
     const toolbar = useRef<HTMLDivElement>(null);
     const drag = useRef<{ pointer: number; y: number; height: number } | null>(null);
     const [workspaceHeight, setWorkspaceHeight] = useState(800);
-    const [conversationMinimum, setConversationMinimum] = useState(320);
+    const [conversationMinimum, setConversationMinimum] = useState(84);
     const [expandedHeight, setExpandedHeight] = useState<number | null>(null);
     const [resizing, setResizing] = useState(false);
     const [minimum, setMinimum] = useState(76);
@@ -68,33 +68,18 @@ export function CallPanel({
     useLayoutEffect(() => {
         const workspace = dock.current?.parentElement;
         if (!workspace) return;
-        const chrome = Array.from(workspace.children).filter(
-            (element) => !element.matches('.call-dock, .call-splitter, .main-columns'),
-        );
-        const composer = workspace.querySelector('.chat-area > .composer-wrap');
         const serverHeading = workspace.closest('.app-shell')?.querySelector('.server-heading');
         const update = () => {
-            setMinimum(serverHeading?.getBoundingClientRect().height || 76);
+            const headerHeight = serverHeading?.getBoundingClientRect().height || 76;
+            setMinimum(headerHeight);
             setWorkspaceHeight(workspace.clientHeight);
-            // Reserve the actual conversation controls plus one line of history.
-            // The composer can grow when typing or attaching files.
-            setConversationMinimum(
-                chrome.reduce(
-                    (height, element) => height + element.getBoundingClientRect().height,
-                    0,
-                ) +
-                    (composer?.getBoundingClientRect().height ?? 0) +
-                    64 +
-                    8,
-            );
+            // The conversation can collapse to its header. The divider is 8px.
+            setConversationMinimum(headerHeight + 8);
         };
         update();
         const observer = new ResizeObserver(update);
         observer.observe(workspace);
         if (serverHeading) observer.observe(serverHeading);
-        if (toolbar.current) observer.observe(toolbar.current);
-        chrome.forEach((element) => observer.observe(element));
-        if (composer) observer.observe(composer);
         return () => observer.disconnect();
     });
     useLayoutEffect(() => {

@@ -6,6 +6,7 @@ import { ThreadPanel } from './ThreadPanel';
 import { ChatMessages } from './ChatMessages';
 import type { ChatScrollPosition } from './chatScroll';
 import { CallPanel } from './CallPanel';
+import { ConversationSection } from './ConversationSection';
 import { FriendsPanel } from './FriendsPanel';
 import { SettingsPanel } from './SettingsPanel';
 import { SimpleForm, RoleForm } from './forms';
@@ -1322,400 +1323,425 @@ function App() {
                             user={user}
                         />
                     )}
-                    <header className="topbar">
-                        <button
-                            className="navigation-toggle"
-                            title="Channels and friends"
-                            aria-label="Open navigation"
-                            aria-expanded={navigationOpen}
-                            onClick={() => setNavigationOpen(true)}
-                        >
-                            <Menu size={22} />
-                        </button>
-                        <div className="channel-title">
-                            {view === 'friends' ? (
-                                <Users size={23} />
-                            ) : dmUser ? (
-                                <MessageCircle size={23} />
-                            ) : (
-                                <Hash size={25} />
-                            )}
-                            <strong>
-                                {view === 'friends'
-                                    ? 'Friends'
-                                    : displayName(dmUser, '') ||
-                                      currentChannel?.name ||
-                                      'Conversation'}
-                            </strong>
-                            {(view === 'friends' || dmUser || currentChannel?.description) && (
-                                <span className="title-divider" />
-                            )}
-                            <span
-                                className="channel-description"
-                                title={
-                                    view === 'chat' && !dmUser
-                                        ? currentChannel?.description
-                                        : undefined
-                                }
-                            >
-                                {view === 'friends'
-                                    ? 'Better together.'
-                                    : dmUser
-                                      ? 'A space for the two of you.'
-                                      : currentChannel?.description}
-                            </span>
-                        </div>
-                        <div className="top-actions">
-                            {call.channel && (
+                    <ConversationSection
+                        activeCall={!!call.channel}
+                        header={
+                            <header className="topbar">
                                 <button
-                                    title={
-                                        call.panelOpen ? 'Hide call details' : 'Show call details'
-                                    }
-                                    aria-label={
-                                        call.panelOpen ? 'Hide call details' : 'Show call details'
-                                    }
-                                    aria-expanded={call.panelOpen}
-                                    aria-controls="call-panel"
-                                    onClick={() => {
-                                        call.setPanelOpen(!call.panelOpen);
-                                        if (call.panelOpen) call.setShowDetails(false);
-                                    }}
+                                    className="navigation-toggle"
+                                    title="Channels and friends"
+                                    aria-label="Open navigation"
+                                    aria-expanded={navigationOpen}
+                                    onClick={() => setNavigationOpen(true)}
                                 >
-                                    <MonitorPlay size={20} />
+                                    <Menu size={22} />
                                 </button>
-                            )}
-                            {view === 'chat' && (
-                                <>
-                                    {dmUser && (
+                                <div className="channel-title">
+                                    {view === 'friends' ? (
+                                        <Users size={23} />
+                                    ) : dmUser ? (
+                                        <MessageCircle size={23} />
+                                    ) : (
+                                        <Hash size={25} />
+                                    )}
+                                    <strong>
+                                        {view === 'friends'
+                                            ? 'Friends'
+                                            : displayName(dmUser, '') ||
+                                              currentChannel?.name ||
+                                              'Conversation'}
+                                    </strong>
+                                    {(view === 'friends' ||
+                                        dmUser ||
+                                        currentChannel?.description) && (
+                                        <span className="title-divider" />
+                                    )}
+                                    <span
+                                        className="channel-description"
+                                        title={
+                                            view === 'chat' && !dmUser
+                                                ? currentChannel?.description
+                                                : undefined
+                                        }
+                                    >
+                                        {view === 'friends'
+                                            ? 'Better together.'
+                                            : dmUser
+                                              ? 'A space for the two of you.'
+                                              : currentChannel?.description}
+                                    </span>
+                                </div>
+                                <div className="top-actions">
+                                    {call.channel && (
                                         <button
-                                            title="Call friend"
-                                            disabled={
-                                                !!call.channel ||
-                                                !permission('calls.join') ||
-                                                !permission('calls.start')
+                                            title={
+                                                call.panelOpen
+                                                    ? 'Hide call details'
+                                                    : 'Show call details'
                                             }
-                                            onClick={() => void startDirectCall(dmUser.id)}
+                                            aria-label={
+                                                call.panelOpen
+                                                    ? 'Hide call details'
+                                                    : 'Show call details'
+                                            }
+                                            aria-expanded={call.panelOpen}
+                                            aria-controls="call-panel"
+                                            onClick={() => {
+                                                call.setPanelOpen(!call.panelOpen);
+                                                if (call.panelOpen) call.setShowDetails(false);
+                                            }}
                                         >
-                                            <Phone size={20} />
+                                            <MonitorPlay size={20} />
                                         </button>
                                     )}
-                                    <button
-                                        title="Pinned messages"
-                                        aria-label="Pinned messages"
-                                        aria-pressed={pins}
-                                        className={pins ? 'highlight' : ''}
-                                        onClick={() => setPins(!pins)}
-                                    >
-                                        <Pin size={20} />
-                                    </button>
-                                    <button
-                                        title="Toggle member list"
-                                        aria-label="Members"
-                                        aria-expanded={members}
-                                        aria-controls="community-members"
-                                        onClick={() => setMembers(!members)}
-                                    >
-                                        <Users size={21} />
-                                    </button>
-                                    <button
+                                    {view === 'chat' && (
+                                        <>
+                                            {dmUser && (
+                                                <button
+                                                    title="Call friend"
+                                                    disabled={
+                                                        !!call.channel ||
+                                                        !permission('calls.join') ||
+                                                        !permission('calls.start')
+                                                    }
+                                                    onClick={() => void startDirectCall(dmUser.id)}
+                                                >
+                                                    <Phone size={20} />
+                                                </button>
+                                            )}
+                                            <button
+                                                title="Pinned messages"
+                                                aria-label="Pinned messages"
+                                                aria-pressed={pins}
+                                                className={pins ? 'highlight' : ''}
+                                                onClick={() => setPins(!pins)}
+                                            >
+                                                <Pin size={20} />
+                                            </button>
+                                            <button
+                                                title="Toggle member list"
+                                                aria-label="Members"
+                                                aria-expanded={members}
+                                                aria-controls="community-members"
+                                                onClick={() => setMembers(!members)}
+                                            >
+                                                <Users size={21} />
+                                            </button>
+                                            <button
+                                                title={
+                                                    prefs.channelNotifications?.[
+                                                        notificationKey(url, state.me.id, room)
+                                                    ] === false
+                                                        ? 'Unmute conversation'
+                                                        : 'Mute conversation'
+                                                }
+                                                aria-label="Mute conversation"
+                                                aria-pressed={
+                                                    prefs.channelNotifications?.[
+                                                        notificationKey(url, state.me.id, room)
+                                                    ] === false
+                                                }
+                                                onClick={() =>
+                                                    setPrefs((previous) => {
+                                                        const key = notificationKey(
+                                                            url,
+                                                            state.me.id,
+                                                            room,
+                                                        );
+                                                        return {
+                                                            ...previous,
+                                                            channelNotifications: {
+                                                                ...previous.channelNotifications,
+                                                                [key]:
+                                                                    previous.channelNotifications?.[
+                                                                        key
+                                                                    ] === false,
+                                                            },
+                                                        };
+                                                    })
+                                                }
+                                            >
+                                                {prefs.channelNotifications?.[
+                                                    notificationKey(url, state.me.id, room)
+                                                ] === false ? (
+                                                    <BellOff size={19} />
+                                                ) : (
+                                                    <Bell size={19} />
+                                                )}
+                                            </button>
+                                            <label className="search">
+                                                <span className="sr-only">
+                                                    Search this conversation
+                                                </span>
+                                                <input
+                                                    type="search"
+                                                    placeholder="Search messages (Ctrl+F)"
+                                                    value={search}
+                                                    onChange={(e) => setSearch(e.target.value)}
+                                                />
+                                                <Search size={16} />
+                                            </label>
+                                        </>
+                                    )}
+                                    <span
+                                        className={`connection-status ${connected ? '' : 'disconnected'}`}
                                         title={
-                                            prefs.channelNotifications?.[
-                                                notificationKey(url, state.me.id, room)
-                                            ] === false
-                                                ? 'Unmute conversation'
-                                                : 'Mute conversation'
-                                        }
-                                        aria-label="Mute conversation"
-                                        aria-pressed={
-                                            prefs.channelNotifications?.[
-                                                notificationKey(url, state.me.id, room)
-                                            ] === false
-                                        }
-                                        onClick={() =>
-                                            setPrefs((previous) => {
-                                                const key = notificationKey(url, state.me.id, room);
-                                                return {
-                                                    ...previous,
-                                                    channelNotifications: {
-                                                        ...previous.channelNotifications,
-                                                        [key]:
-                                                            previous.channelNotifications?.[key] ===
-                                                            false,
-                                                    },
-                                                };
-                                            })
+                                            connected
+                                                ? 'Connected to server'
+                                                : 'Disconnected from server'
                                         }
                                     >
-                                        {prefs.channelNotifications?.[
-                                            notificationKey(url, state.me.id, room)
-                                        ] === false ? (
-                                            <BellOff size={19} />
-                                        ) : (
-                                            <Bell size={19} />
-                                        )}
-                                    </button>
-                                    <label className="search">
-                                        <span className="sr-only">Search this conversation</span>
-                                        <input
-                                            type="search"
-                                            placeholder="Search messages (Ctrl+F)"
-                                            value={search}
-                                            onChange={(e) => setSearch(e.target.value)}
-                                        />
-                                        <Search size={16} />
-                                    </label>
-                                </>
-                            )}
-                            <span
-                                className={`connection-status ${connected ? '' : 'disconnected'}`}
-                                title={
-                                    connected ? 'Connected to server' : 'Disconnected from server'
-                                }
-                            >
-                                <i />
-                                <span className="sr-only">
-                                    {connected ? 'Connected' : 'Disconnected; reconnecting'}
-                                </span>
-                            </span>
-                        </div>
-                    </header>
-                    {!connected && (
-                        <div className="connection-banner" role="status">
-                            Connection lost. Reconnecting… Messages will be available when the
-                            server returns.
-                        </div>
-                    )}
-                    <div className="call-invitations">
-                        {(state.directCalls || [])
-                            .filter((c) => c.invited.includes(state.me.id))
-                            .map((c) => (
-                                <div key={c.id}>
-                                    <span>
-                                        {displayName(user(c.creator)) || 'A friend'} invited you to
-                                        a private call
-                                    </span>
-                                    <button
-                                        className="primary"
-                                        disabled={!!call.channel}
-                                        onClick={() => void call.join(c.id)}
-                                    >
-                                        Join call
-                                    </button>
-                                    <button
-                                        onClick={() =>
-                                            void act(() => api(`/calls/${c.id}/decline`, 'POST'))
-                                        }
-                                    >
-                                        Decline
-                                    </button>
-                                </div>
-                            ))}
-                    </div>
-                    <div className="main-columns">
-                        {view === 'friends' ? (
-                            <FriendsPanel
-                                state={state}
-                                call={call}
-                                startDirectCall={startDirectCall}
-                                permission={permission}
-                                user={user}
-                                color={color}
-                                dm={dm}
-                                setModal={setModal}
-                                act={act}
-                                api={api}
-                            />
-                        ) : (
-                            <section
-                                className={`chat-area ${draggingFiles ? 'dragging-files' : ''}`}
-                                onDragEnter={(e) => {
-                                    if (e.dataTransfer.types.includes('Files')) {
-                                        e.preventDefault();
-                                        dragDepth.current++;
-                                        setDraggingFiles(true);
-                                    }
-                                }}
-                                onDragLeave={() => {
-                                    dragDepth.current = Math.max(0, dragDepth.current - 1);
-                                    if (!dragDepth.current) setDraggingFiles(false);
-                                }}
-                                onDragOver={(e) => {
-                                    if (e.dataTransfer.types.includes('Files')) {
-                                        e.preventDefault();
-                                        e.dataTransfer.dropEffect =
-                                            canPost && !busy ? 'copy' : 'none';
-                                    }
-                                }}
-                                onDrop={(e) => {
-                                    if (e.dataTransfer.types.includes('Files')) {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        resetDrop();
-                                        addFiles(Array.from(e.dataTransfer.files));
-                                    }
-                                }}
-                            >
-                                {draggingFiles && (
-                                    <div className="file-drop-overlay">
-                                        <Paperclip size={42} />
-                                        <strong>
-                                            {canPost
-                                                ? 'Drop files to attach'
-                                                : 'This conversation is read-only'}
-                                        </strong>
-                                        <span>
-                                            Up to 10 files · 5 MB total · Review before sending
+                                        <i />
+                                        <span className="sr-only">
+                                            {connected ? 'Connected' : 'Disconnected; reconnecting'}
                                         </span>
+                                    </span>
+                                </div>
+                            </header>
+                        }
+                    >
+                        {!connected && (
+                            <div className="connection-banner" role="status">
+                                Connection lost. Reconnecting… Messages will be available when the
+                                server returns.
+                            </div>
+                        )}
+                        <div className="call-invitations">
+                            {(state.directCalls || [])
+                                .filter((c) => c.invited.includes(state.me.id))
+                                .map((c) => (
+                                    <div key={c.id}>
+                                        <span>
+                                            {displayName(user(c.creator)) || 'A friend'} invited you
+                                            to a private call
+                                        </span>
+                                        <button
+                                            className="primary"
+                                            disabled={!!call.channel}
+                                            onClick={() => void call.join(c.id)}
+                                        >
+                                            Join call
+                                        </button>
+                                        <button
+                                            onClick={() =>
+                                                void act(() =>
+                                                    api(`/calls/${c.id}/decline`, 'POST'),
+                                                )
+                                            }
+                                        >
+                                            Decline
+                                        </button>
                                     </div>
-                                )}
-                                <ChatMessages
-                                    key={`${url}:${state.me.id}:${room}:${search}:${pins}`}
-                                    scrollMemory={chatScrollMemory.current}
-                                    scrollKey={JSON.stringify([
-                                        url,
-                                        state.me.id,
-                                        room,
-                                        search,
-                                        pins,
-                                    ])}
-                                    onReply={setThread}
-                                    permission={conversationPermission}
-                                    conversation={conversation}
-                                    search={search}
-                                    pins={pins}
-                                    dmUser={dmUser}
-                                    currentChannel={currentChannel}
-                                    visibleMessages={visibleMessages}
+                                ))}
+                        </div>
+                        <div className="main-columns">
+                            {view === 'friends' ? (
+                                <FriendsPanel
+                                    state={state}
+                                    call={call}
+                                    startDirectCall={startDirectCall}
+                                    permission={permission}
                                     user={user}
                                     color={color}
+                                    dm={dm}
+                                    setModal={setModal}
+                                    act={act}
+                                    api={api}
+                                />
+                            ) : (
+                                <section
+                                    className={`chat-area ${draggingFiles ? 'dragging-files' : ''}`}
+                                    onDragEnter={(e) => {
+                                        if (e.dataTransfer.types.includes('Files')) {
+                                            e.preventDefault();
+                                            dragDepth.current++;
+                                            setDraggingFiles(true);
+                                        }
+                                    }}
+                                    onDragLeave={() => {
+                                        dragDepth.current = Math.max(0, dragDepth.current - 1);
+                                        if (!dragDepth.current) setDraggingFiles(false);
+                                    }}
+                                    onDragOver={(e) => {
+                                        if (e.dataTransfer.types.includes('Files')) {
+                                            e.preventDefault();
+                                            e.dataTransfer.dropEffect =
+                                                canPost && !busy ? 'copy' : 'none';
+                                        }
+                                    }}
+                                    onDrop={(e) => {
+                                        if (e.dataTransfer.types.includes('Files')) {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            resetDrop();
+                                            addFiles(Array.from(e.dataTransfer.files));
+                                        }
+                                    }}
+                                >
+                                    {draggingFiles && (
+                                        <div className="file-drop-overlay">
+                                            <Paperclip size={42} />
+                                            <strong>
+                                                {canPost
+                                                    ? 'Drop files to attach'
+                                                    : 'This conversation is read-only'}
+                                            </strong>
+                                            <span>
+                                                Up to 10 files · 5 MB total · Review before sending
+                                            </span>
+                                        </div>
+                                    )}
+                                    <ChatMessages
+                                        key={`${url}:${state.me.id}:${room}:${search}:${pins}`}
+                                        scrollMemory={chatScrollMemory.current}
+                                        scrollKey={JSON.stringify([
+                                            url,
+                                            state.me.id,
+                                            room,
+                                            search,
+                                            pins,
+                                        ])}
+                                        onReply={setThread}
+                                        permission={conversationPermission}
+                                        conversation={conversation}
+                                        search={search}
+                                        pins={pins}
+                                        dmUser={dmUser}
+                                        currentChannel={currentChannel}
+                                        visibleMessages={visibleMessages}
+                                        user={user}
+                                        color={color}
+                                        state={state}
+                                        dm={dm}
+                                        download={download}
+                                        act={act}
+                                        api={api}
+                                        setModal={setModal}
+                                        setEdit={setEdit}
+                                        clearFilters={() => {
+                                            setSearch('');
+                                            setPins(false);
+                                        }}
+                                    />
+                                    <ChatComposer
+                                        canAttach={canPost && permission('files.attach')}
+                                        users={state.users}
+                                        emojis={state.emojis}
+                                        attachments={attachments}
+                                        setAttachments={setAttachments}
+                                        draft={draft}
+                                        setDraft={setDraft}
+                                        busy={busy}
+                                        canPost={canPost}
+                                        connected={connected}
+                                        fileInput={fileInput}
+                                        lastTyping={lastTyping}
+                                        addFiles={addFiles}
+                                        send={send}
+                                        pasteDesktop={pasteDesktop}
+                                        onEmoji={() => setModal('emoji')}
+                                        onTyping={() => socket?.emit('typing', room)}
+                                        typing={typing}
+                                        user={user}
+                                        placeholder={`Message ${dmUser ? '@' + displayName(dmUser) : '#' + (currentChannel?.name || 'general')}`}
+                                    />
+                                </section>
+                            )}
+                            {thread && thread.room === room && view === 'chat' && roomVisible && (
+                                <ThreadPanel
+                                    key={`${url}:${state.me.id}:${room}:${thread.id}`}
+                                    parent={thread}
+                                    api={api}
+                                    socket={socket}
                                     state={state}
+                                    permission={conversationPermission}
+                                    user={user}
+                                    color={color}
                                     dm={dm}
                                     download={download}
                                     act={act}
-                                    api={api}
                                     setModal={setModal}
                                     setEdit={setEdit}
-                                    clearFilters={() => {
-                                        setSearch('');
-                                        setPins(false);
-                                    }}
-                                />
-                                <ChatComposer
-                                    canAttach={canPost && permission('files.attach')}
-                                    users={state.users}
-                                    emojis={state.emojis}
-                                    attachments={attachments}
-                                    setAttachments={setAttachments}
-                                    draft={draft}
-                                    setDraft={setDraft}
-                                    busy={busy}
-                                    canPost={canPost}
                                     connected={connected}
-                                    fileInput={fileInput}
-                                    lastTyping={lastTyping}
-                                    addFiles={addFiles}
-                                    send={send}
-                                    pasteDesktop={pasteDesktop}
-                                    onEmoji={() => setModal('emoji')}
-                                    onTyping={() => socket?.emit('typing', room)}
-                                    typing={typing}
-                                    user={user}
-                                    placeholder={`Message ${dmUser ? '@' + displayName(dmUser) : '#' + (currentChannel?.name || 'general')}`}
+                                    onClose={() => setThread(null)}
                                 />
-                            </section>
-                        )}
-                        {thread && thread.room === room && view === 'chat' && roomVisible && (
-                            <ThreadPanel
-                                key={`${url}:${state.me.id}:${room}:${thread.id}`}
-                                parent={thread}
-                                api={api}
-                                socket={socket}
-                                state={state}
-                                permission={conversationPermission}
-                                user={user}
-                                color={color}
-                                dm={dm}
-                                download={download}
-                                act={act}
-                                setModal={setModal}
-                                setEdit={setEdit}
-                                connected={connected}
-                                onClose={() => setThread(null)}
-                            />
-                        )}
-                        {members && !thread && (
-                            <aside
-                                className="member-list"
-                                id="community-members"
-                                aria-label="Community members"
-                            >
-                                <div className="member-list-heading">
-                                    <span>Members · {state.users.length}</span>
-                                    <button
-                                        aria-label="Close member list"
-                                        title="Close member list"
-                                        onClick={() => setMembers(false)}
-                                    >
-                                        <X size={18} />
-                                    </button>
-                                </div>
-                                {(['online', 'idle', 'dnd', 'offline'] as const).map((status) => {
-                                    const group = state.users.filter(
-                                        (u) => userStatus(state, u.id) === status,
-                                    );
-                                    return group.length ? (
-                                        <React.Fragment key={status}>
-                                            <div className="member-category">
-                                                {statusLabels[status].toUpperCase()} —{' '}
-                                                {group.length}
-                                            </div>
-                                            {group.map((u) => (
-                                                <button
-                                                    className="member"
-                                                    key={u.id}
-                                                    onClick={() => {
-                                                        if (u.id !== state.me.id) dm(u.id);
-                                                        else openSettings();
-                                                    }}
-                                                >
-                                                    <div className="avatar-status">
-                                                        <Avatar user={u} color={color(u)} />
-                                                        <PresenceDot status={status} />
+                            )}
+                            {members && !thread && (
+                                <aside
+                                    className="member-list"
+                                    id="community-members"
+                                    aria-label="Community members"
+                                >
+                                    <div className="member-list-heading">
+                                        <span>Members · {state.users.length}</span>
+                                        <button
+                                            aria-label="Close member list"
+                                            title="Close member list"
+                                            onClick={() => setMembers(false)}
+                                        >
+                                            <X size={18} />
+                                        </button>
+                                    </div>
+                                    {(['online', 'idle', 'dnd', 'offline'] as const).map(
+                                        (status) => {
+                                            const group = state.users.filter(
+                                                (u) => userStatus(state, u.id) === status,
+                                            );
+                                            return group.length ? (
+                                                <React.Fragment key={status}>
+                                                    <div className="member-category">
+                                                        {statusLabels[status].toUpperCase()} —{' '}
+                                                        {group.length}
                                                     </div>
-                                                    <span>
-                                                        <strong style={{ color: color(u) }}>
-                                                            {displayName(u)}
-                                                            {u.id === state.me.id && (
-                                                                <small>you</small>
+                                                    {group.map((u) => (
+                                                        <button
+                                                            className="member"
+                                                            key={u.id}
+                                                            onClick={() => {
+                                                                if (u.id !== state.me.id) dm(u.id);
+                                                                else openSettings();
+                                                            }}
+                                                        >
+                                                            <div className="avatar-status">
+                                                                <Avatar user={u} color={color(u)} />
+                                                                <PresenceDot status={status} />
+                                                            </div>
+                                                            <span>
+                                                                <strong style={{ color: color(u) }}>
+                                                                    {displayName(u)}
+                                                                    {u.id === state.me.id && (
+                                                                        <small>you</small>
+                                                                    )}
+                                                                </strong>
+                                                                <small>
+                                                                    {
+                                                                        state.roles.find(
+                                                                            (r) => r.id === u.role,
+                                                                        )?.name
+                                                                    }
+                                                                </small>
+                                                            </span>
+                                                            {u.role === 'owner' && (
+                                                                <Shield
+                                                                    size={14}
+                                                                    className="owner-shield"
+                                                                />
                                                             )}
-                                                        </strong>
-                                                        <small>
-                                                            {
-                                                                state.roles.find(
-                                                                    (r) => r.id === u.role,
-                                                                )?.name
-                                                            }
-                                                        </small>
-                                                    </span>
-                                                    {u.role === 'owner' && (
-                                                        <Shield
-                                                            size={14}
-                                                            className="owner-shield"
-                                                        />
-                                                    )}
-                                                </button>
-                                            ))}
-                                        </React.Fragment>
-                                    ) : null;
-                                })}
-                            </aside>
-                        )}
-                    </div>
-                    <footer className="status-bar">
-                        <span>
-                            Campfire <i /> Keep the conversation glowing
-                        </span>
-                    </footer>
+                                                        </button>
+                                                    ))}
+                                                </React.Fragment>
+                                            ) : null;
+                                        },
+                                    )}
+                                </aside>
+                            )}
+                        </div>
+                        <footer className="status-bar">
+                            <span>
+                                Campfire <i /> Keep the conversation glowing
+                            </span>
+                        </footer>
+                    </ConversationSection>
                 </main>
                 {modal && (
                     <div
