@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Server } from 'socket.io';
-import { canReadRoom } from './security.js';
+import { createChannelAccess } from './channel-access.js';
 import { canonicalRoom } from '../shared/rooms.js';
 import { openDatabase, messageViews } from './database.js';
 import { originPolicy, route } from './policies.js';
@@ -41,7 +41,7 @@ export function createApp({
         if (req.headers.origin) res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
         res.setHeader('Vary', 'Origin');
         res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader(
             'Content-Security-Policy',
@@ -58,25 +58,20 @@ export function createApp({
         maxHttpBufferSize: 100000,
     });
     const sessions = createSessions({ ...database, io });
-    const hasRoom = (user, room) =>
-        canReadRoom(
-            user.id,
-            room,
-            (id) => !!get('SELECT id FROM channels WHERE id=? AND kind=?', id, 'text'),
-            (id) => !!get('SELECT id FROM users WHERE id=?', id),
-        );
+    const access = createChannelAccess({ ...database, ...sessions, io });
+    const { hasRoom } = access;
     const messageView = (message) => messageViews(all, [message])[0];
     const emitRoom = (rawRoom, event, data) => {
         const room = canonicalRoom(rawRoom);
-        if (room.startsWith('dm:'))
-            room.split(':')
-                .slice(1)
-                .forEach((id) => io.to(`user:${id}`).emit(event, data));
-        else io.emit(event, data);
+        for (const socket of io.sockets.sockets.values()) {
+            const user = sessions.userFor(socket.data.token);
+            if (user && hasRoom(user, room)) socket.emit(event, data);
+        }
     };
     const context = {
         ...database,
         ...sessions,
+        ...access,
         app,
         io,
         hasRoom,
@@ -98,7 +93,9 @@ export function createApp({
     const calls = registerCalls(context);
     app.get(
         '/api/state',
-        route((req, res) =>
+        route((req, res) => {
+            const channels = access.channelsFor(req.user);
+            const visible = new Set(channels.map((channel) => channel.id));
             res.json({
                 me: sessions.publicUser(req.user),
                 name: get('SELECT value FROM settings WHERE key=?', 'name').value,
@@ -107,7 +104,12 @@ export function createApp({
                     ...role,
                     permissions: JSON.parse(role.permissions),
                 })),
-                channels: all('SELECT * FROM channels'),
+                channels,
+                channelPermissions: sessions.can(req.user, 'manage')
+                    ? all('SELECT * FROM channel_access').filter((entry) =>
+                          visible.has(entry.channel),
+                      )
+                    : [],
                 friends: all(
                     'SELECT * FROM friends WHERE sender=? OR recipient=?',
                     req.user.id,
@@ -122,8 +124,8 @@ export function createApp({
                 directCalls: calls.privateState(req.user.id),
                 emojis: all('SELECT id,name,author FROM emojis'),
                 iceServers,
-            }),
-        ),
+            });
+        }),
     );
     registerMessages(context);
     registerProfiles(context);

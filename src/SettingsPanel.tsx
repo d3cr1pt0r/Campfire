@@ -1,4 +1,6 @@
-import type { Dispatch, SetStateAction } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
+import { AvatarCropper } from './AvatarCropper';
+import { ChannelSettings } from './ChannelSettings';
 import { ArrowRight, Bell, LogOut, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { State, Preferences, User } from './types';
 import type { ApiClient } from './api';
@@ -24,6 +26,7 @@ export function SettingsPanel({
     notify,
     busy,
     uploadAvatar,
+    loadAvatar,
     url,
     devices,
     setDevices,
@@ -44,7 +47,8 @@ export function SettingsPanel({
     refresh: () => Promise<void>;
     notify: (message: string) => void;
     busy: boolean;
-    uploadAvatar: (file: File) => Promise<void>;
+    uploadAvatar: (data: string) => Promise<void>;
+    loadAvatar: () => Promise<File>;
     url: string;
     devices: MediaDeviceInfo[];
     setDevices: Dispatch<SetStateAction<MediaDeviceInfo[]>>;
@@ -52,6 +56,7 @@ export function SettingsPanel({
     uploadEmoji: (event: React.FormEvent<HTMLFormElement>) => void;
     permission: (permission: string) => boolean;
 }) {
+    const [avatarFile, setAvatarFile] = useState<File | null>(null);
     return (
         <>
             <nav className="settings-nav">
@@ -62,6 +67,7 @@ export function SettingsPanel({
                     ['notifications', 'Notifications'],
                     ['server', 'Server settings'],
                     ['roles', 'Roles & permissions'],
+                    ...(permission('manage') ? [['channels', 'Channels & access']] : []),
                     ['emojis', 'Custom emojis'],
                 ].map(([id, label]) => (
                     <button
@@ -87,6 +93,7 @@ export function SettingsPanel({
                                 notifications: 'Notifications',
                                 server: 'Server settings',
                                 roles: 'Roles & permissions',
+                                channels: 'Channels & access',
                                 emojis: 'Custom emojis',
                             } as Record<string, string>
                         )[settingsTab]
@@ -145,12 +152,25 @@ export function SettingsPanel({
                                 disabled={busy}
                                 onChange={(e) => {
                                     const file = e.target.files?.[0];
-                                    if (file) void uploadAvatar(file);
+                                    if (file) setAvatarFile(file);
                                     e.target.value = '';
                                 }}
                             />
                         </label>
-                        <p className="muted">Resized to fit within 512 × 512 pixels.</p>
+                        <p className="muted">
+                            Choose the crop and position before saving. Saved as a 512 × 512 image.
+                            Upload the original again to restore an earlier crop.
+                        </p>
+                        {state.me.avatar && (
+                            <button
+                                disabled={busy}
+                                onClick={() =>
+                                    void act(async () => setAvatarFile(await loadAvatar()))
+                                }
+                            >
+                                Adjust current picture
+                            </button>
+                        )}
                         {state.me.avatar && (
                             <button
                                 disabled={busy}
@@ -441,6 +461,15 @@ export function SettingsPanel({
                         </p>
                     </>
                 )}
+                {settingsTab === 'channels' && permission('manage') && (
+                    <ChannelSettings
+                        state={state}
+                        api={api}
+                        refresh={refresh}
+                        busy={busy}
+                        act={act}
+                    />
+                )}
                 {settingsTab === 'roles' && (
                     <>
                         <p className="muted">
@@ -494,6 +523,13 @@ export function SettingsPanel({
                     </>
                 )}
             </div>
+            {avatarFile && (
+                <AvatarCropper
+                    file={avatarFile}
+                    onSave={uploadAvatar}
+                    onClose={() => setAvatarFile(null)}
+                />
+            )}
         </>
     );
 }

@@ -8,7 +8,8 @@ export function registerCalls({
     userFor,
     can,
     requirePermission,
-    hasRoom,
+    canWrite,
+    canJoin,
     emitRoom,
     attach,
 }) {
@@ -19,9 +20,13 @@ export function registerCalls({
     // Private call authorization and invitations live only for the active session.
     const privateCalls = new Map();
     const visibleCalls = (user) =>
-        callState().filter(
-            (c) =>
-                !c.channel.startsWith('private:') || privateCalls.get(c.channel)?.allowed.has(user),
+        callState().filter((c) =>
+            c.channel.startsWith('private:')
+                ? privateCalls.get(c.channel)?.allowed.has(user)
+                : canJoin(
+                      get('SELECT * FROM users WHERE id=?', user),
+                      get('SELECT * FROM channels WHERE id=?', c.channel),
+                  ),
         );
     const privateState = (user) =>
         [...privateCalls.values()]
@@ -159,9 +164,18 @@ export function registerCalls({
     const enforceCalls = () => {
         for (const s of io.sockets.sockets.values()) {
             const u = userFor(s.data.token);
-            if (s.data.call && (!u || !can(u, 'voice'))) {
+            if (
+                s.data.call &&
+                (!u ||
+                    !can(u, 'voice') ||
+                    (!s.data.call.startsWith('private:') &&
+                        !canJoin(u, get('SELECT * FROM channels WHERE id=?', s.data.call))))
+            ) {
                 s.data.call = null;
-                s.emit('call:revoked');
+                s.emit(
+                    'call:revoked',
+                    'This voice channel was deleted or your call access changed.',
+                );
             }
         }
         prunePrivateCalls();
@@ -180,7 +194,7 @@ export function registerCalls({
         attach(socket);
         socket.on('typing', (rawRoom) => {
             const room = canonicalRoom(rawRoom);
-            if (typeof room === 'string' && hasRoom(socket.data.user, room))
+            if (typeof room === 'string' && canWrite(socket.data.user, room))
                 emitRoom(room, 'typing', { room, user: socket.data.user.id });
         });
         socket.on('call:join', (channel, ack = () => {}) => {
@@ -189,7 +203,10 @@ export function registerCalls({
                 requirePermission(socket.data.user, 'voice');
                 check(
                     typeof channel === 'string' &&
-                        (get('SELECT id FROM channels WHERE id=? AND kind=?', channel, 'voice') ||
+                        (canJoin(
+                            socket.data.user,
+                            get('SELECT * FROM channels WHERE id=?', channel),
+                        ) ||
                             privateCalls.get(channel)?.allowed.has(socket.data.user.id)),
                     'Unknown voice channel or private call',
                 );
@@ -220,14 +237,28 @@ export function registerCalls({
                 ack({ error: e.message });
             }
         });
+        const allowedInCall = (peer) => {
+            const user = peer && userFor(peer.data.token);
+            return (
+                !!user &&
+                can(user, 'voice') &&
+                !!peer.data.call &&
+                (peer.data.call.startsWith('private:')
+                    ? privateCalls.get(peer.data.call)?.allowed.has(user.id)
+                    : canJoin(user, get('SELECT * FROM channels WHERE id=?', peer.data.call)))
+            );
+        };
         socket.on('call:speaking', (active) => {
-            if (typeof active !== 'boolean' || !socket.data.call || !can(socket.data.user, 'voice'))
-                return;
+            if (typeof active !== 'boolean' || !socket.data.call || !allowedInCall(socket)) return;
             const now = Date.now();
             if (now - (socket.data.lastActivity || 0) < 50) return;
             socket.data.lastActivity = now;
             for (const peer of io.sockets.sockets.values())
-                if (peer.id !== socket.id && peer.data.call === socket.data.call)
+                if (
+                    peer.id !== socket.id &&
+                    peer.data.call === socket.data.call &&
+                    allowedInCall(peer)
+                )
                     peer.emit('call:speaking', { user: socket.data.user.id, active });
         });
         socket.on('call:leave', () => {
@@ -243,7 +274,8 @@ export function registerCalls({
                 data &&
                 typeof data === 'object' &&
                 socket.data.call &&
-                can(socket.data.user, 'voice') &&
+                allowedInCall(socket) &&
+                allowedInCall(target) &&
                 target?.data.call === socket.data.call &&
                 JSON.stringify(data).length < 50000
             )

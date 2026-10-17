@@ -348,9 +348,9 @@ export function useCall(
                 updateRemote();
             }
         };
-        const revoked = () => {
+        const revoked = (reason?: string) => {
             leave();
-            report('Your role no longer has permission to join calls.');
+            report(reason || 'Your role no longer has permission to join calls.');
         };
         const disconnect = () => leave();
         socket.on('call:revoked', revoked);

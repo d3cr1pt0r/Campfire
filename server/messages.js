@@ -14,10 +14,13 @@ export function registerMessages({
     hasRoom,
     requirePermission,
     can,
+    canWrite,
     messageView,
     emitRoom,
     maxStoredUploadBytes,
 }) {
+    const requireWrite = (user, room) =>
+        check(canWrite(user, room), 'This conversation is read-only', 403);
     app.get(
         '/api/messages',
         route((req, res) => {
@@ -79,6 +82,7 @@ export function registerMessages({
             const { body = '', attachment, attachments } = req.body;
             const room = canonicalRoom(req.body.room);
             check(typeof room === 'string' && hasRoom(req.user, room), 'Unknown conversation', 403);
+            requireWrite(req.user, room);
             check(
                 typeof body === 'string' && body.length <= 4000,
                 'Messages can contain up to 4,000 characters',
@@ -148,6 +152,7 @@ export function registerMessages({
         route((req, res) => {
             const m = get('SELECT * FROM messages WHERE id=?', req.params.id);
             check(m && hasRoom(req.user, m.room), 'Message not found', 404);
+            if (!m.room.startsWith('dm:')) requireWrite(req.user, m.room);
             if ('pinned' in req.body) requirePermission(req.user, 'manage');
             if ('body' in req.body) requirePermission(req.user, 'send');
             if ('body' in req.body) {
@@ -181,6 +186,7 @@ export function registerMessages({
         route((req, res) => {
             const m = get('SELECT * FROM messages WHERE id=?', req.params.id);
             check(m && hasRoom(req.user, m.room), 'Message not found', 404);
+            if (!m.room.startsWith('dm:')) requireWrite(req.user, m.room);
             check(m.author === req.user.id || can(req.user, 'manage'), 'Permission denied', 403);
             run('DELETE FROM messages WHERE id=?', m.id);
             emitRoom(m.room, 'message:delete', { id: m.id, room: m.room });
@@ -192,6 +198,7 @@ export function registerMessages({
         route((req, res) => {
             const m = get('SELECT * FROM messages WHERE id=?', req.params.id);
             check(m && hasRoom(req.user, m.room), 'Message not found', 404);
+            if (!m.room.startsWith('dm:')) requireWrite(req.user, m.room);
             const emoji = req.body.emoji;
             requirePermission(req.user, 'send');
             check(

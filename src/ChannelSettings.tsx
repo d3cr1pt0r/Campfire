@@ -1,0 +1,156 @@
+import { useEffect, useState } from 'react';
+import type { State, Channel, ChannelAccess } from './types';
+import type { ApiClient } from './api';
+
+type Props = {
+    state: State;
+    api: ApiClient;
+    refresh: () => Promise<void>;
+    busy: boolean;
+    act: (fn: () => Promise<unknown>) => Promise<void>;
+};
+export function ChannelSettings(props: Props) {
+    return (
+        <>
+            <p>
+                Each server keeps one permanent text channel and one permanent voice channel. You
+                can rename them. Additional channels can be deleted.
+            </p>
+            <p className="muted">
+                Role access applies below the role’s global permissions. The owner always retains
+                full access. Read-only channels allow viewing and downloading, without message
+                changes.
+            </p>
+            {props.state.channels.map((channel) => (
+                <ChannelEditor key={channel.id} {...props} channel={channel} />
+            ))}
+        </>
+    );
+}
+
+function ChannelEditor({ state, channel, api, refresh, busy, act }: Props & { channel: Channel }) {
+    const serialized = JSON.stringify(
+        state.channelPermissions.filter((entry) => entry.channel === channel.id),
+    );
+    const [modes, setModes] = useState<Record<string, ChannelAccess['mode']>>({});
+    const [confirming, setConfirming] = useState(false);
+    useEffect(() => {
+        setModes(
+            Object.fromEntries(
+                (JSON.parse(serialized) as ChannelAccess[]).map((entry) => [
+                    entry.role,
+                    entry.mode,
+                ]),
+            ),
+        );
+    }, [serialized]);
+    return (
+        <section className="channel-settings-card" aria-label={`${channel.name} channel settings`}>
+            <h3>
+                {channel.kind === 'text' ? '#' : '🔊'} {channel.name}{' '}
+                {channel.protected && <small>Permanent channel</small>}
+            </h3>
+            <form
+                onSubmit={(event) => {
+                    event.preventDefault();
+                    const name = new FormData(event.currentTarget).get('name');
+                    void act(async () => {
+                        await api(`/channels/${channel.id}`, 'PATCH', { name });
+                        await refresh();
+                    });
+                }}
+            >
+                <label>
+                    Channel name
+                    <input
+                        name="name"
+                        key={channel.name}
+                        defaultValue={channel.name}
+                        required
+                        maxLength={32}
+                    />
+                </label>
+                <button disabled={busy}>Rename channel</button>
+            </form>
+            <form
+                onSubmit={(event) => {
+                    event.preventDefault();
+                    void act(async () => {
+                        await api(`/channels/${channel.id}/access`, 'PUT', {
+                            permissions: state.roles
+                                .filter((role) => role.id !== 'owner')
+                                .map((role) => ({ role: role.id, mode: modes[role.id] || 'full' })),
+                        });
+                        await refresh();
+                    });
+                }}
+            >
+                <p>Owner: full access</p>
+                {state.roles
+                    .filter((role) => role.id !== 'owner')
+                    .map((role) => (
+                        <label className="channel-access-row" key={role.id}>
+                            {role.name}
+                            <select
+                                aria-label={`${role.name} access to ${channel.name}`}
+                                value={modes[role.id] || 'full'}
+                                disabled={busy}
+                                onChange={(event) =>
+                                    setModes({
+                                        ...modes,
+                                        [role.id]: event.target.value as ChannelAccess['mode'],
+                                    })
+                                }
+                            >
+                                <option value="full">
+                                    {channel.kind === 'text' ? 'Full access' : 'Visible'}
+                                </option>
+                                {channel.kind === 'text' && (
+                                    <option value="read-only">Read only</option>
+                                )}
+                                <option value="hidden">Hidden</option>
+                            </select>
+                        </label>
+                    ))}
+                <button className="secondary" disabled={busy}>
+                    Save channel access
+                </button>
+            </form>
+            {!channel.protected &&
+                (confirming ? (
+                    <div className="channel-delete-confirm">
+                        <p>
+                            Delete {channel.name}
+                            {channel.kind === 'text'
+                                ? ' and all its messages and attachments'
+                                : ' and disconnect everyone in it'}
+                            ? This cannot be undone.
+                        </p>
+                        <button disabled={busy} onClick={() => setConfirming(false)}>
+                            Cancel
+                        </button>
+                        <button
+                            className="danger-bg"
+                            disabled={busy}
+                            onClick={() =>
+                                void act(async () => {
+                                    await api(`/channels/${channel.id}`, 'DELETE');
+                                    await refresh();
+                                })
+                            }
+                        >
+                            Confirm deletion
+                        </button>
+                    </div>
+                ) : (
+                    <button
+                        className="danger-text"
+                        disabled={busy}
+                        onClick={() => setConfirming(true)}
+                    >
+                        Delete channel
+                    </button>
+                ))}
+        </section>
+    );
+}

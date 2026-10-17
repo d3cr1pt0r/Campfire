@@ -131,11 +131,35 @@ The executable is not code-signed, so Windows may show an unknown-publisher/Smar
 - Voice channels with microphone mute/deafen, webcam video and local preview, screen/window sharing, per-person Watch/Stop watching controls, and separate voice/stream volume.
 - Focused-app push-to-talk with Space, browser noise suppression/echo cancellation, and call sounds.
 - Role creation/editing, colors, chat/voice/management permissions, owner-only role assignment, and server naming.
+- Channel renaming/deletion with permanent text/voice anchors, per-role text access (full/read-only/hidden), and voice visibility.
+- Avatar positioning with drag, zoom, sliders and a fit-whole-image option.
 - Settings for notifications, audio input/output, and 360p/720p/1080p requested streaming resolution.
 
 History loads in pages of 100 messages, with a **Load older messages** button. Search and pinned views query the full conversation and paginate results. Unread counts are session-local. Screen sharing replaces the outgoing camera track and restores it when sharing stops. Windows desktop sharing supports system audio; see below for platform limitations. Settings affecting device capture apply on the next call/video start. Output-device support and capture picker behavior depend on the OS. Push-to-talk works while the app has focus and the cursor is outside an input field; it is not a system-wide hotkey.
 
-Private channels, moderation/ban UI, custom server icons, saved multi-server sessions, threads, bots, password recovery, mobile clients, code-signed desktop releases, auto-updates, and a large-call media server are future work. Message text supports clickable HTTP(S) links and custom emoji tokens, with no HTML or Markdown execution. DMs are access-controlled on the server; they are **not end-to-end encrypted** against the server owner. WebRTC encrypts media transport, and TURN can relay that media.
+Moderation/ban UI, custom server icons, saved multi-server sessions, threads, bots, password recovery, mobile clients, code-signed desktop releases, auto-updates, and a large-call media server are future work. Message text supports clickable HTTP(S) links and custom emoji tokens, with no HTML or Markdown execution. DMs are access-controlled on the server; they are **not end-to-end encrypted** against the server owner. WebRTC encrypts media transport, and TURN can relay that media.
+
+## Channel management and access
+
+Open **Settings → Channels & access**, or use the settings icon beside the channel categories. Managers can rename channels and delete additional channels after confirming. Each server keeps one permanent text channel and one permanent voice channel; these can be renamed but not deleted. Existing servers protect `general` and `lounge` when present, otherwise an existing channel of each type. Deleted channels stay deleted after restart. Deleting a text channel removes its messages and attachments; deleting a voice channel disconnects its participants.
+
+Access is configured per role (group) and per channel:
+
+| Text channel | Behavior |
+| --- | --- |
+| Full access | View and write, subject to the role's global permissions and message ownership |
+| Read only | View messages, reactions, pins and downloads; no posting, reacting, editing, deleting or pinning |
+| Hidden | No channel listing, history, downloads, typing notices or message events |
+
+Voice channels are **Visible** or **Hidden**. A role also needs the global voice permission to see/join them. Hidden voice channels do not expose participant rosters or signaling. Revoking voice access disconnects active participants. Private friend calls retain their separate invitation rules.
+
+The owner always retains full access. Managers can configure channels they can see; management permission does not bypass a channel's read-only restrictions. Missing per-role overrides default to full access for compatibility, including newly created roles. Global send/voice permissions remain an upper limit. The minimum-channel rule applies to the server; a role may have every channel hidden.
+
+Back up the database, restart the updated backend for migration 3, then update/rebuild desktop clients. Existing channel names and histories are preserved. The new schema requires restoring the backup when rolling back to older server code.
+
+## Position a profile picture
+
+Under **Settings → My account**, choose **Upload profile picture**. Drag the preview or use horizontal/vertical position and zoom sliders, then choose **Save picture**. **Center crop** fills the avatar; **Fit whole image** keeps the entire photo with background space where necessary. Cancel leaves your existing avatar unchanged. **Adjust current picture** reopens the saved picture for positioning; upload the original again to recover areas removed by an earlier crop. Saved avatars are 512 × 512 PNGs and use the chosen composition in chat, member lists and calls.
 
 ## Microphone troubleshooting
 

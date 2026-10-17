@@ -57,6 +57,12 @@ export function ChatMessages({
     setEdit: (message: Message | null) => void;
     bottom: React.RefObject<HTMLDivElement | null>;
 }) {
+    if (!currentChannel && !dmUser)
+        return (
+            <div className="messages">
+                <p>No text channels are available for your role.</p>
+            </div>
+        );
     return (
         <div className="messages">
             {conversation.error && <div role="alert">{conversation.error}</div>}
@@ -187,6 +193,7 @@ export function ChatMessages({
                                                     : ''
                                             }
                                             key={emoji}
+                                            disabled={!permission('send')}
                                             onClick={() =>
                                                 void act(() =>
                                                     api(`/messages/${m.id}/reaction`, 'POST', {
@@ -207,6 +214,7 @@ export function ChatMessages({
                                     <button
                                         title="Add reaction"
                                         aria-label="Add reaction"
+                                        disabled={!permission('send')}
                                         onClick={() => setModal(`reaction:${m.id}`)}
                                     >
                                         <Smile size={14} />
@@ -215,7 +223,11 @@ export function ChatMessages({
                                 </div>
                             </div>
                             <div className="message-actions">
-                                <button title="React" onClick={() => setModal(`reaction:${m.id}`)}>
+                                <button
+                                    title="React"
+                                    disabled={!permission('send')}
+                                    onClick={() => setModal(`reaction:${m.id}`)}
+                                >
                                     <Smile size={16} />
                                 </button>
                                 {m.author === state.me.id && permission('send') && (
@@ -243,14 +255,15 @@ export function ChatMessages({
                                         <Pin size={16} />
                                     </button>
                                 )}
-                                {(m.author === state.me.id || permission('manage')) && (
-                                    <button
-                                        title="Delete"
-                                        onClick={() => setModal(`delete:${m.id}`)}
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
-                                )}
+                                {permission('send') &&
+                                    (m.author === state.me.id || permission('manage')) && (
+                                        <button
+                                            title="Delete"
+                                            onClick={() => setModal(`delete:${m.id}`)}
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    )}
                             </div>
                         </article>
                     </React.Fragment>

@@ -54,5 +54,9 @@ export function useConversation(
     }, [conversation, socket, room, enabled]);
     // Abort on replacement without permanently closing an object during React's
     // development effect replay. Request generations reject obsolete results.
-    return { ...snapshot, loadOlder: conversation.loadOlder };
+    return {
+        ...snapshot,
+        messages: enabled ? snapshot.messages : [],
+        loadOlder: conversation.loadOlder,
+    };
 }

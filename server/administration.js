@@ -1,7 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { channelName } from './images.js';
 import { check, route, validateRole } from './policies.js';
-export function registerAdministration({ app, io, get, run, requirePermission, enforceCalls }) {
+import { transaction } from './database.js';
+export function registerAdministration({
+    app,
+    db,
+    get,
+    all,
+    run,
+    requirePermission,
+    enforceCalls,
+    canRead,
+    canJoin,
+    publishChannels,
+}) {
     app.post(
         '/api/channels',
         route((req, res) => {
@@ -13,9 +25,96 @@ export function registerAdministration({ app, io, get, run, requirePermission, e
                 check(false, e.message);
             }
             const id = randomUUID();
-            run('INSERT INTO channels VALUES(?,?,?)', id, name, req.body.kind);
-            io.emit('refresh');
+            run('INSERT INTO channels(id,name,kind) VALUES(?,?,?)', id, name, req.body.kind);
+            publishChannels();
             res.json({ id });
+        }),
+    );
+    const managedChannel = (req) => {
+        requirePermission(req.user, 'manage');
+        const channel = get('SELECT * FROM channels WHERE id=?', req.params.id);
+        check(
+            channel && (canRead(req.user, channel) || canJoin(req.user, channel)),
+            'Channel not found',
+            404,
+        );
+        return channel;
+    };
+    app.patch(
+        '/api/channels/:id',
+        route((req, res) => {
+            const channel = managedChannel(req);
+            let name;
+            try {
+                name = channelName(req.body.name, channel.kind);
+            } catch (error) {
+                check(false, error.message);
+            }
+            run('UPDATE channels SET name=? WHERE id=?', name, channel.id);
+            publishChannels();
+            res.json({ ok: true });
+        }),
+    );
+    app.delete(
+        '/api/channels/:id',
+        route((req, res) => {
+            const channel = managedChannel(req);
+            transaction(db, () => {
+                check(
+                    !channel.protected &&
+                        get('SELECT COUNT(*) n FROM channels WHERE kind=?', channel.kind).n > 1,
+                    'The protected text and voice channels cannot be deleted',
+                    409,
+                );
+                run('DELETE FROM messages WHERE room=?', channel.id);
+                run('DELETE FROM channels WHERE id=?', channel.id);
+            });
+            enforceCalls();
+            publishChannels();
+            res.json({ ok: true });
+        }),
+    );
+    app.put(
+        '/api/channels/:id/access',
+        route((req, res) => {
+            const channel = managedChannel(req);
+            const entries = req.body.permissions;
+            check(
+                Array.isArray(entries) && entries.length <= all('SELECT id FROM roles').length,
+                'Invalid channel permissions',
+            );
+            const seen = new Set();
+            for (const entry of entries) {
+                check(
+                    entry &&
+                        typeof entry.role === 'string' &&
+                        entry.role !== 'owner' &&
+                        !seen.has(entry.role) &&
+                        get('SELECT id FROM roles WHERE id=?', entry.role),
+                    'Invalid or duplicate role',
+                );
+                check(
+                    (channel.kind === 'text'
+                        ? ['full', 'read-only', 'hidden']
+                        : ['full', 'hidden']
+                    ).includes(entry.mode),
+                    'Invalid channel access mode',
+                );
+                seen.add(entry.role);
+            }
+            transaction(db, () => {
+                run('DELETE FROM channel_access WHERE channel=?', channel.id);
+                for (const entry of entries)
+                    run(
+                        'INSERT INTO channel_access(channel,role,mode) VALUES(?,?,?)',
+                        channel.id,
+                        entry.role,
+                        entry.mode,
+                    );
+            });
+            enforceCalls();
+            publishChannels();
+            res.json({ ok: true });
         }),
     );
     app.post(
@@ -30,7 +129,7 @@ export function registerAdministration({ app, io, get, run, requirePermission, e
             );
             const id = randomUUID();
             run('INSERT INTO roles VALUES(?,?,?,?)', id, name, color, JSON.stringify(permissions));
-            io.emit('refresh');
+            publishChannels();
             res.json({ id });
         }),
     );
@@ -56,7 +155,7 @@ export function registerAdministration({ app, io, get, run, requirePermission, e
                 role.id,
             );
             enforceCalls();
-            io.emit('refresh');
+            publishChannels();
             res.json({ ok: true });
         }),
     );
@@ -74,7 +173,7 @@ export function registerAdministration({ app, io, get, run, requirePermission, e
             );
             run('UPDATE users SET role=? WHERE id=?', req.body.role, target.id);
             enforceCalls();
-            io.emit('refresh');
+            publishChannels();
             res.json({ ok: true });
         }),
     );
@@ -89,7 +188,7 @@ export function registerAdministration({ app, io, get, run, requirePermission, e
                 'Server name must contain 1–64 characters',
             );
             run('UPDATE settings SET value=? WHERE key=?', req.body.name.trim(), 'name');
-            io.emit('refresh');
+            publishChannels();
             res.json({ ok: true });
         }),
     );

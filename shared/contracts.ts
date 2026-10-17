@@ -15,6 +15,13 @@ export type Channel = {
     id: string;
     name: string;
     kind: 'text' | 'voice';
+    protected: boolean;
+    access: 'full' | 'read-only';
+};
+export type ChannelAccess = {
+    channel: string;
+    role: string;
+    mode: 'full' | 'read-only' | 'hidden';
 };
 export type CallMember = {
     socket: string;
@@ -27,6 +34,7 @@ export type State = {
     users: User[];
     roles: Role[];
     channels: Channel[];
+    channelPermissions: ChannelAccess[];
     friends: {
         sender: string;
         recipient: string;
@@ -88,7 +96,8 @@ export interface ServerEvents {
     typing: (event: { room: string; user: string }) => void;
     calls: (members: CallMember[]) => void;
     'call:invite': (event: { id: string; from: string }) => void;
-    'call:revoked': () => void;
+    'call:revoked': (reason?: string) => void;
+    channels: (channels: Channel[]) => void;
     'call:speaking': (event: { user: string; active: boolean }) => void;
     signal: (event: { from: string; user: string; data: CallSignal }) => void;
 }

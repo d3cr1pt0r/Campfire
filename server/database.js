@@ -44,6 +44,17 @@ export function migrate(db) {
                 CREATE TRIGGER attachment_usage_delete AFTER DELETE ON attachments BEGIN UPDATE storage_usage SET bytes=bytes-OLD.bytes WHERE id=1; END;
                 CREATE TRIGGER attachment_usage_update AFTER UPDATE OF bytes ON attachments BEGIN UPDATE storage_usage SET bytes=bytes+NEW.bytes-OLD.bytes WHERE id=1; END;`);
         },
+        () => {
+            db.exec(`ALTER TABLE channels ADD COLUMN protected INTEGER NOT NULL DEFAULT 0;
+                INSERT INTO channels(id,name,kind) SELECT 'general','general','text' WHERE NOT EXISTS(SELECT 1 FROM channels WHERE kind='text');
+                INSERT INTO channels(id,name,kind) SELECT 'lounge','lounge','voice' WHERE NOT EXISTS(SELECT 1 FROM channels WHERE kind='voice');
+                UPDATE channels SET protected=1 WHERE id=(SELECT id FROM channels WHERE kind='text' ORDER BY (id='general') DESC,rowid LIMIT 1);
+                UPDATE channels SET protected=1 WHERE id=(SELECT id FROM channels WHERE kind='voice' ORDER BY (id='lounge') DESC,rowid LIMIT 1);
+                CREATE UNIQUE INDEX protected_channel_kind ON channels(kind) WHERE protected=1;
+                CREATE TABLE channel_access(channel TEXT REFERENCES channels(id) ON DELETE CASCADE,role TEXT REFERENCES roles(id) ON DELETE CASCADE,mode TEXT NOT NULL CHECK(mode IN ('full','read-only','hidden')),PRIMARY KEY(channel,role));
+                CREATE TRIGGER preserve_channels BEFORE DELETE ON channels WHEN OLD.protected=1 OR (SELECT COUNT(*) FROM channels WHERE kind=OLD.kind)<=1 BEGIN SELECT RAISE(ABORT,'Keep the protected text and voice channels'); END;
+                CREATE TRIGGER preserve_channel_kind BEFORE UPDATE OF kind,protected ON channels WHEN NEW.kind IS NOT OLD.kind OR NEW.protected IS NOT OLD.protected BEGIN SELECT RAISE(ABORT,'Channel type and protection cannot change'); END;`);
+        },
     ];
     migrations.forEach((apply, index) => {
         const version = index + 1;
@@ -60,6 +71,15 @@ export function openDatabase(dataDir, name) {
     const db = new DatabaseSync(path.join(dataDir, 'driskord.sqlite'));
     try {
         db.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
+        if (!db.prepare('SELECT COUNT(*) n FROM channels').get().n) {
+            const insert = db.prepare('INSERT INTO channels(id,name,kind) VALUES(?,?,?)');
+            for (const [id, kind] of [
+                ['general', 'text'],
+                ['introductions', 'text'],
+                ['lounge', 'voice'],
+            ])
+                insert.run(id, id, kind);
+        }
         migrate(db);
         db.function('contains_text', (text, search) =>
             Number(text.toLowerCase().includes(search.toLowerCase())),
@@ -81,12 +101,6 @@ export function openDatabase(dataDir, name) {
             '#a5a8b5',
             JSON.stringify(['send', 'voice']),
         );
-        for (const [id, kind] of [
-            ['general', 'text'],
-            ['introductions', 'text'],
-            ['lounge', 'voice'],
-        ])
-            run('INSERT OR IGNORE INTO channels VALUES(?,?,?)', id, id, kind);
         run('INSERT OR IGNORE INTO settings VALUES(?,?)', 'name', name);
         return { db, run, get, all };
     } catch (error) {

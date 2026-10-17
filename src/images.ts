@@ -21,3 +21,41 @@ export async function resizeImage(file: File, side: number): Promise<string> {
         bitmap.close();
     }
 }
+
+export type AvatarPosition = { x: number; y: number; zoom: number };
+export function avatarCrop(width: number, height: number, position: AvatarPosition) {
+    if (
+        ![width, height, position.x, position.y, position.zoom].every(Number.isFinite) ||
+        width <= 0 ||
+        height <= 0
+    )
+        throw new Error('Invalid image dimensions or crop');
+    const minimumZoom = Math.min(width, height) / Math.max(width, height);
+    const zoom = Math.max(minimumZoom, Math.min(4, position.zoom));
+    const side = Math.min(width, height) / zoom;
+    return {
+        x: (width - side) * Math.max(0, Math.min(1, position.x)),
+        y: (height - side) * Math.max(0, Math.min(1, position.y)),
+        side,
+    };
+}
+
+export function drawAvatar(
+    canvas: HTMLCanvasElement,
+    bitmap: ImageBitmap,
+    position: AvatarPosition,
+) {
+    const crop = avatarCrop(bitmap.width, bitmap.height, position);
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Image positioning is unavailable');
+    const scale = canvas.width / crop.side;
+    context.fillStyle = '#18191f';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(
+        bitmap,
+        -crop.x * scale,
+        -crop.y * scale,
+        bitmap.width * scale,
+        bitmap.height * scale,
+    );
+}

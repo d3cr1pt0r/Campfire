@@ -44,7 +44,7 @@ client event contracts but do not replace server-side runtime validation.
   opaque `next` cursor, and `pinned=1` restricts results to pins. Search/pin filters
   apply before pagination. Update the server before distributing the new client.
 - Losing `send` permission now blocks editing existing messages as well as new
-  messages and reactions. Own-message deletion remains allowed.
+  messages and reactions. Own-message deletion remains allowed in DMs; text channel mutations also obey channel access.
 - Idle sockets disconnect at session expiry. Logout uses the same revocation
   service. Long session lifetimes are split into timer-safe intervals.
 - Password hashing uses asynchronous scrypt without changing the stored hash
@@ -106,7 +106,7 @@ responses, live edit/delete merging, superseded requests and state refresh races
 The full test suite includes real HTTP/Socket.IO transport; these tests require
 permission to bind localhost. Media helper tests use controlled doubles.
 
-Local verification on Node 26.11.1 passed all 99 tests, formatting, strict type
+Local verification on Node 26.11.1 passed all 108 tests, formatting, strict type
 checking and the Vite production build. An offline `npm ci --dry-run` also passed.
 The added CI matrix targets Node 24; it has not been executed remotely here.
 
@@ -114,3 +114,24 @@ Live Electron/browser UI, keyboard/fullscreen behavior, actual microphones,
 camera/screen/system-audio capture, Windows executable packaging, Docker execution,
 NAT/TURN, load and physical storage capacity still require separate acceptance
 testing. No SFU, attachment-file migration, signing or automatic updates are added.
+
+## Channels and avatar positioning
+
+Migration 3 adds permanent channel markers and role/channel access overrides.
+`server/channel-access.js` owns effective access checks and per-user channel
+metadata; message events are delivered only to currently authorized sockets.
+HTTP history/downloads and all message mutations use the same policy. Calls
+filter rosters, check both signaling endpoints and revoke active access after
+permission changes or deletion. The protected-channel rule is also enforced by
+SQLite triggers. Bootstrap no longer recreates deleted default channels.
+
+`src/ChannelSettings.tsx` exposes naming, confirmed deletion and role access.
+`src/AvatarCropper.tsx` owns image decoding, preview, drag/zoom/fit controls and
+resource cleanup. Shared geometry in `src/images.ts` drives the preview and the
+saved square PNG. The original image is not retained after saving a crop.
+
+Tests cover legacy migration, restart behavior, cascading attachment cleanup,
+read-only restrictions including managers, hidden history/download denial, actual
+Socket.IO event/roster/signaling isolation, call revocation/deletion, and crop
+geometry/render transforms. Live crop dragging, keyboard focus, fullscreen UI,
+and actual peer media teardown remain manual acceptance checks.

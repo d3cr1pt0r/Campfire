@@ -121,7 +121,22 @@ function App() {
     const notify = useCallback((text: string) => setError(text), []);
     const client = useMemo(() => createApiClient(url, token), [url, token]);
     const api = client.json;
-    const conversation = useConversation(api, socket, room, !!token, search, pins);
+    const roomVisible =
+        !!state &&
+        (room.startsWith('dm:') ||
+            state.channels.some((channel) => channel.id === room && channel.kind === 'text'));
+    const conversation = useConversation(api, socket, room, !!token && roomVisible, search, pins);
+    useEffect(() => {
+        if (
+            state &&
+            !room.startsWith('dm:') &&
+            !state.channels.some((channel) => channel.kind === 'text' && channel.id === room)
+        ) {
+            setRoom(state.channels.find((channel) => channel.kind === 'text')?.id || '');
+            setSearch('');
+            setPins(false);
+        }
+    }, [state?.channels, room]);
     const messages = conversation.messages;
     const stateRefresh = useMemo(
         () =>
@@ -172,6 +187,10 @@ function App() {
             setError(`Connection: ${e.message}`);
         });
         s.on('refresh', refresh);
+        s.on('channels', (channels) => {
+            setState((previous) => (previous ? { ...previous, channels } : previous));
+            void refresh();
+        });
         s.on('call:invite', ({ from }: { from: string }) =>
             notify(
                 `${displayName(
@@ -289,6 +308,22 @@ function App() {
         !!state &&
         (state.me.role === 'owner' ||
             !!state.roles.find((r) => r.id === state.me.role)?.permissions.includes(p));
+    const canPost =
+        permission('send') &&
+        (room.startsWith('dm:') ||
+            state?.channels.find((channel) => channel.id === room)?.access === 'full');
+    const conversationPermission = (name: string) => permission(name) && canPost;
+    useEffect(() => {
+        if (!canPost)
+            setModal((previous) =>
+                previous === 'edit' ||
+                previous?.startsWith('reaction:') ||
+                previous?.startsWith('delete:')
+                    ? null
+                    : previous,
+            );
+        if (!roomVisible) setEdit(null);
+    }, [canPost, roomVisible]);
     const user = (id: string) => state?.users.find((u) => u.id === id);
     const color = (u?: User) => state?.roles.find((r) => r.id === u?.role)?.color;
     const dm = (id: string) => {
@@ -330,8 +365,8 @@ function App() {
         });
     };
     const addFiles = (files: File[]) => {
-        if (!permission('send')) {
-            notify('Your role cannot upload files.');
+        if (!canPost) {
+            notify('This conversation is read-only. Files cannot be uploaded.');
             return;
         }
         if (busy) {
@@ -394,10 +429,13 @@ function App() {
             const result = await api<{ id: string }>('/calls', 'POST', { user: id });
             await call.join(result.id);
         });
-    const uploadAvatar = (file: File) =>
-        act(async () => {
-            await api('/profile/avatar', 'POST', { data: await resizeImage(file, 512) });
-            await refresh();
+    const uploadAvatar = async (data: string) => {
+        await api('/profile/avatar', 'POST', { data });
+        await refresh();
+    };
+    const loadAvatar = async () =>
+        new File([await client.blob(`/avatars/${state?.me.avatar}`)], 'avatar.png', {
+            type: 'image/png',
         });
     const uploadEmoji = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -592,7 +630,11 @@ function App() {
                     <button
                         className="server-icon active"
                         title={state.name}
-                        onClick={() => selectRoom('general')}
+                        onClick={() =>
+                            selectRoom(
+                                state.channels.find((channel) => channel.kind === 'text')?.id || '',
+                            )
+                        }
                     >
                         {initials(state.name)}
                     </button>
@@ -634,6 +676,14 @@ function App() {
                             <span>TEXT CHANNELS</span>
                             {permission('manage') && (
                                 <button
+                                    title="Manage channels and access"
+                                    onClick={() => openSettings('channels')}
+                                >
+                                    <Settings size={15} />
+                                </button>
+                            )}
+                            {permission('manage') && (
+                                <button
                                     title="Create text channel"
                                     onClick={() => setModal('channel:text')}
                                 >
@@ -658,6 +708,14 @@ function App() {
                             ))}
                         <div className="category">
                             <span>VOICE CHANNELS</span>
+                            {permission('manage') && (
+                                <button
+                                    title="Manage voice channels and access"
+                                    onClick={() => openSettings('channels')}
+                                >
+                                    <Settings size={15} />
+                                </button>
+                            )}
                             {permission('manage') && (
                                 <button
                                     title="Create voice channel"
@@ -926,7 +984,7 @@ function App() {
                                     if (e.dataTransfer.types.includes('Files')) {
                                         e.preventDefault();
                                         e.dataTransfer.dropEffect =
-                                            permission('send') && !busy ? 'copy' : 'none';
+                                            canPost && !busy ? 'copy' : 'none';
                                     }
                                 }}
                                 onDrop={(e) => {
@@ -942,9 +1000,9 @@ function App() {
                                     <div className="file-drop-overlay">
                                         <Paperclip size={42} />
                                         <strong>
-                                            {permission('send')
+                                            {canPost
                                                 ? 'Drop files to attach'
-                                                : 'Your role cannot upload files'}
+                                                : 'This conversation is read-only'}
                                         </strong>
                                         <span>
                                             Up to 10 files · 5 MB total · Review before sending
@@ -952,7 +1010,7 @@ function App() {
                                     </div>
                                 )}
                                 <ChatMessages
-                                    permission={permission}
+                                    permission={conversationPermission}
                                     conversation={conversation}
                                     search={search}
                                     pins={pins}
@@ -996,7 +1054,7 @@ function App() {
                                         <button
                                             type="button"
                                             title="Attach files (up to 10 files, 5 MB total)"
-                                            disabled={busy || !permission('send')}
+                                            disabled={busy || !canPost}
                                             onClick={() => fileInput.current?.click()}
                                         >
                                             <Plus size={22} />
@@ -1014,12 +1072,12 @@ function App() {
                                         <textarea
                                             aria-label="Message"
                                             placeholder={
-                                                permission('send')
+                                                canPost
                                                     ? `Message ${dmUser ? '@' + displayName(dmUser) : '#' + (currentChannel?.name || 'general')}`
-                                                    : 'Your role cannot send messages'
+                                                    : 'This conversation is read-only'
                                             }
                                             value={draft}
-                                            disabled={!permission('send')}
+                                            disabled={!canPost}
                                             maxLength={4000}
                                             rows={1}
                                             onChange={(e) => {
@@ -1050,7 +1108,7 @@ function App() {
                                             disabled={
                                                 busy ||
                                                 !connected ||
-                                                !permission('send') ||
+                                                !canPost ||
                                                 (!draft.trim() && !attachments.length)
                                             }
                                         >
@@ -1210,6 +1268,7 @@ function App() {
                                     notify={notify}
                                     busy={busy}
                                     uploadAvatar={uploadAvatar}
+                                    loadAvatar={loadAvatar}
                                     url={url}
                                     devices={devices}
                                     setDevices={setDevices}
