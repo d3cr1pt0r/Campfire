@@ -21,3 +21,9 @@ Only Windows portable executables were attached to the five releases when review
 [Prepared description](v0.1.5.md). No published v0.1.5 release was found through the GitHub API on 2026-10-17 (the release-by-tag endpoint returned 404), and the local checkout has no v0.1.5 tag. No publication date or final tagged commit is assumed.
 
 The draft covers commits after v0.1.4 through `9286959` (the current checkout when prepared). Its changelog link uses that source cutoff until a final tag is available. Reconcile the notes and link with the actual tag before publication. This draft has not been published to GitHub.
+
+## v0.1.6 draft
+
+[Prepared description](v0.1.6.md). Based on the channel-management/mentions/notifications commit `12ab3a2`, the shutdown fix `78ab0e0`, and the version bump `2103793`, following the v0.1.5 notes commit `0f534d1`.
+
+The local checkout has no v0.1.5 or v0.1.6 tag. No live release lookup was performed for this draft, and no publication date is assumed. The changelog link uses the source commits; reconcile it with the final release tags before publication. This draft has not been published to GitHub.
