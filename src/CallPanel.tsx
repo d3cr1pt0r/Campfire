@@ -1,5 +1,5 @@
 import type { State, User, Preferences } from './types';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 
 import type { useCall } from './useCall';
 
@@ -15,8 +15,11 @@ import {
     ChevronDown,
     ChevronUp,
     Phone,
+    UserPlus,
+    Activity,
 } from 'lucide-react';
 import { MediaTile } from './MediaTile';
+import { fitCallParticipants } from './callLayout';
 
 export function CallPanel({
     state,
@@ -40,12 +43,17 @@ export function CallPanel({
     user: (id: string) => User | undefined;
 }) {
     const dock = useRef<HTMLDivElement>(null);
+    const stage = useRef<HTMLDivElement>(null);
+    const toolbar = useRef<HTMLDivElement>(null);
     const drag = useRef<{ pointer: number; y: number; height: number } | null>(null);
     const [workspaceHeight, setWorkspaceHeight] = useState(800);
     const [conversationMinimum, setConversationMinimum] = useState(320);
     const [expandedHeight, setExpandedHeight] = useState<number | null>(null);
     const [resizing, setResizing] = useState(false);
-    const minimum = 64;
+    const [minimum, setMinimum] = useState(124);
+    const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
+    const gallery = fitCallParticipants(stageSize.width, stageSize.height, call.remote.length + 1);
+    const participantOpacity = Math.max(0, Math.min(1, (stageSize.height - 24) / 96));
     const maximum = Math.max(minimum, workspaceHeight - conversationMinimum);
     const height = call.panelOpen
         ? Math.max(minimum, Math.min(maximum, expandedHeight ?? workspaceHeight * 0.43))
@@ -64,6 +72,11 @@ export function CallPanel({
         );
         const composer = workspace.querySelector('.chat-area > .composer-wrap');
         const update = () => {
+            const heading = dock.current?.querySelector('.call-heading');
+            setMinimum(
+                (heading?.getBoundingClientRect().height ?? 64) +
+                    (toolbar.current?.getBoundingClientRect().height ?? 60),
+            );
             setWorkspaceHeight(workspace.clientHeight);
             // Reserve the actual conversation controls plus one line of history.
             // The composer can grow when typing or attaching files.
@@ -80,10 +93,19 @@ export function CallPanel({
         update();
         const observer = new ResizeObserver(update);
         observer.observe(workspace);
+        if (toolbar.current) observer.observe(toolbar.current);
         chrome.forEach((element) => observer.observe(element));
         if (composer) observer.observe(composer);
         return () => observer.disconnect();
     });
+    useLayoutEffect(() => {
+        if (!stage.current) return;
+        const observer = new ResizeObserver(([entry]) => {
+            setStageSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+        });
+        observer.observe(stage.current);
+        return () => observer.disconnect();
+    }, []);
     const resize = (requested: number) => {
         const next = Math.max(minimum, Math.min(maximum, requested));
         if (next <= minimum) {
@@ -126,100 +148,69 @@ export function CallPanel({
                             {call.panelOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                         </button>
                     </div>
-                    <div className="call-panel-body" id="call-panel-body" hidden={!call.panelOpen}>
-                        <div className="video-grid">
-                            <MediaTile
-                                stream={call.local}
-                                name={`${displayName(state.me)} (you)`}
-                                avatarName={displayName(state.me)}
-                                avatar={state.me.avatar}
-                                speaking={speaking.has(state.me.id)}
-                                muted
-                                preview
-                            />
-                            {call.remote.map((p) => (
-                                <MediaTile
-                                    key={p.id}
-                                    stream={p.stream}
-                                    streamAudio={p.streamAudio}
-                                    sharing={p.sharing}
-                                    cameraActive={p.camera}
-                                    watching={p.watching}
-                                    watchPending={p.watchPending}
-                                    onWatch={(enabled) => call.watch(p.id, enabled)}
-                                    name={displayName(user(p.user)) || 'Member'}
-                                    avatar={user(p.user)?.avatar}
-                                    speaking={speaking.has(p.user)}
-                                    muted={call.deafened}
-                                    output={prefs.output}
-                                    outputLabel={prefs.outputLabel}
-                                    onOutputFallback={() =>
-                                        notify(
-                                            'Saved output unavailable; using System default. Your selection is kept for next time.',
-                                        )
-                                    }
-                                />
-                            ))}
-                        </div>
-                        <div className="call-controls">
-                            {call.channel?.startsWith('private:') &&
-                                (state.me.role === 'owner' ||
-                                    state.roles
-                                        .find((r) => r.id === state.me.role)
-                                        ?.permissions.includes('calls.start')) && (
-                                    <button onClick={() => setModal('invite-call')}>
-                                        Invite friend
-                                    </button>
-                                )}
-                            <button
-                                className={call.muted ? 'danger-bg' : ''}
-                                disabled={!call.canSpeak}
-                                title={call.muted ? 'Unmute microphone' : 'Mute microphone'}
-                                aria-label={call.muted ? 'Unmute microphone' : 'Mute microphone'}
-                                aria-pressed={!call.muted}
-                                onClick={() => call.setMuted(!call.muted)}
-                            >
-                                {call.muted ? <MicOff /> : <Mic />}
-                            </button>
-                            <button
-                                className={call.camera ? 'enabled' : ''}
-                                disabled={!call.canCamera}
-                                title={call.camera ? 'Turn off camera' : 'Turn on camera'}
-                                aria-label={call.camera ? 'Turn off camera' : 'Turn on camera'}
-                                aria-pressed={call.camera}
-                                onClick={() => void call.toggleCamera()}
-                            >
-                                {call.camera ? <Video /> : <VideoOff />}
-                            </button>
-                            <button
-                                className={call.sharing ? 'enabled' : ''}
-                                disabled={!call.canShare}
-                                title={
-                                    call.sharing ? 'Stop screen sharing' : 'Share screen or window'
+                    <div className="call-panel-body" id="call-panel-body">
+                        <div
+                            className="call-stage"
+                            ref={stage}
+                            inert={participantOpacity === 0}
+                            aria-hidden={participantOpacity === 0}
+                        >
+                            <div
+                                className="video-grid"
+                                style={
+                                    {
+                                        width: gallery.width,
+                                        opacity: participantOpacity,
+                                        visibility: participantOpacity === 0 ? 'hidden' : 'visible',
+                                        '--participant-scale': gallery.scale,
+                                    } as CSSProperties
                                 }
-                                aria-label={
-                                    call.sharing ? 'Stop screen sharing' : 'Share screen or window'
-                                }
-                                aria-pressed={call.sharing}
-                                onClick={() => void call.toggleShare()}
                             >
-                                <MonitorUp />
-                            </button>
-                            <button className="danger-bg" title="Leave call" onClick={call.leave}>
-                                <PhoneOff />
-                            </button>
-                            {prefs.pushToTalk && (
-                                <small>Hold Space to talk (outside text fields)</small>
-                            )}
-                            <button
-                                aria-expanded={call.showDetails}
-                                onClick={() => call.setShowDetails(!call.showDetails)}
-                            >
-                                Connection diagnostics
-                            </button>
+                                <div className="call-participant">
+                                    <MediaTile
+                                        stream={call.local}
+                                        name={`${displayName(state.me)} (you)`}
+                                        avatarName={displayName(state.me)}
+                                        avatar={state.me.avatar}
+                                        speaking={speaking.has(state.me.id)}
+                                        muted
+                                        preview
+                                    />
+                                </div>
+                                {call.remote.map((p) => (
+                                    <div className="call-participant" key={p.id}>
+                                        <MediaTile
+                                            stream={p.stream}
+                                            streamAudio={p.streamAudio}
+                                            sharing={p.sharing}
+                                            cameraActive={p.camera}
+                                            watching={p.watching}
+                                            watchPending={p.watchPending}
+                                            onWatch={(enabled) => call.watch(p.id, enabled)}
+                                            name={displayName(user(p.user)) || 'Member'}
+                                            avatar={user(p.user)?.avatar}
+                                            speaking={speaking.has(p.user)}
+                                            muted={call.deafened}
+                                            output={prefs.output}
+                                            outputLabel={prefs.outputLabel}
+                                            onOutputFallback={() =>
+                                                notify(
+                                                    'Saved output unavailable; using System default. Your selection is kept for next time.',
+                                                )
+                                            }
+                                        />
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                         {call.showDetails && (
-                            <div className="call-details">
+                            <div
+                                className="call-details"
+                                id="call-connection-details"
+                                tabIndex={0}
+                                role="region"
+                                aria-label="Connection diagnostics"
+                            >
                                 <p>
                                     Microphone:{' '}
                                     {!call.canSpeak
@@ -276,6 +267,95 @@ export function CallPanel({
                                 </p>
                             </div>
                         )}
+                        <div className="call-toolbar" ref={toolbar}>
+                            <div className="call-controls">
+                                {call.channel?.startsWith('private:') &&
+                                    (state.me.role === 'owner' ||
+                                        state.roles
+                                            .find((r) => r.id === state.me.role)
+                                            ?.permissions.includes('calls.start')) && (
+                                        <button
+                                            title="Invite friend"
+                                            aria-label="Invite friend"
+                                            onClick={() => setModal('invite-call')}
+                                        >
+                                            <UserPlus />
+                                        </button>
+                                    )}
+                                <button
+                                    className={call.muted ? 'danger-bg' : ''}
+                                    disabled={!call.canSpeak}
+                                    title={call.muted ? 'Unmute microphone' : 'Mute microphone'}
+                                    aria-label={
+                                        call.muted ? 'Unmute microphone' : 'Mute microphone'
+                                    }
+                                    aria-pressed={!call.muted}
+                                    onClick={() => call.setMuted(!call.muted)}
+                                >
+                                    {call.muted ? <MicOff /> : <Mic />}
+                                </button>
+                                <button
+                                    className={call.camera ? 'enabled' : ''}
+                                    disabled={!call.canCamera}
+                                    title={call.camera ? 'Turn off camera' : 'Turn on camera'}
+                                    aria-label={call.camera ? 'Turn off camera' : 'Turn on camera'}
+                                    aria-pressed={call.camera}
+                                    onClick={() => void call.toggleCamera()}
+                                >
+                                    {call.camera ? <Video /> : <VideoOff />}
+                                </button>
+                                <button
+                                    className={call.sharing ? 'enabled' : ''}
+                                    disabled={!call.canShare}
+                                    title={
+                                        call.sharing
+                                            ? 'Stop screen sharing'
+                                            : 'Share screen or window'
+                                    }
+                                    aria-label={
+                                        call.sharing
+                                            ? 'Stop screen sharing'
+                                            : 'Share screen or window'
+                                    }
+                                    aria-pressed={call.sharing}
+                                    onClick={() => void call.toggleShare()}
+                                >
+                                    <MonitorUp />
+                                </button>
+                                <button
+                                    className="danger-bg"
+                                    title="Leave call"
+                                    onClick={call.leave}
+                                >
+                                    <PhoneOff />
+                                </button>
+                                <button
+                                    title="Connection diagnostics"
+                                    aria-label="Connection diagnostics"
+                                    aria-expanded={call.showDetails}
+                                    aria-controls="call-connection-details"
+                                    onClick={() => {
+                                        if (!call.showDetails) {
+                                            setExpandedHeight((previous) =>
+                                                Math.max(
+                                                    previous ?? workspaceHeight * 0.43,
+                                                    minimum + 180,
+                                                ),
+                                            );
+                                            call.setPanelOpen(true);
+                                        }
+                                        call.setShowDetails(!call.showDetails);
+                                    }}
+                                >
+                                    <Activity />
+                                </button>
+                            </div>
+                            {prefs.pushToTalk && (
+                                <small className="call-push-hint">
+                                    Hold Space to talk (outside text fields)
+                                </small>
+                            )}
+                        </div>
                     </div>
                 </section>
             </div>

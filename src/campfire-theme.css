@@ -418,13 +418,102 @@ label,
 .call-panel-body {
     flex: 1;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0;
+}
+.call-stage {
+    flex: 1 1 0;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    margin-inline: 24px;
+}
+.call-stage .video-grid {
+    display: flex;
+    flex-wrap: wrap;
+    flex: 0 0 auto;
+    justify-content: center;
+    align-content: center;
+    gap: 12px;
+    overflow: visible;
+}
+.call-participant {
+    flex: 0 0 auto;
+    width: calc(290px * var(--participant-scale));
+    height: calc(272px * var(--participant-scale));
+}
+.call-participant > .media-tile {
+    width: 290px;
+    min-width: 290px;
+    height: 272px;
+    min-height: 272px;
+    aspect-ratio: auto;
+    transform: scale(var(--participant-scale));
+    transform-origin: top left;
+}
+.call-participant > .preview video,
+.call-participant > .preview .media-placeholder {
+    height: 160px;
+    bottom: auto;
+}
+.call-participant > .preview .media-name {
+    position: relative;
+    display: block;
+    margin: 166px 10px 0;
+    inset: auto;
+    padding: 0;
+    background: transparent;
+    font-size: 12px;
+}
+.call-participant .media-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.call-toolbar {
+    flex: 0 0 auto;
+    padding: 8px 16px 12px;
+}
+.call-toolbar .call-controls {
+    flex-wrap: nowrap;
+    padding: 0;
+    margin: 0;
+    justify-content: center;
+    gap: 8px;
+}
+.call-toolbar .call-controls > button {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 8px;
+    margin: 0;
+}
+.call-toolbar .call-controls > button.danger-bg {
+    margin: 0;
+}
+.call-push-hint {
+    display: block;
+    margin-top: 6px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 11px;
+}
+.call-panel-body > .call-details {
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: 45%;
+    margin: 0;
+    padding: 0 24px;
     overflow: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
-    padding: 8px 24px 16px;
-}
-.call-panel-body[hidden] {
-    display: none;
 }
 .call-splitter {
     flex: 0 0 8px;
@@ -466,7 +555,10 @@ label,
         padding-inline: 16px;
         gap: 8px;
     }
-    .call-panel-body {
+    .call-stage {
+        margin-inline: 16px;
+    }
+    .call-panel-body > .call-details {
         padding-inline: 16px;
     }
 }
