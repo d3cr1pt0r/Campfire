@@ -226,29 +226,29 @@ export function ThreadPanel(props: Props) {
                 <span>
                     {root.replyCount || 0} {root.replyCount === 1 ? 'reply' : 'replies'}
                 </span>
+                <div className="thread-tools">
+                    <label>
+                        <Search size={16} />
+                        <input
+                            aria-label="Search thread"
+                            placeholder="Search"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+                    </label>
+                    <button
+                        title="Pinned replies"
+                        aria-label="Pinned replies"
+                        aria-pressed={pins}
+                        onClick={() => setPins(!pins)}
+                    >
+                        <Pin size={17} />
+                    </button>
+                </div>
                 <button title="Close thread" aria-label="Close thread" onClick={onClose}>
                     <X size={20} />
                 </button>
             </header>
-            <div className="thread-tools">
-                <label>
-                    <Search size={16} />
-                    <input
-                        aria-label="Search thread"
-                        placeholder="Search thread"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
-                </label>
-                <button
-                    title="Pinned replies"
-                    aria-label="Pinned replies"
-                    aria-pressed={pins}
-                    onClick={() => setPins(!pins)}
-                >
-                    <Pin size={17} />
-                </button>
-            </div>
             <p className="thread-context">
                 Replying to {displayName(user(root.author), 'Former member')}
             </p>
