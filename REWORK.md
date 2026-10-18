@@ -63,10 +63,12 @@ client event contracts but do not replace server-side runtime validation.
 
 Before starting this version on an existing installation:
 
-1. Stop the backend and back up its complete data directory. Rename the previous
-   application database to `campfire.sqlite` in that directory, along with any
-   matching `-wal` and `-shm` sidecars. Do this before restarting so the backend
-   opens the existing community instead of creating a fresh database.
+1. Stop the backend and back up its complete data directory. The server reuses
+   an existing `.sqlite` community database when `campfire.sqlite` is absent or
+   has no accounts. If multiple previous databases contain accounts, startup
+   stops rather than selecting one arbitrarily. A populated `campfire.sqlite`
+   takes precedence. To standardize the filename, rename the intended database
+   to `campfire.sqlite` with matching `-wal` and `-shm` sidecars while stopped.
 2. Docker Compose now uses the `campfire` service and `campfire-data` volume.
    Reuse the existing volume with an override declaring `campfire-data` as
    `external: true` and setting `name` to the existing Docker volume name.

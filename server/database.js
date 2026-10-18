@@ -1,6 +1,6 @@
 import { migratePermissions, permissionIds, memberPermissions } from '../shared/permissions.js';
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { canonicalRoom } from '../shared/rooms.js';
 
@@ -120,9 +120,43 @@ export function migrate(db) {
     });
 }
 
+function communityDatabasePath(dataDir) {
+    const current = path.join(dataDir, 'campfire.sqlite');
+    const hasAccounts = (filename) => {
+        const database = new DatabaseSync(filename, { readOnly: true });
+        try {
+            if (
+                !database
+                    .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='users'")
+                    .get()
+            )
+                return false;
+            return Boolean(database.prepare('SELECT 1 FROM users LIMIT 1').get());
+        } finally {
+            database.close();
+        }
+    };
+    if (existsSync(current) && hasAccounts(current)) return current;
+    // A branding change must not strand an existing community under its previous filename.
+    const existing = readdirSync(dataDir, { withFileTypes: true })
+        .filter(
+            (entry) =>
+                entry.isFile() &&
+                entry.name.endsWith('.sqlite') &&
+                entry.name !== 'campfire.sqlite',
+        )
+        .map((entry) => path.join(dataDir, entry.name))
+        .filter(hasAccounts);
+    if (existing.length > 1)
+        throw new Error(
+            'Multiple existing community databases found. Select one by backing up the data directory and moving the intended database to campfire.sqlite while the server is stopped.',
+        );
+    return existing[0] ?? current;
+}
+
 export function openDatabase(dataDir, name) {
     mkdirSync(dataDir, { recursive: true });
-    const db = new DatabaseSync(path.join(dataDir, 'campfire.sqlite'));
+    const db = new DatabaseSync(communityDatabasePath(dataDir));
     try {
         db.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
         if (!db.prepare('SELECT COUNT(*) n FROM channels').get().n) {
