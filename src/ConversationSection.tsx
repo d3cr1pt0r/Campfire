@@ -35,6 +35,7 @@ export function ConversationSection({
     const contentOpacity = activeCall ? Math.max(0, Math.min(1, (room - 100) / 100)) : 1;
     return (
         <section
+            id="conversation-section"
             ref={section}
             className={`conversation-section ${actionsOpacity === 0 ? 'compact' : ''}`}
             aria-label="Conversation"

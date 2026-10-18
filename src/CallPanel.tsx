@@ -12,18 +12,18 @@ import {
     VideoOff,
     MonitorUp,
     PhoneOff,
-    ChevronDown,
-    ChevronUp,
     Phone,
     UserPlus,
     Activity,
+    Maximize2,
 } from 'lucide-react';
 import { MediaTile } from './MediaTile';
 import { fitCallParticipants } from './callLayout';
 
+export type CallAreaMode = 'split' | 'call' | 'conversation';
+
 export function CallPanel({
     state,
-    onHide,
     call,
     prefs,
     speaking,
@@ -31,9 +31,10 @@ export function CallPanel({
     setModal,
     notify,
     user,
+    areaMode,
+    onAreaModeChange,
 }: {
     state: State;
-    onHide: () => void;
     call: ReturnType<typeof useCall>;
     prefs: Preferences;
     speaking: Set<string>;
@@ -41,6 +42,8 @@ export function CallPanel({
     setModal: (modal: string | null) => void;
     notify: (message: string) => void;
     user: (id: string) => User | undefined;
+    areaMode: CallAreaMode;
+    onAreaModeChange: (mode: CallAreaMode) => void;
 }) {
     const dock = useRef<HTMLDivElement>(null);
     const splitter = useRef<HTMLDivElement>(null);
@@ -56,9 +59,13 @@ export function CallPanel({
     const gallery = fitCallParticipants(stageSize.width, stageSize.height, call.remote.length + 1);
     const participantOpacity = Math.max(0, Math.min(1, (stageSize.height - 24) / 96));
     const maximum = Math.max(minimum, workspaceHeight - conversationMinimum);
-    const height = call.panelOpen
-        ? Math.max(minimum, Math.min(maximum, expandedHeight ?? workspaceHeight * 0.43))
-        : minimum;
+    const panelOpen = areaMode === 'call' || (areaMode === 'split' && call.panelOpen);
+    const height =
+        areaMode === 'call'
+            ? maximum
+            : panelOpen
+              ? Math.max(minimum, Math.min(maximum, expandedHeight ?? workspaceHeight * 0.43))
+              : minimum;
     const compactLayout = height < minimum + 64;
     const privateCall = call.channel?.startsWith('private:');
     const participants = new Set(
@@ -95,6 +102,7 @@ export function CallPanel({
         return () => observer.disconnect();
     }, []);
     const resize = (requested: number) => {
+        onAreaModeChange('split');
         const next = Math.max(minimum, Math.min(maximum, requested));
         if (next <= minimum) {
             call.setPanelOpen(false);
@@ -105,8 +113,9 @@ export function CallPanel({
         }
     };
     const toggle = () => {
-        if (call.panelOpen) onHide();
-        else call.setPanelOpen(true);
+        onAreaModeChange('split');
+        call.setPanelOpen(!panelOpen);
+        if (panelOpen) call.setShowDetails(false);
     };
     return (
         <>
@@ -134,19 +143,13 @@ export function CallPanel({
                         <div className="call-heading-actions">
                             <span className="live-badge">LIVE</span>
                             <button
-                                aria-label={
-                                    call.panelOpen ? 'Hide call details' : 'Show call details'
-                                }
-                                title={call.panelOpen ? 'Hide call details' : 'Show call details'}
-                                aria-expanded={call.panelOpen}
-                                aria-controls="call-panel-body"
-                                onClick={toggle}
+                                className="panel-expand"
+                                title="Expand call details"
+                                aria-label="Expand call details"
+                                aria-controls="call-panel"
+                                onClick={() => onAreaModeChange('call')}
                             >
-                                {call.panelOpen ? (
-                                    <ChevronUp size={18} />
-                                ) : (
-                                    <ChevronDown size={18} />
-                                )}
+                                <Maximize2 size={18} />
                             </button>
                         </div>
                     </div>
@@ -356,6 +359,8 @@ export function CallPanel({
                                     aria-controls="call-connection-details"
                                     onClick={() => {
                                         if (!call.showDetails) {
+                                            if (areaMode === 'conversation')
+                                                onAreaModeChange('split');
                                             setExpandedHeight((previous) =>
                                                 Math.max(
                                                     previous ?? workspaceHeight * 0.43,
@@ -391,7 +396,7 @@ export function CallPanel({
                 aria-valuemax={Math.round(maximum)}
                 aria-valuenow={Math.round(height)}
                 aria-valuetext={
-                    call.panelOpen
+                    panelOpen
                         ? `Call details ${Math.round(height)} pixels high`
                         : 'Compact call information'
                 }

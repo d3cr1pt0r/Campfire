@@ -63,6 +63,20 @@ body {
     background: var(--panel);
     border-color: var(--line);
 }
+.workspace {
+    --panel-header-inset: 20px;
+}
+.workspace .topbar {
+    padding-inline-end: var(--panel-header-inset);
+}
+.workspace .panel-expand {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    padding: 6px;
+    flex-shrink: 0;
+}
 .topbar {
     min-height: 76px;
     height: 76px;
@@ -83,12 +97,12 @@ body {
     min-width: 0;
     overflow: hidden;
 }
-.conversation-section .top-actions > :not(.connection-status),
+.conversation-section .top-actions > :not(.panel-expand),
 .conversation-section .topbar > .navigation-toggle,
 .conversation-section .channel-title > svg {
     opacity: var(--conversation-actions-opacity, 1);
 }
-.conversation-section.compact .top-actions > :not(.connection-status),
+.conversation-section.compact .top-actions > :not(.panel-expand),
 .conversation-section.compact .topbar > .navigation-toggle,
 .conversation-section.compact .channel-title > svg {
     display: none;
@@ -133,6 +147,12 @@ body {
 }
 .server-heading {
     border-color: #e1c79816;
+}
+.server-heading .connection-status {
+    justify-content: flex-start;
+    width: auto;
+    height: auto;
+    padding: 0;
 }
 .nav-item {
     color: var(--nav-ink);
@@ -448,6 +468,7 @@ label,
     min-height: 64px;
     margin: 0;
     padding: 10px 24px;
+    padding-inline-end: var(--panel-header-inset);
     gap: 12px;
     color: var(--ink);
 }
@@ -661,6 +682,9 @@ label,
     opacity: 1;
 }
 @media (max-width: 800px) {
+    .workspace {
+        --panel-header-inset: 12px;
+    }
     .call-identity {
         max-width: calc(50% - 106px);
     }
@@ -685,7 +709,7 @@ label,
         padding: 6px;
     }
     .call-dock .call-heading {
-        padding-inline: 16px;
+        padding-inline-start: 16px;
         gap: 8px;
     }
     .call-stage {

@@ -5,7 +5,7 @@ import { ChatComposer } from './ChatComposer';
 import { ThreadPanel } from './ThreadPanel';
 import { ChatMessages } from './ChatMessages';
 import type { ChatScrollPosition } from './chatScroll';
-import { CallPanel } from './CallPanel';
+import { CallPanel, type CallAreaMode } from './CallPanel';
 import { ConversationSection } from './ConversationSection';
 import { FriendsPanel } from './FriendsPanel';
 import { SettingsPanel } from './SettingsPanel';
@@ -49,6 +49,7 @@ import {
     Video,
     Bell,
     BellOff,
+    Maximize2,
 } from 'lucide-react';
 import type { State, Message, Preferences, User } from './types';
 import { useCall } from './useCall';
@@ -296,6 +297,14 @@ function App() {
             ),
     );
     const speaking = useSpeaking(socket, call.microphone, state?.me.id || '', call.channel);
+    const [callAreaMode, setCallAreaMode] = useState<CallAreaMode>('split');
+    useEffect(() => setCallAreaMode('split'), [call.channel, url, token]);
+    const toggleCallPanel = () => {
+        const open = callAreaMode === 'call' || (callAreaMode === 'split' && call.panelOpen);
+        setCallAreaMode('split');
+        call.setPanelOpen(!open);
+        if (open) call.setShowDetails(false);
+    };
     useEffect(() => {
         storage.setItem('preferences', JSON.stringify(prefs));
     }, [prefs]);
@@ -988,9 +997,17 @@ function App() {
                         <button className="server-heading" onClick={() => openSettings('server')}>
                             <span>
                                 {state.name}
-                                <small>
-                                    <i className={connected ? 'online-dot' : 'offline-dot'} />
-                                    {connected ? 'Good company, always.' : 'Reconnecting…'}
+                                <small
+                                    className={`connection-status ${connected ? '' : 'disconnected'}`}
+                                    role="status"
+                                    title={
+                                        connected
+                                            ? 'Connected to server'
+                                            : 'Disconnected from server; reconnecting'
+                                    }
+                                >
+                                    <i aria-hidden="true" />
+                                    {connected ? 'Connected to server' : 'Reconnecting…'}
                                 </small>
                             </span>
                             <ChevronDown size={18} />
@@ -1075,10 +1092,7 @@ function App() {
                                             disabled={!permission('calls.join')}
                                             onClick={() => {
                                                 if (call.channel !== c.id) void call.join(c.id);
-                                                else {
-                                                    call.setPanelOpen(!call.panelOpen);
-                                                    if (call.panelOpen) call.setShowDetails(false);
-                                                }
+                                                else toggleCallPanel();
                                             }}
                                         >
                                             <Volume2 size={20} />
@@ -1116,6 +1130,8 @@ function App() {
                                                             className="voice-stream-indicator"
                                                             title="Open camera call"
                                                             onClick={() => {
+                                                                if (callAreaMode === 'conversation')
+                                                                    setCallAreaMode('split');
                                                                 if (call.channel !== p.channel)
                                                                     void call.join(p.channel);
                                                                 else call.setPanelOpen(true);
@@ -1139,6 +1155,8 @@ function App() {
                                                             }
                                                             disabled={!permission('calls.join')}
                                                             onClick={() => {
+                                                                if (callAreaMode === 'conversation')
+                                                                    setCallAreaMode('split');
                                                                 if (p.socket === socket?.id)
                                                                     call.setPanelOpen(true);
                                                                 else
@@ -1166,10 +1184,7 @@ function App() {
                                         disabled={!!call.channel && call.channel !== c.id}
                                         onClick={() => {
                                             if (call.channel !== c.id) void call.join(c.id);
-                                            else {
-                                                call.setPanelOpen(!call.panelOpen);
-                                                if (call.panelOpen) call.setShowDetails(false);
-                                            }
+                                            else toggleCallPanel();
                                         }}
                                     >
                                         <Phone size={18} />
@@ -1296,10 +1311,8 @@ function App() {
                 <main className="workspace" inert={compact && navigationOpen}>
                     {call.channel && (
                         <CallPanel
-                            onHide={() => {
-                                call.setPanelOpen(false);
-                                call.setShowDetails(false);
-                            }}
+                            areaMode={callAreaMode}
+                            onAreaModeChange={setCallAreaMode}
                             state={state}
                             call={call}
                             prefs={prefs}
@@ -1359,28 +1372,6 @@ function App() {
                                     </span>
                                 </div>
                                 <div className="top-actions">
-                                    {call.channel && (
-                                        <button
-                                            title={
-                                                call.panelOpen
-                                                    ? 'Hide call details'
-                                                    : 'Show call details'
-                                            }
-                                            aria-label={
-                                                call.panelOpen
-                                                    ? 'Hide call details'
-                                                    : 'Show call details'
-                                            }
-                                            aria-expanded={call.panelOpen}
-                                            aria-controls="call-panel"
-                                            onClick={() => {
-                                                call.setPanelOpen(!call.panelOpen);
-                                                if (call.panelOpen) call.setShowDetails(false);
-                                            }}
-                                        >
-                                            <MonitorPlay size={20} />
-                                        </button>
-                                    )}
                                     {view === 'chat' && (
                                         <>
                                             {dmUser && (
@@ -1470,19 +1461,17 @@ function App() {
                                             </label>
                                         </>
                                     )}
-                                    <span
-                                        className={`connection-status ${connected ? '' : 'disconnected'}`}
-                                        title={
-                                            connected
-                                                ? 'Connected to server'
-                                                : 'Disconnected from server'
-                                        }
-                                    >
-                                        <i />
-                                        <span className="sr-only">
-                                            {connected ? 'Connected' : 'Disconnected; reconnecting'}
-                                        </span>
-                                    </span>
+                                    {call.channel && (
+                                        <button
+                                            className="panel-expand"
+                                            title="Expand conversation"
+                                            aria-label="Expand conversation"
+                                            aria-controls="conversation-section"
+                                            onClick={() => setCallAreaMode('conversation')}
+                                        >
+                                            <Maximize2 size={18} />
+                                        </button>
+                                    )}
                                 </div>
                             </header>
                         }
