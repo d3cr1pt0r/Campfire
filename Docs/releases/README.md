@@ -44,4 +44,6 @@ The working `package.json` declares version 0.1.8. No local v0.1.8 tag exists. T
 
 [Prepared description](v0.1.9.md). Covers changes after the v0.1.8 draft source cutoff `ed4e95f` through `0d21c3e`: call view options and participant selection, larger centered tiles, expand-only panel controls, mute/deafen badges, clearer thread context, composer sizing/focus/alignment, and sidebar cleanup.
 
+Cross-checked against [v0.1.8](v0.1.8.md): the existing grid, resizable call section, participant hover/volume controls, stream-watch actions, and voice-roster status indicators are not presented as new v0.1.9 features. The notes describe the new view switches, sizing changes, tile badges, and specific alignment fixes.
+
 The working `package.json` declares version 0.1.9. No local v0.1.8 or v0.1.9 tag exists. The changelog link uses the recorded source cutoffs; reconcile it with the final release tags before publication. No live release lookup was performed, and no publication date or uploaded assets are assumed. This draft has not been published to GitHub.
