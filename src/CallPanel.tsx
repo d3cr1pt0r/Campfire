@@ -172,6 +172,8 @@ export function CallPanel({
                                         avatar={state.me.avatar}
                                         speaking={speaking.has(state.me.id)}
                                         muted
+                                        microphoneMuted={call.muted}
+                                        deafened={call.deafened}
                                         preview
                                     />
                                 </div>
@@ -189,6 +191,14 @@ export function CallPanel({
                                             avatar={user(p.user)?.avatar}
                                             speaking={speaking.has(p.user)}
                                             muted={call.deafened}
+                                            microphoneMuted={
+                                                state.calls.find((member) => member.socket === p.id)
+                                                    ?.muted
+                                            }
+                                            deafened={
+                                                state.calls.find((member) => member.socket === p.id)
+                                                    ?.deafened
+                                            }
                                             output={prefs.output}
                                             outputLabel={prefs.outputLabel}
                                             onOutputFallback={() =>

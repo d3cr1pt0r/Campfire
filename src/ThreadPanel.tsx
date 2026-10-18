@@ -11,6 +11,7 @@ import { validateFileSelection } from '../shared/uploads.js';
 import { emojis } from '../shared/emojis.js';
 
 type Props = {
+    focusRequest: number;
     parent: Message;
     api: ApiClient;
     socket: AppSocket | null;
@@ -298,6 +299,7 @@ export function ThreadPanel(props: Props) {
                 </div>
             )}
             <ChatComposer
+                focusRequest={props.focusRequest}
                 canAttach={canPost && permission('files.attach')}
                 users={state.users}
                 emojis={state.emojis}

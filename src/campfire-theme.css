@@ -533,6 +533,26 @@ label,
     overflow: hidden;
     text-overflow: ellipsis;
 }
+.call-avatar-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+}
+.call-media-status {
+    position: absolute;
+    z-index: 5;
+    left: 10px;
+    bottom: 10px;
+    display: flex;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+    color: var(--ink);
+}
 .call-toolbar {
     flex: 0 0 auto;
     padding: 8px 16px 12px;

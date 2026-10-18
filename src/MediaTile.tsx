@@ -1,6 +1,6 @@
 import { VolumeControl } from './VolumeControl';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Maximize2 } from 'lucide-react';
+import { HeadphoneOff, Maximize2, MicOff } from 'lucide-react';
 import { AuthImage } from './ChatContent';
 import { ExpandedVideo } from './ExpandedVideo';
 import { AudioPlayback, type AudioPlaybackHandle } from './AudioPlayback';
@@ -18,6 +18,8 @@ export function MediaTile({
     name,
     avatarName = name,
     muted = false,
+    microphoneMuted = false,
+    deafened = false,
     preview = false,
     output = '',
     outputLabel = '',
@@ -35,6 +37,8 @@ export function MediaTile({
     name: string;
     avatarName?: string;
     muted?: boolean;
+    microphoneMuted?: boolean;
+    deafened?: boolean;
     preview?: boolean;
     output?: string;
     outputLabel?: string;
@@ -102,6 +106,16 @@ export function MediaTile({
         void voice.current?.play();
         void program.current?.play();
     };
+    const status = (microphoneMuted || deafened) && (
+        <span
+            className="call-media-status"
+            role="img"
+            aria-label={deafened ? 'Deafened' : 'Microphone muted'}
+            title={deafened ? 'Deafened' : 'Microphone muted'}
+        >
+            {deafened ? <HeadphoneOff size={14} /> : <MicOff size={14} />}
+        </span>
+    );
     return (
         <div
             className={`media-tile ${preview ? 'preview' : ''} ${speaking ? 'speaking' : ''} ${sharing && !preview ? 'has-stream' : ''}`}
@@ -110,11 +124,13 @@ export function MediaTile({
             tabIndex={0}
         >
             <div className="media-placeholder">
-                {avatar ? (
-                    <AuthImage path={`/avatars/${avatar}`} alt={name} className="call-avatar" />
-                ) : (
-                    initials(avatarName)
-                )}
+                <div className="call-avatar-wrap">
+                    {avatar ? (
+                        <AuthImage path={`/avatars/${avatar}`} alt={name} className="call-avatar" />
+                    ) : (
+                        initials(avatarName)
+                    )}
+                </div>
             </div>
             <video
                 style={{ opacity: hasVideo && allowVideo ? 1 : 0 }}
@@ -127,6 +143,7 @@ export function MediaTile({
                     if (hasVideo) setExpanded(true);
                 }}
             />
+            {status}
             {hasVideo && allowVideo && (
                 <button
                     type="button"

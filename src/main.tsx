@@ -178,6 +178,8 @@ function App() {
         [draft, setDraft] = useState(''),
         [attachments, setAttachments] = useState<File[]>([]);
     const [thread, setThread] = useState<Message | null>(null);
+    const [composerFocus, setComposerFocus] = useState(0);
+    const [threadFocus, setThreadFocus] = useState(0);
     useEffect(() => setThread(null), [room, url, token, view]);
     const [search, setSearch] = useState(''),
         [pins, setPins] = useState(false),
@@ -495,6 +497,7 @@ function App() {
     const color = (u?: User) => state?.roles.find((r) => r.id === u?.role)?.color;
     const dm = (id: string) => {
         if (!state) return;
+        setComposerFocus((request) => request + 1);
         setRoom(canonicalRoom(`dm:${state.me.id}:${id}`));
         setView('chat');
         setNavigationOpen(false);
@@ -502,6 +505,7 @@ function App() {
         setPins(false);
     };
     const selectRoom = (id: string) => {
+        setComposerFocus((request) => request + 1);
         setRoom(id);
         setView('chat');
         setNavigationOpen(false);
@@ -1601,7 +1605,10 @@ function App() {
                                             search,
                                             pins,
                                         ])}
-                                        onReply={setThread}
+                                        onReply={(message) => {
+                                            setThread(message);
+                                            setThreadFocus((request) => request + 1);
+                                        }}
                                         permission={conversationPermission}
                                         conversation={conversation}
                                         search={search}
@@ -1624,6 +1631,7 @@ function App() {
                                         }}
                                     />
                                     <ChatComposer
+                                        focusRequest={composerFocus}
                                         canAttach={canPost && permission('files.attach')}
                                         users={state.users}
                                         emojis={state.emojis}
@@ -1649,6 +1657,7 @@ function App() {
                             )}
                             {thread && thread.room === room && view === 'chat' && roomVisible && (
                                 <ThreadPanel
+                                    focusRequest={threadFocus}
                                     key={`${url}:${state.me.id}:${room}:${thread.id}`}
                                     parent={thread}
                                     api={api}

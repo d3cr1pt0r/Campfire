@@ -26,6 +26,7 @@ type Props = {
     user: (id: string) => User | undefined;
     placeholder: string;
     label?: string;
+    focusRequest?: number;
     users: User[];
     emojis?: { id: string; name: string; author: string }[];
 };
@@ -49,10 +50,14 @@ export function ChatComposer({
     user,
     placeholder,
     label = 'Message',
+    focusRequest,
     users,
     emojis = [],
 }: Props) {
     const input = useRef<HTMLTextAreaElement>(null);
+    useLayoutEffect(() => {
+        if (focusRequest !== undefined && canPost) input.current?.focus({ preventScroll: true });
+    }, [focusRequest, canPost]);
     useLayoutEffect(() => {
         const textarea = input.current;
         const composer = textarea?.parentElement;
