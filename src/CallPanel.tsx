@@ -239,6 +239,11 @@ export function CallPanel({
                                             watching={p.watching}
                                             watchPending={p.watchPending}
                                             onWatch={(enabled) => call.watch(p.id, enabled)}
+                                            onPopoutBlocked={() =>
+                                                notify(
+                                                    'Allow pop-up windows to pop out this stream.',
+                                                )
+                                            }
                                             name={displayName(user(p.user)) || 'Member'}
                                             avatar={user(p.user)?.avatar}
                                             speaking={speaking.has(p.user)}

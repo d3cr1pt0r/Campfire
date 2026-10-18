@@ -1,11 +1,12 @@
 import { VolumeControl } from './VolumeControl';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { HeadphoneOff, Maximize2, MicOff } from 'lucide-react';
+import { HeadphoneOff, Maximize2, MicOff, PictureInPicture2 } from 'lucide-react';
 import { AuthImage } from './ChatContent';
 import { ExpandedVideo } from './ExpandedVideo';
 import { AudioPlayback, type AudioPlaybackHandle } from './AudioPlayback';
 import { syncPlaybackTracks } from './playback';
 import { initials } from './profiles';
+import { PopoutVideo } from './PopoutVideo';
 
 export function MediaTile({
     stream,
@@ -26,6 +27,7 @@ export function MediaTile({
     avatar,
     speaking = false,
     onOutputFallback,
+    onPopoutBlocked,
 }: {
     stream: MediaStream | null;
     streamAudio?: MediaStream | null;
@@ -45,6 +47,7 @@ export function MediaTile({
     avatar?: string | null;
     speaking?: boolean;
     onOutputFallback?: () => void;
+    onPopoutBlocked?: () => void;
 }) {
     const voice = useRef<AudioPlaybackHandle>(null),
         program = useRef<AudioPlaybackHandle>(null),
@@ -55,6 +58,28 @@ export function MediaTile({
         [streamError, setStreamError] = useState('');
     const [hasVideo, setHasVideo] = useState(false),
         [expanded, setExpanded] = useState(false);
+    const [popout, setPopout] = useState<Window | null>(null);
+    const closePopout = () => setPopout(null);
+    useEffect(() => {
+        if (!sharing || (!watching && !watchPending)) setPopout(null);
+    }, [sharing, watching, watchPending]);
+    const openPopout = () => {
+        if (popout && !popout.closed) {
+            popout.focus();
+            return;
+        }
+        const target = window.open(
+            'about:blank',
+            `campfire-stream-${crypto.randomUUID()}`,
+            'popup=yes,width=960,height=600,resizable=yes,scrollbars=no',
+        );
+        if (!target) {
+            onPopoutBlocked?.();
+            return;
+        }
+        setPopout(target);
+        if (!watching) onWatch?.(true);
+    };
     const voiceTrack = preview ? undefined : stream?.getAudioTracks()[0];
     const audible = useMemo(() => new MediaStream(voiceTrack ? [voiceTrack] : []), [voiceTrack]);
     const visibleStream = useMemo(() => new MediaStream(), [stream]);
@@ -144,6 +169,53 @@ export function MediaTile({
                 }}
             />
             {status}
+            {!preview && sharing && (
+                <button
+                    type="button"
+                    className="popout-video"
+                    title={popout ? 'Focus stream window' : 'Pop out stream'}
+                    aria-label={`Pop out stream from ${name}`}
+                    aria-pressed={!!popout}
+                    disabled={watchPending && !watching}
+                    onClick={openPopout}
+                >
+                    <PictureInPicture2 size={17} />
+                </button>
+            )}
+            {popout && (
+                <PopoutVideo
+                    target={popout}
+                    stream={visibleStream}
+                    name={name}
+                    ready={hasVideo && allowVideo}
+                    onClose={closePopout}
+                >
+                    <VolumeControl
+                        name={name}
+                        label="Voice"
+                        value={voiceVolume}
+                        onChange={setVoiceVolume}
+                    />
+                    <VolumeControl
+                        name={name}
+                        label="Stream"
+                        value={streamVolume}
+                        onChange={setStreamVolume}
+                    />
+                    {(voiceError || streamError) && (
+                        <button onClick={retryAudio}>Play audio</button>
+                    )}
+                    {muted && <span>Deafened</span>}
+                    <button
+                        onClick={() => {
+                            closePopout();
+                            onWatch?.(false);
+                        }}
+                    >
+                        Stop watching
+                    </button>
+                </PopoutVideo>
+            )}
             {hasVideo && allowVideo && (
                 <button
                     type="button"

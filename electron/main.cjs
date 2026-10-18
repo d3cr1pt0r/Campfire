@@ -13,6 +13,7 @@ const {
     clipboard,
 } = require('electron');
 const path = require('node:path');
+const { installWindowPolicy } = require('./window-policy.cjs');
 const { clipboardAttachments } = require('./clipboard-files.cjs');
 const { createRendererServer, listenRendererServer } = require('./renderer-server.cjs');
 const { createClientState } = require('./client-state.cjs');
@@ -194,18 +195,7 @@ else {
                         win.hide();
                     }
                 });
-                win.webContents.setWindowOpenHandler(({ url }) => {
-                    try {
-                        const target = new URL(url);
-                        if (
-                            ['http:', 'https:'].includes(target.protocol) &&
-                            !target.username &&
-                            !target.password
-                        )
-                            void shell.openExternal(target.href).catch(() => {});
-                    } catch {}
-                    return { action: 'deny' };
-                });
+                installWindowPolicy(win, shell);
                 win.webContents.on('will-navigate', (event, url) => {
                     if (!trusted(url)) event.preventDefault();
                 });

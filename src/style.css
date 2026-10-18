@@ -3847,3 +3847,77 @@ h2,
         font-size: 42px;
     }
 }
+
+.media-tile > .popout-video {
+    position: absolute;
+    top: 10px;
+    right: 48px;
+    z-index: 6;
+    width: 30px;
+    height: 30px;
+    padding: 6px;
+    background: #211b18dd;
+    color: #fff;
+    border: 1px solid #ffffff50;
+}
+.media-tile > .popout-video[aria-pressed='true'] {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+body.stream-popout-body {
+    display: block;
+    margin: 0;
+    min-width: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+}
+.stream-popout {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--panel, #261f1b);
+    color: var(--ink, #f4e9dc);
+}
+.stream-popout header,
+.stream-popout footer {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 10px 14px;
+    flex-shrink: 0;
+}
+.stream-popout header strong {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.stream-popout-stage {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    background: #000;
+}
+.stream-popout-stage video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+.stream-popout-stage p,
+.stream-popout-retry {
+    position: absolute;
+    inset: 40% 10% auto;
+    text-align: center;
+    color: #fff;
+}
+.stream-popout footer label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.stream-popout input[type='range'] {
+    width: 90px;
+}
