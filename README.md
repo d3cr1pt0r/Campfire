@@ -4,6 +4,10 @@ A cozy, self-hosted place for friends and communities to gather. Text, voice, vi
 
 A place to catch up, share what you're working on, or just hang out together. Use Campfire in your browser or through the desktop app, with your community's own server at the center.
 
+![Campfire desktop client showing a populated conversation, reactions, member list, and a voice channel with stream sharing](Docs/screenshots/campfire-desktop.png)
+
+*A demo community with sample messages, avatars, and an active voice channel.*
+
 ## What you can do
 
 - **Chat together:** organize conversations into text channels, reply in threads, and message friends directly.
