@@ -12,7 +12,7 @@ import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
 
 test('overlapping and repeated shutdown calls close SQLite only once', async (t) => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'driskord-shutdown-'));
+    const dir = mkdtempSync(path.join(tmpdir(), 'campfire-shutdown-'));
     const service = createApp({ dataDir: dir });
     t.after(async () => {
         await service.close();
@@ -120,7 +120,7 @@ test('one origin policy supports configured, local and same-origin transports', 
 
 test('forwarded client addresses affect rate limiting only behind a trusted proxy', async (t) => {
     for (const trustProxy of [false, ['loopback']]) {
-        const dir = mkdtempSync(path.join(tmpdir(), 'driskord-proxy-'));
+        const dir = mkdtempSync(path.join(tmpdir(), 'campfire-proxy-'));
         const service = createApp({ dataDir: dir, trustProxy });
         try {
             const attempt = (ip) =>
@@ -175,7 +175,7 @@ test('idle sockets expire without sending another packet and revocation cancels 
 });
 
 test('canonical conversations, stable pagination, full search, permissions and storage quotas', async (t) => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'driskord-rework-'));
+    const dir = mkdtempSync(path.join(tmpdir(), 'campfire-rework-'));
     const service = createApp({ dataDir: dir, maxStoredUploadBytes: 5 });
     t.after(async () => {
         await service.close();
@@ -247,7 +247,7 @@ test('canonical conversations, stable pagination, full search, permissions and s
 });
 
 test('concurrent first registrations produce one owner and duplicate registration returns conflict', async (t) => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'driskord-registration-'));
+    const dir = mkdtempSync(path.join(tmpdir(), 'campfire-registration-'));
     const service = createApp({ dataDir: dir });
     t.after(async () => {
         await service.close();

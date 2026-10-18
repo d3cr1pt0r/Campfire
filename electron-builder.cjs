@@ -1,6 +1,6 @@
-// Keep app identity stable so replacing a desktop build retains the same user profile.
+// Use the Campfire identity consistently across desktop builds.
 module.exports = {
-    appId: 'org.driskord.desktop',
+    appId: 'org.campfire.desktop',
     productName: 'Campfire',
     directories: { output: 'release' },
     files: [
@@ -19,7 +19,7 @@ module.exports = {
             { target: 'AppImage', arch: ['x64'] },
             { target: 'tar.gz', arch: ['x64'] },
         ],
-        executableName: 'driskord',
+        executableName: 'campfire',
         category: 'Network',
         artifactName: 'Campfire-${version}-linux-${arch}.${ext}',
     },

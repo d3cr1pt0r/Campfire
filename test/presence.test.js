@@ -9,7 +9,7 @@ import { request } from '../test-support/http.js';
 import { shouldIdle, idleDelay, userStatus } from '../src/presence.ts';
 
 async function fixture(t) {
-    const directory = mkdtempSync(path.join(tmpdir(), 'driskord-presence-'));
+    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-presence-'));
     let service = createApp({ dataDir: directory });
     const attached = [];
     const detach = (socket) => {

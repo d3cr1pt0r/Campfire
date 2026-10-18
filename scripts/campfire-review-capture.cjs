@@ -162,7 +162,7 @@ app.whenReady()
             ['after', 5182],
             ['canvas', 5182],
             ['forest', 5182],
-        ]) {
+        ].filter(([theme]) => !process.env.REVIEW_THEME || theme === process.env.REVIEW_THEME)) {
             fs.mkdirSync(path.join(output, theme), { recursive: true });
             for (const [id, title, setup, then, finallyStep] of screens) {
                 console.log('loading', theme, id);

@@ -8,7 +8,7 @@ import { createApp } from '../server/app.js';
 import { request } from '../test-support/http.js';
 
 async function fixture(t) {
-    const directory = mkdtempSync(path.join(tmpdir(), 'driskord-registration-'));
+    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-registration-'));
     let service = createApp({ dataDir: directory, setupCode: 'owner-secret' });
     t.after(async () => {
         await service.close();

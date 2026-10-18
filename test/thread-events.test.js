@@ -8,7 +8,7 @@ import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
 
 test('thread events broadcast reply counts and typing only to authorized room participants', async (t) => {
-    const directory = mkdtempSync(path.join(tmpdir(), 'driskord-thread-events-'));
+    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-thread-events-'));
     const service = createApp({ dataDir: directory });
     const sockets = [];
     t.after(async () => {

@@ -59,6 +59,25 @@ client event contracts but do not replace server-side runtime validation.
 
 ## Configuration and database upgrades
 
+### Campfire branding upgrade
+
+Before starting this version on an existing installation:
+
+1. Stop the backend and back up its complete data directory. Rename the previous
+   application database to `campfire.sqlite` in that directory, along with any
+   matching `-wal` and `-shm` sidecars. Do this before restarting so the backend
+   opens the existing community instead of creating a fresh database.
+2. Docker Compose now uses the `campfire` service and `campfire-data` volume.
+   Reuse the existing volume with an override declaring `campfire-data` as
+   `external: true` and setting `name` to the existing Docker volume name.
+   Rename the database inside that volume while the service is stopped.
+3. Desktop builds now use package/executable name `campfire` and app ID
+   `org.campfire.desktop`. With the app fully closed, copy the previous desktop
+   user-data directory into the new Campfire profile to retain client settings.
+   Encrypted credentials remain subject to the operating system's key storage;
+   signing in again may be required. The preload bridge is now `window.campfire`,
+   so rebuild the renderer and desktop shell together.
+
 Back up the database before upgrading, using the SQLite backup mechanism or by
 stopping the service and copying the data directory including WAL files. Restart
 the backend, then update browser/desktop clients. Existing accounts, password

@@ -1,4 +1,4 @@
-# Driskord implementation guide
+# Campfire implementation guide
 
 This document describes the initial source implementation and is intended to be updated with future features. See README.md for setup and exact validation status. The implementation is an early private-community prototype; outstanding runtime/media validation is not implied by a feature being listed here.
 
@@ -174,14 +174,14 @@ The test uses a third-party STUN service for address discovery only. Outbound UD
 
 `npm run dist:win` runs the actual type check and Vite build, then invokes pinned `electron-builder@26.0.12` via npm exec. This tool is downloaded on demand; it does not change the app dependency lockfile. The build requires registry/Electron/NSIS downloads. The existing app lockfile should be committed and used with npm ci on CI. Configuration is in electron-builder.cjs:
 
-- Stable app ID `org.driskord.desktop` (also set as the Windows AppUserModelId).
-- Product name Driskord; x64 portable target; output `release/Driskord-${version}-${arch}-Portable.exe`.
+- Stable app ID `org.campfire.desktop` (also set as the Windows AppUserModelId).
+- Product name Campfire; x64 portable target; output `release/Campfire-${version}-${arch}-Portable.exe`.
 - No install wizard, elevation, Start menu registration or shortcuts. The portable launcher extracts runtime files temporarily.
 - App assets and Electron shell packaged in ASAR; server source, databases, tests, .env and release output are not selected as application source. Electron-builder also collects declared production dependencies.
 - No native app dependency rebuilding is required; the desktop shell uses Node/Electron built-ins.
 - No automatic publishing, updater or signing configuration. Keep app ID stable and increase package.json version for later releases. Updates replace the closed EXE; client settings stay in the current Windows AppData profile, independent of the executable location. They are not moved with the EXE.
 
-The workflow `.github/workflows/windows.yml` is workflow_dispatch only, uses a Windows runner/Node 24, installs application dependencies with npm ci, runs checks/tests, and uploads the EXE as the 14-day Driskord-Windows-x64-Portable Actions artifact. It does not create GitHub Releases. No workflow has been run from this environment.
+The workflow `.github/workflows/windows.yml` is workflow_dispatch only, uses a Windows runner/Node 24, installs application dependencies with npm ci, runs checks/tests, and uploads the EXE as the 14-day Campfire-Windows-x64-Portable Actions artifact. It does not create GitHub Releases. No workflow has been run from this environment.
 
 VITE_DEFAULT_SERVER_URL can prefill a public server origin when building. It is visible in the renderer bundle and must not contain credentials or secrets. Without this variable, Electron shows a blank required server field; browser clients default to their hosting origin (Vite development defaults to localhost:3001). Saved connections override defaults. The localhost port used by the desktop is UI infrastructure only, never the suggested community address. Friends run the shared server separately.
 

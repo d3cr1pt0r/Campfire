@@ -43,7 +43,9 @@ Prefer Docker? Run:
 docker compose up --build -d
 ```
 
-The setup code appears in `docker compose logs driskord`. Community data is kept in a persistent Docker volume.
+The setup code appears in `docker compose logs campfire`. Community data is kept in a persistent Docker volume.
+
+For an existing installation, follow the [Campfire branding upgrade steps](REWORK.md#campfire-branding-upgrade) before starting this version.
 
 ## Run the desktop app from source
 

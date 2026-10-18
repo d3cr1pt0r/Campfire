@@ -12,7 +12,7 @@ test(
     'call joining, initiation, media announcements and live revocation enforce distinct permissions',
     { timeout: 10000 },
     async (t) => {
-        const directory = mkdtempSync(path.join(tmpdir(), 'driskord-call-permissions-'));
+        const directory = mkdtempSync(path.join(tmpdir(), 'campfire-call-permissions-'));
         const service = createApp({ dataDir: directory }),
             sockets = [];
         t.after(async () => {

@@ -10,7 +10,7 @@ import { createApp } from '../test-support/open-server.js';
 // Run the real Express middleware/routes without a listening socket. Socket.IO
 // transport/NAT are covered separately by the existing live integration suite.
 test('profiles, previews, custom reactions, channel names, and private-call authorization', async (t) => {
-    const directory = mkdtempSync(path.join(tmpdir(), 'driskord-features-'));
+    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-features-'));
     const service = createApp({ dataDir: directory });
     const attached = [];
     t.after(async () => {

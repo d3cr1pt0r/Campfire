@@ -16,7 +16,7 @@ const path = require('node:path');
 const { clipboardAttachments } = require('./clipboard-files.cjs');
 const { createRendererServer, listenRendererServer } = require('./renderer-server.cjs');
 const { createClientState } = require('./client-state.cjs');
-app.setAppUserModelId('org.driskord.desktop');
+app.setAppUserModelId('org.campfire.desktop');
 let assetServer;
 let tray;
 let quitting = false;

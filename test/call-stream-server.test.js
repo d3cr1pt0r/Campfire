@@ -12,7 +12,7 @@ test(
     'stream roster reaches viewers outside the call, respects channel access, and clears stale shares',
     { timeout: 15000 },
     async (t) => {
-        const directory = mkdtempSync(path.join(tmpdir(), 'driskord-stream-roster-'));
+        const directory = mkdtempSync(path.join(tmpdir(), 'campfire-stream-roster-'));
         const service = createApp({ dataDir: directory }),
             sockets = [];
         t.after(async () => {

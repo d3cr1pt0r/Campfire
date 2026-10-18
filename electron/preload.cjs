@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 // No arbitrary IPC, file access, shell commands, or Node APIs reach the renderer.
-contextBridge.exposeInMainWorld('driskord', {
+contextBridge.exposeInMainWorld('campfire', {
     readClipboardAttachments: () => ipcRenderer.invoke('clipboard:attachments'),
     getIdleState: () => ipcRenderer.invoke('presence:idle-state'),
     storage: {

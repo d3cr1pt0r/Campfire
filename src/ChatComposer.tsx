@@ -267,7 +267,7 @@ export function ChatComposer({
                             !e.altKey &&
                             !e.shiftKey &&
                             e.key.toLowerCase() === 'v' &&
-                            window.driskord?.readClipboardAttachments
+                            window.campfire?.readClipboardAttachments
                         ) {
                             e.preventDefault();
                             void pasteDesktop(e.currentTarget);

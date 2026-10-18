@@ -11,7 +11,7 @@ test(
     'an idle authenticated transport disconnects when its session expires',
     { timeout: 5000 },
     async (t) => {
-        const dataDir = mkdtempSync(path.join(tmpdir(), 'driskord-expiry-'));
+        const dataDir = mkdtempSync(path.join(tmpdir(), 'campfire-expiry-'));
         const service = createApp({ dataDir, sessionLifetimeMs: 250 });
         let socket;
         t.after(async () => {
@@ -46,7 +46,7 @@ test(
     'self-hosted communication, authorization, persistence and signaling',
     { timeout: 30000 },
     async (t) => {
-        const dataDir = mkdtempSync(path.join(tmpdir(), 'driskord-test-'));
+        const dataDir = mkdtempSync(path.join(tmpdir(), 'campfire-test-'));
         let service = createApp({ dataDir });
         await new Promise((resolve) => service.http.listen(0, '127.0.0.1', resolve));
         let base = `http://127.0.0.1:${service.http.address().port}`;

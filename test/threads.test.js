@@ -7,7 +7,7 @@ import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
 
 test('threads isolate history, share chat features, enforce permissions, and persist', async (t) => {
-    const directory = mkdtempSync(path.join(tmpdir(), 'driskord-threads-'));
+    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-threads-'));
     let service = createApp({ dataDir: directory });
     t.after(async () => {
         await service.close();

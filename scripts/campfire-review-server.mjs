@@ -3,6 +3,9 @@ import { createServer } from 'vite';
 import { execFileSync } from 'node:child_process';
 import { permissionIds } from '../shared/permissions.js';
 const baseline = 'f7e55c1027027e97da01994285c0988fcc3055a4';
+const baselineName = JSON.parse(
+    execFileSync('git', ['show', `${baseline}:package.json`], { encoding: 'utf8' }),
+).name;
 const users = [
     { id: 'alex', username: 'alex', nickname: 'Alex', role: 'owner', status: 'online' },
     { id: 'mia', username: 'mia', nickname: 'Mia', role: 'member', status: 'online' },
@@ -130,6 +133,12 @@ for (const [theme, port] of [
                                 'git',
                                 ['show', `${baseline}:${id.slice(process.cwd().length + 1)}`],
                                 { encoding: 'utf8' },
+                            ).replace(new RegExp(baselineName, 'gi'), (name) =>
+                                name === name.toUpperCase()
+                                    ? 'CAMPFIRE'
+                                    : name[0] === name[0].toUpperCase()
+                                      ? 'Campfire'
+                                      : 'campfire',
                             );
                         } catch {
                             return null;

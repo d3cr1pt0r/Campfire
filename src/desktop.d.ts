@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 interface Window {
-    driskord?: {
+    campfire?: {
         readClipboardAttachments?: () => Promise<{
             files: { name: string; data: Uint8Array; type: string }[];
             text: string;

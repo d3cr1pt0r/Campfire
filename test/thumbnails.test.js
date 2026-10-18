@@ -9,7 +9,7 @@ import { request } from '../test-support/http.js';
 import { canonicalRoom } from '../shared/rooms.js';
 
 async function fixture(t) {
-    const directory = mkdtempSync(path.join(tmpdir(), 'driskord-thumbnails-'));
+    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-thumbnails-'));
     const service = createApp({ dataDir: directory });
     t.after(async () => {
         await service.close();

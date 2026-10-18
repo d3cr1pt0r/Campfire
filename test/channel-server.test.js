@@ -13,7 +13,7 @@ test(
     'live channel access filters events and rosters, revokes calls, and handles deletion',
     { timeout: 15000 },
     async (t) => {
-        const directory = mkdtempSync(path.join(tmpdir(), 'driskord-channel-sockets-'));
+        const directory = mkdtempSync(path.join(tmpdir(), 'campfire-channel-sockets-'));
         const service = createApp({ dataDir: directory }),
             sockets = [];
         t.after(async () => {

@@ -71,10 +71,10 @@ import { CampfireScene } from './CampfireScene';
 function CampfireMark() {
     return <img className="campfire-mark" src={campfireIcon} alt="" />;
 }
-const storage = window.driskord?.storage ?? localStorage;
+const storage = window.campfire?.storage ?? localStorage;
 const defaultServerUrl =
     import.meta.env.VITE_DEFAULT_SERVER_URL?.trim() ||
-    (window.driskord
+    (window.campfire
         ? ''
         : window.location.port === '5173'
           ? 'http://localhost:3001'
@@ -566,11 +566,11 @@ function App() {
         }
     };
     const pasteDesktop = async (textarea: HTMLTextAreaElement) => {
-        if (!window.driskord?.readClipboardAttachments || !canPost) return;
+        if (!window.campfire?.readClipboardAttachments || !canPost) return;
         const targetRoom = room;
         const account = state?.me.id;
         try {
-            const clipboard = await window.driskord.readClipboardAttachments();
+            const clipboard = await window.campfire.readClipboardAttachments();
             if (
                 !textarea.isConnected ||
                 document.activeElement !== textarea ||

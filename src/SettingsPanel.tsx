@@ -699,7 +699,7 @@ export function SettingsPanel({
                         Type : for emoji suggestions; use arrows and Enter or Tab to choose.
                     </p>
                 )}
-                {settingsTab === 'account' && window.driskord && (
+                {settingsTab === 'account' && window.campfire && (
                     <Toggle
                         title="Close to system tray"
                         value={!!prefs.closeToTray}

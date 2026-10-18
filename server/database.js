@@ -122,7 +122,7 @@ export function migrate(db) {
 
 export function openDatabase(dataDir, name) {
     mkdirSync(dataDir, { recursive: true });
-    const db = new DatabaseSync(path.join(dataDir, 'driskord.sqlite'));
+    const db = new DatabaseSync(path.join(dataDir, 'campfire.sqlite'));
     try {
         db.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
         if (!db.prepare('SELECT COUNT(*) n FROM channels').get().n) {

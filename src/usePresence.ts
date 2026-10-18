@@ -20,7 +20,7 @@ export function usePresence(socket: AppSocket | null, prefs: Preferences) {
             const activityAtStart = lastActivity;
             try {
                 const system = prefs.autoIdle
-                    ? await window.driskord?.getIdleState?.().catch(() => null)
+                    ? await window.campfire?.getIdleState?.().catch(() => null)
                     : null;
                 if (!disposed && lastActivity === activityAtStart)
                     send(

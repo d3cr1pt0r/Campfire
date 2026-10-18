@@ -133,9 +133,9 @@ export function ThreadPanel(props: Props) {
         }
     };
     const pasteDesktop = async (textarea: HTMLTextAreaElement) => {
-        if (!window.driskord?.readClipboardAttachments || !canPost) return;
+        if (!window.campfire?.readClipboardAttachments || !canPost) return;
         try {
-            const clipboard = await window.driskord.readClipboardAttachments();
+            const clipboard = await window.campfire.readClipboardAttachments();
             if (
                 !mounted.current ||
                 !textarea.isConnected ||

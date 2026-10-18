@@ -9,7 +9,7 @@ import { request } from '../test-support/http.js';
 import { migrate } from '../server/database.js';
 import { permissionIds } from '../shared/permissions.js';
 async function fixture(t) {
-    const directory = mkdtempSync(path.join(tmpdir(), 'driskord-permissions-'));
+    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-permissions-'));
     let service = createApp({ dataDir: directory });
     t.after(async () => {
         await service.close();

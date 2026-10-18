@@ -12,7 +12,7 @@ const build = require('../electron-builder.cjs');
 const plain = { isEncryptionAvailable: () => false };
 
 test('desktop client state survives renderer-port changes and supports sign-out', () => {
-    const directory = mkdtempSync(path.join(tmpdir(), 'driskord-client-'));
+    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-client-'));
     try {
         const first = createClientState(directory, plain);
         assert.equal(first.get('connection'), null);
@@ -38,7 +38,7 @@ test('desktop client state survives renderer-port changes and supports sign-out'
     }
 });
 test('client state uses supplied OS encryption and recovers from unreadable files', () => {
-    const directory = mkdtempSync(path.join(tmpdir(), 'driskord-client-'));
+    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-client-'));
     // Stub the OS service; this tests storage integration, not Windows DPAPI itself.
     const encryption = {
         isEncryptionAvailable: () => true,
@@ -62,8 +62,8 @@ test('client state uses supplied OS encryption and recovers from unreadable file
     }
 });
 test('desktop asset host serves UI with CSP and has no community API', async () => {
-    const directory = mkdtempSync(path.join(tmpdir(), 'driskord-assets-'));
-    writeFileSync(path.join(directory, 'index.html'), '<h1>Driskord</h1>');
+    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-assets-'));
+    writeFileSync(path.join(directory, 'index.html'), '<h1>Campfire</h1>');
     const server = createRendererServer(directory);
     server.address = () => ({ port: 40509 });
     const request = (url, host = '127.0.0.1:40509', method = 'GET') =>
@@ -90,7 +90,7 @@ test('desktop asset host serves UI with CSP and has no community API', async () 
     try {
         const page = await request('/');
         assert.equal(page.status, 200);
-        assert.match(page.body.toString(), /Driskord/);
+        assert.match(page.body.toString(), /Campfire/);
         assert.match(page.headers['Content-Security-Policy'], /script-src 'self'/);
         assert.equal((await request('/api/state')).status, 404);
         assert.equal((await request('/', 'attacker.example')).status, 403);
@@ -104,7 +104,7 @@ test('desktop asset host serves UI with CSP and has no community API', async () 
     }
 });
 test('Windows portable build is x64 and includes UI and desktop runtime', () => {
-    assert.equal(build.appId, 'org.driskord.desktop');
+    assert.equal(build.appId, 'org.campfire.desktop');
     assert.equal(build.win.target[0].target, 'portable');
     assert.deepEqual(build.win.target[0].arch, ['x64']);
     assert.equal(build.nsis, undefined);
@@ -118,7 +118,7 @@ test('Windows portable build is x64 and includes UI and desktop runtime', () => 
 });
 
 test('desktop persists selected audio IDs, labels and renderer origin across launches', () => {
-    const directory = mkdtempSync(path.join(tmpdir(), 'driskord-devices-'));
+    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-devices-'));
     try {
         const state = createClientState(directory, plain);
         const preferences = {
@@ -196,7 +196,7 @@ test('clipboard file formats decode multiple Windows paths and local Linux file 
 test('clipboard attachment reads are bounded, copy-only, and ignore ordinary path text', async () => {
     const { clipboardAttachments } = require('../electron/clipboard-files.cjs');
     const { pathToFileURL } = await import('node:url');
-    const directory = mkdtempSync(path.join(tmpdir(), 'driskord-clipboard-'));
+    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-clipboard-'));
     const filename = path.join(directory, 'hello.txt');
     writeFileSync(filename, 'clipboard file');
     const raw = 'electron application/osclipboard;format="x-special/gnome-copied-files"';

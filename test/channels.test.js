@@ -11,7 +11,7 @@ import { migrate } from '../server/database.js';
 import { request } from '../test-support/http.js';
 
 async function fixture(t) {
-    const directory = mkdtempSync(path.join(tmpdir(), 'driskord-channels-'));
+    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-channels-'));
     let service = createApp({ dataDir: directory });
     t.after(async () => {
         await service.close();

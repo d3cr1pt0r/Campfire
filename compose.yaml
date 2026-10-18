@@ -1,16 +1,16 @@
 services:
-  driskord:
+  campfire:
     build: .
     restart: unless-stopped
     ports:
       - "3001:3001"
     environment:
-      SERVER_NAME: "My Driskord server"
+      SERVER_NAME: "My Campfire server"
       CLIENT_ORIGINS: "${CLIENT_ORIGINS:-}"
       TRUST_PROXY: "${TRUST_PROXY:-}"
       MAX_STORED_UPLOAD_BYTES: "${MAX_STORED_UPLOAD_BYTES:-1073741824}"
       ICE_SERVERS: "${ICE_SERVERS:-[]}"
     volumes:
-      - driskord-data:/data
+      - campfire-data:/data
 volumes:
-  driskord-data:
+  campfire-data:

@@ -1,6 +1,6 @@
 # Client UI/UX review — 17 October 2026
 
-This pass applies Apple’s guidance on hierarchy, alignment, control spacing, adaptable layouts, clear actions, and focus to Driskord’s existing React/Electron interface. The application keeps its dark appearance and purple accent. This is a cross-platform interface improvement, not a claim of native Apple HIG or accessibility compliance.
+This pass applies Apple’s guidance on hierarchy, alignment, control spacing, adaptable layouts, clear actions, and focus to Campfire’s existing React/Electron interface. The application keeps its dark appearance and purple accent. This is a cross-platform interface improvement, not a claim of native Apple HIG or accessibility compliance.
 
 References: [Layout](https://developer.apple.com/design/human-interface-guidelines/layout), [Buttons](https://developer.apple.com/design/human-interface-guidelines/buttons), [Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility), [Modality](https://developer.apple.com/design/human-interface-guidelines/modality), and [Split views](https://developer.apple.com/design/human-interface-guidelines/split-views).
 
