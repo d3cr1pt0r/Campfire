@@ -322,10 +322,12 @@ function ChatMessageList({
                                             className="message-time"
                                             dateTime={new Date(m.created).toISOString()}
                                         >
-                                            {new Date(m.created).toLocaleTimeString('en-US', {
-                                                hour: 'numeric',
-                                                minute: '2-digit',
-                                            })}
+                                            <span>
+                                                {new Date(m.created).toLocaleTimeString('en-US', {
+                                                    hour: 'numeric',
+                                                    minute: '2-digit',
+                                                })}
+                                            </span>
                                         </time>
                                         <Avatar user={u} color={color(u)} />
                                         <div className="message-body">
