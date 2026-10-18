@@ -11,7 +11,7 @@ test('participant cards fit the available width and height for one to eight peop
                 assert.ok(result.width <= width + 0.001);
                 const columns = Math.round((result.width + 12) / (290 * result.scale + 12));
                 const rows = Math.ceil(count / columns);
-                assert.ok(rows * 272 * result.scale + (rows - 1) * 12 <= height + 0.001);
+                assert.ok(rows * 160 * result.scale + (rows - 1) * 12 <= height + 0.001);
             }
         }
     }

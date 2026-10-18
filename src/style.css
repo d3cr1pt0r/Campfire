@@ -2910,43 +2910,102 @@ label textarea {
 }
 .media-tile:not(.preview) {
     width: 290px;
-    aspect-ratio: auto;
-    min-height: 246px;
+    aspect-ratio: 16/10;
+    min-height: 180px;
 }
-.media-tile:not(.preview) video {
-    height: 160px;
+.media-tile-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    background: linear-gradient(#0009, transparent 35%, transparent 55%, #000b);
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    transition:
+        opacity 160ms ease-out,
+        transform 160ms ease-out;
 }
-.media-tile:not(.preview) .media-placeholder {
-    bottom: auto;
-    height: 160px;
-}
-.media-tile:not(.preview) .media-name {
-    position: relative;
+.media-tile-overlay .media-name {
+    position: static;
     display: block;
-    margin: 166px 10px 0;
-    inset: auto;
+    margin: 0;
     background: transparent;
     font-size: 12px;
-    overflow-wrap: anywhere;
-    padding: 0;
+    padding: 0 32px 0 0;
+    color: #fff;
 }
-.tile-media-controls {
+.media-tile-overlay .tile-media-controls {
     position: relative;
     inset: auto;
-    padding: 10px;
-    background: #2a221d;
-    margin-top: 8px;
-    min-height: 52px;
+    padding: 0;
+    background: transparent;
+    margin: 0;
+    min-height: 0;
 }
-.tile-media-controls .watch-stream {
-    min-height: 32px;
-    font-size: 12px;
+.has-stream .tile-media-controls {
+    margin-bottom: 44px;
 }
-.tile-media-controls label {
+.media-tile-overlay .tile-media-controls label {
     font-size: 12px;
+    color: #fff;
 }
 .tile-media-controls input {
     height: 24px;
+}
+.media-tile > .expand-video {
+    z-index: 5;
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    transition:
+        opacity 160ms ease-out,
+        transform 160ms ease-out;
+}
+.media-tile:hover > .media-tile-overlay,
+.media-tile:focus-within > .media-tile-overlay,
+.media-tile:hover > .expand-video,
+.media-tile:focus-within > .expand-video {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+.media-tile:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -3px;
+}
+.media-tile > .watch-stream {
+    position: absolute;
+    z-index: 5;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: calc(100% - 24px);
+    min-height: 32px;
+    padding: 6px 12px;
+    font-size: 12px;
+    white-space: nowrap;
+    background: var(--accent);
+    color: var(--accent-ink, #211b18);
+    box-shadow: 0 2px 8px #0006;
+}
+@media (hover: none) {
+    .media-tile > .media-tile-overlay,
+    .media-tile > .expand-video {
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .media-tile > .media-tile-overlay,
+    .media-tile > .expand-video {
+        transition: none;
+    }
 }
 .media-name {
     max-width: calc(100% - 18px);

@@ -515,30 +515,16 @@ label,
 .call-participant {
     flex: 0 0 auto;
     width: calc(290px * var(--participant-scale));
-    height: calc(272px * var(--participant-scale));
+    height: calc(160px * var(--participant-scale));
 }
 .call-participant > .media-tile {
     width: 290px;
     min-width: 290px;
-    height: 272px;
-    min-height: 272px;
+    height: 160px;
+    min-height: 160px;
     aspect-ratio: auto;
     transform: scale(var(--participant-scale));
     transform-origin: top left;
-}
-.call-participant > .preview video,
-.call-participant > .preview .media-placeholder {
-    height: 160px;
-    bottom: auto;
-}
-.call-participant > .preview .media-name {
-    position: relative;
-    display: block;
-    margin: 166px 10px 0;
-    inset: auto;
-    padding: 0;
-    background: transparent;
-    font-size: 12px;
 }
 .call-participant .media-name {
     white-space: nowrap;

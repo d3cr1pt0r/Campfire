@@ -1,4 +1,4 @@
-// Fit complete participant cards, including their individual media controls.
+// Fit participant media tiles; controls overlay the original 290 × 160 media area.
 export function fitCallParticipants(width: number, height: number, count: number) {
     const gap = 12;
     let columns = 1;
@@ -10,7 +10,7 @@ export function fitCallParticipants(width: number, height: number, count: number
             Math.min(
                 1,
                 (width - gap * (candidate - 1)) / (290 * candidate),
-                (height - gap * (rows - 1)) / (272 * rows),
+                (height - gap * (rows - 1)) / (160 * rows),
             ),
         );
         if (fit > scale) {

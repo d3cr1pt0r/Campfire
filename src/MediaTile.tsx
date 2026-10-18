@@ -103,20 +103,18 @@ export function MediaTile({
         void program.current?.play();
     };
     return (
-        <div className={`media-tile ${preview ? 'preview' : ''} ${speaking ? 'speaking' : ''}`}>
+        <div
+            className={`media-tile ${preview ? 'preview' : ''} ${speaking ? 'speaking' : ''} ${sharing && !preview ? 'has-stream' : ''}`}
+            role="group"
+            aria-label={name}
+            tabIndex={0}
+        >
             <div className="media-placeholder">
                 {avatar ? (
                     <AuthImage path={`/avatars/${avatar}`} alt={name} className="call-avatar" />
                 ) : (
                     initials(avatarName)
                 )}
-                <small>
-                    {preview
-                        ? 'Your video preview'
-                        : sharing && !watching
-                          ? 'Screen share available'
-                          : 'Call participant'}
-                </small>
             </div>
             <video
                 style={{ opacity: hasVideo && allowVideo ? 1 : 0 }}
@@ -181,45 +179,47 @@ export function MediaTile({
                     onClose={() => setExpanded(false)}
                 />
             )}
-            <span className="media-name">
-                {name}
-                {muted && !preview ? ' · Deafened' : ''}
-            </span>
-            {!preview && (
-                <div className="tile-media-controls">
-                    {sharing && (
-                        <button
-                            type="button"
-                            className="watch-stream"
-                            aria-pressed={watching}
-                            disabled={watchPending}
-                            onClick={() => onWatch?.(!watching)}
-                        >
-                            {watchPending
-                                ? watching
-                                    ? 'Starting stream…'
-                                    : 'Stopping stream…'
-                                : watching
-                                  ? 'Stop watching'
-                                  : 'Watch stream'}
-                        </button>
-                    )}
-                    <VolumeControl
-                        name={name}
-                        label="Voice"
-                        value={voiceVolume}
-                        onChange={setVoiceVolume}
-                    />
-                    {sharing && (
+            <div className="media-tile-overlay">
+                <span className="media-name">
+                    {name}
+                    {muted && !preview ? ' · Deafened' : ''}
+                </span>
+                {!preview && (
+                    <div className="tile-media-controls">
                         <VolumeControl
                             name={name}
-                            label="Stream"
-                            value={streamVolume}
-                            onChange={setStreamVolume}
-                            disabled={!watching}
+                            label="Voice"
+                            value={voiceVolume}
+                            onChange={setVoiceVolume}
                         />
-                    )}
-                </div>
+                        {sharing && (
+                            <VolumeControl
+                                name={name}
+                                label="Stream"
+                                value={streamVolume}
+                                onChange={setStreamVolume}
+                                disabled={!watching}
+                            />
+                        )}
+                    </div>
+                )}
+            </div>
+            {!preview && sharing && (
+                <button
+                    type="button"
+                    className="watch-stream"
+                    aria-pressed={watching}
+                    disabled={watchPending}
+                    onClick={() => onWatch?.(!watching)}
+                >
+                    {watchPending
+                        ? watching
+                            ? 'Starting stream…'
+                            : 'Stopping stream…'
+                        : watching
+                          ? 'Stop watching'
+                          : 'Watch stream'}
+                </button>
             )}
         </div>
     );
