@@ -889,52 +889,66 @@ small {
     flex: 1;
 }
 .message {
-    padding: 9px 30px;
+    padding: 6px 30px 6px 8px;
     display: flex;
     align-items: flex-start;
-    gap: 13px;
+    gap: 10px;
     position: relative;
-    min-height: 65px;
+    min-height: 40px;
 }
 .message:hover {
     background: #0000000c;
 }
+.message-time {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 0 0 52px;
+    height: 28px;
+    font-size: 10px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    color: color-mix(in srgb, var(--muted) 85%, var(--field, var(--surface)));
+}
 .message .avatar {
-    width: 36px;
-    height: 36px;
-    border-radius: 12px;
-    font-size: 12px;
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
+    font-size: 11px;
 }
 .message-body {
     flex: 1;
     min-width: 0;
 }
+.message-line {
+    font-size: 14px;
+    line-height: 22px;
+    padding-block: 3px;
+    overflow-wrap: anywhere;
+}
 .message-meta {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-height: 18px;
+    display: inline;
 }
 .message-meta button {
     font-size: 15px;
     font-weight: 700;
     padding: 0;
-    line-height: 1.4;
-}
-.message-meta time {
-    font-size: 11px;
-    color: #94785f;
+    line-height: 22px;
+    vertical-align: top;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    margin-right: 8px;
 }
 .message-meta > svg {
     color: #c2b0a0;
+    vertical-align: middle;
+    margin-right: 8px;
 }
-.message-body > p {
-    font-size: 13px;
+.message-text {
+    font-size: 14px;
     color: #d3c6ba;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
-    margin: 3px 0 5px;
-    line-height: 1.75;
 }
 .edited {
     color: #92765d;
@@ -1709,9 +1723,9 @@ small {
         width: 245px;
     }
     .message {
-        padding: 12px 38px;
+        padding: 12px 38px 12px 8px;
     }
-    .message-body > p {
+    .message-text {
         font-size: 14px;
     }
     .channel-welcome {
@@ -2631,14 +2645,9 @@ label textarea {
 .role-row strong {
     overflow-wrap: anywhere;
 }
-.message-body > p {
+.message-text {
     font-size: 14px;
-    line-height: 1.65;
 }
-.message-meta {
-    flex-wrap: wrap;
-}
-.message-meta time,
 .edited {
     color: #c6b5a6;
 }
@@ -3173,7 +3182,7 @@ label textarea {
         font-size: 24px;
     }
     .message {
-        padding: 10px 16px;
+        padding: 10px 16px 10px 8px;
     }
     .composer-wrap {
         padding: 10px 12px;
@@ -3228,15 +3237,15 @@ label textarea {
         opacity: 1;
         pointer-events: auto;
         align-self: flex-end;
-        margin-left: 49px;
+        margin-left: 100px;
         width: max-content;
-        max-width: calc(100% - 49px);
+        max-width: calc(100% - 100px);
     }
     .message {
         flex-wrap: wrap;
     }
     .message-body {
-        flex-basis: calc(100% - 49px);
+        flex-basis: calc(100% - 100px);
     }
     .nav-item,
     .friend-filters button,
@@ -3388,7 +3397,7 @@ button:disabled {
     display: none;
 }
 .thread-panel .message {
-    padding-left: 14px;
+    padding-left: 8px;
     padding-right: 14px;
 }
 .thread-panel .attachment {

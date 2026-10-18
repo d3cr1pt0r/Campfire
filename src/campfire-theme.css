@@ -207,11 +207,10 @@ body {
 .mini-label {
     color: var(--accent);
 }
-.message-body > p,
+.message-text,
 .chat-content {
     color: var(--ink);
 }
-.message-meta time,
 .date-divider,
 .member span > small,
 .member-category,
@@ -223,8 +222,8 @@ body {
     color: var(--muted);
 }
 .message {
-    padding-top: 12px;
-    padding-bottom: 12px;
+    padding-top: 6px;
+    padding-bottom: 6px;
 }
 .message:hover {
     background: var(--soft-accent);
@@ -1017,7 +1016,7 @@ label,
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin-top: 10px;
+    margin-top: 6px;
 }
 .reactions:empty {
     display: none;

@@ -318,39 +318,41 @@ function ChatMessageList({
                                         </div>
                                     )}
                                     <article className="message">
+                                        <time
+                                            className="message-time"
+                                            dateTime={new Date(m.created).toISOString()}
+                                        >
+                                            {new Date(m.created).toLocaleTimeString('en-US', {
+                                                hour: 'numeric',
+                                                minute: '2-digit',
+                                            })}
+                                        </time>
                                         <Avatar user={u} color={color(u)} />
                                         <div className="message-body">
-                                            <div className="message-meta">
-                                                <button
-                                                    title={`@${u?.username || 'unknown'}`}
-                                                    style={{ color: color(u) }}
-                                                    onClick={() => {
-                                                        if (u && u.id !== state.me.id) dm(u.id);
-                                                    }}
-                                                >
-                                                    {displayName(u, 'Former member')}
-                                                </button>
-                                                <time>
-                                                    {new Date(m.created).toLocaleTimeString(
-                                                        'en-US',
-                                                        {
-                                                            hour: 'numeric',
-                                                            minute: '2-digit',
-                                                        },
+                                            <div className="message-line">
+                                                <span className="message-meta">
+                                                    <button
+                                                        title={`@${u?.username || 'unknown'}`}
+                                                        style={{ color: color(u) }}
+                                                        onClick={() => {
+                                                            if (u && u.id !== state.me.id) dm(u.id);
+                                                        }}
+                                                    >
+                                                        {displayName(u, 'Former member')}
+                                                    </button>
+                                                    {Boolean(m.pinned) && <Pin size={12} />}
+                                                </span>
+                                                <span className="message-text">
+                                                    <ChatContent
+                                                        users={state.users}
+                                                        text={m.body}
+                                                        custom={state.emojis || []}
+                                                    />
+                                                    {Boolean(m.edited) && (
+                                                        <small className="edited"> (edited)</small>
                                                     )}
-                                                </time>
-                                                {Boolean(m.pinned) && <Pin size={12} />}
+                                                </span>
                                             </div>
-                                            <p>
-                                                <ChatContent
-                                                    users={state.users}
-                                                    text={m.body}
-                                                    custom={state.emojis || []}
-                                                />
-                                                {Boolean(m.edited) && (
-                                                    <small className="edited"> (edited)</small>
-                                                )}
-                                            </p>
                                             {m.attachments.map((a) => (
                                                 <React.Fragment key={a.id}>
                                                     {(/^image\/(png|jpeg|gif|webp)$/.test(a.mime) ||
