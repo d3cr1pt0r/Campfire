@@ -2779,7 +2779,7 @@ label textarea {
     font-size: 13px;
 }
 .settings-content > button,
-.channel-settings-card button {
+.channel-settings-card button:not(.toggle) {
     min-height: 36px;
 }
 .field-help {
