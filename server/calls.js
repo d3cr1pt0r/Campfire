@@ -73,25 +73,13 @@ export function registerCalls({
     };
     const callTimer = setInterval(prunePrivateCalls, 15000);
     callTimer.unref();
-    const areFriends = (a, b) =>
-        !!get(
-            'SELECT 1 FROM friends WHERE accepted=1 AND ((sender=? AND recipient=?) OR (sender=? AND recipient=?))',
-            a,
-            b,
-            b,
-            a,
-        );
     const inviteUser = (caller, room, id) => {
         const target = get('SELECT * FROM users WHERE id=? AND banned=0', id);
-        check(
-            target && target.id !== caller.id && areFriends(caller.id, id),
-            'You can only call accepted friends',
-            403,
-        );
+        check(target && target.id !== caller.id, 'Choose another member of this server', 403);
         requirePermission(target, 'calls.join');
         check(
             [...io.sockets.sockets.values()].some((s) => s.data.user.id === id),
-            'That friend is offline',
+            'That member is offline',
         );
         check(!room.allowed.has(id), 'That person is already invited or in this call', 409);
         check(room.allowed.size < 8, 'This call is full (8 people maximum)');
@@ -106,7 +94,7 @@ export function registerCalls({
         route((req, res) => {
             requirePermission(req.user, 'calls.join');
             requirePermission(req.user, 'calls.start');
-            check(typeof req.body.user === 'string', 'Choose a friend');
+            check(typeof req.body.user === 'string', 'Choose a member');
             check(
                 !callState().some((c) => c.user === req.user.id),
                 'Leave your current call before starting another',
@@ -114,7 +102,7 @@ export function registerCalls({
             const key = `${req.user.id}:${req.body.user}`;
             check(
                 Date.now() - (recentCalls.get(key) || 0) > 15000,
-                'Wait a few seconds before calling this friend again',
+                'Wait a few seconds before calling this member again',
                 429,
             );
             check(
@@ -146,10 +134,10 @@ export function registerCalls({
             const room = privateCalls.get(req.params.id);
             check(
                 room && callState().some((c) => c.channel === room.id && c.user === req.user.id),
-                'Join this private call before inviting friends',
+                'Join this private call before inviting members',
                 403,
             );
-            check(typeof req.body.user === 'string', 'Choose a friend');
+            check(typeof req.body.user === 'string', 'Choose a member');
             inviteUser(req.user, room, req.body.user);
             res.json({ ok: true });
         }),

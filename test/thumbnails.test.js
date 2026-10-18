@@ -24,11 +24,9 @@ async function fixture(t) {
             })
         ).data;
     const owner = await signup('Owner'),
-        friend = await signup('Friend'),
+        member = await signup('Member'),
         outsider = await signup('Outsider');
-    await request(service.app, '/friends', owner.token, 'POST', { username: 'Friend' });
-    await request(service.app, '/friends', friend.token, 'POST', { username: 'Owner' });
-    const room = canonicalRoom(`dm:${owner.user.id}:${friend.user.id}`);
+    const room = canonicalRoom(`dm:${owner.user.id}:${member.user.id}`);
     const upload = async (bytes) => {
         const response = await request(service.app, '/messages', owner.token, 'POST', {
             room,
@@ -37,7 +35,7 @@ async function fixture(t) {
         assert.equal(response.status, 200, JSON.stringify(response.data));
         return response.data;
     };
-    return { service, owner, friend, outsider, upload };
+    return { service, owner, member, outsider, upload };
 }
 
 test('thumbnails are small WebP images with original aspect ratio, cached, access controlled, and cascade deleted', async (t) => {
@@ -53,7 +51,7 @@ test('thumbnails are small WebP images with original aspect ratio, cached, acces
     assert.equal((await request(f.service.app, endpoint)).status, 401);
     assert.equal((await request(f.service.app, endpoint, f.outsider.token)).status, 404);
     assert.equal(f.service.db.prepare('SELECT COUNT(*) n FROM attachment_previews').get().n, 0);
-    const preview = await request(f.service.app, endpoint, f.friend.token);
+    const preview = await request(f.service.app, endpoint, f.member.token);
     assert.equal(preview.status, 200);
     assert.match(preview.headers['content-type'], /image\/webp/);
     const metadata = await sharp(preview.data).metadata();
@@ -67,7 +65,7 @@ test('thumbnails are small WebP images with original aspect ratio, cached, acces
     assert.deepEqual(full.data, original);
     await request(f.service.app, `/messages/${message.id}`, f.owner.token, 'DELETE');
     assert.equal(f.service.db.prepare('SELECT COUNT(*) n FROM attachment_previews').get().n, 0);
-    assert.equal((await request(f.service.app, endpoint, f.friend.token)).status, 404);
+    assert.equal((await request(f.service.app, endpoint, f.member.token)).status, 404);
 });
 
 test('invalid and excessive-pixel images fail previews without changing downloadable originals', async (t) => {

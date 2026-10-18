@@ -382,36 +382,6 @@ label,
 .toggle.on i {
     background: var(--accent-ink);
 }
-.friend-filters button {
-    color: var(--muted);
-}
-.friend-filters [aria-pressed='true'] {
-    color: var(--accent);
-    background: var(--soft-accent);
-    border-radius: 9px;
-}
-.friend-row {
-    background: var(--panel);
-    padding: 18px;
-    border-color: var(--line);
-}
-.friend-row small {
-    color: var(--muted);
-}
-.friends-header {
-    padding: 28px;
-    margin-bottom: 24px;
-    border: 1px solid var(--line);
-    border-radius: 18px;
-    background: radial-gradient(ellipse at 100% 0, #edaa6017, transparent 70%), var(--panel);
-}
-.friends-header h1 {
-    font-size: 38px;
-    margin: 8px 0;
-}
-.friends-header p {
-    margin: 0;
-}
 .call-panel {
     margin: 16px 24px;
     background: radial-gradient(ellipse at 0 0, #edaa6015, transparent), var(--panel);
@@ -917,9 +887,6 @@ label,
     .call-panel {
         margin: 12px;
     }
-    .friends-header {
-        padding: 20px;
-    }
 }
 
 .theme-options {
@@ -1042,7 +1009,6 @@ label,
 .stream-viewer-notice {
     color: var(--muted);
 }
-.friend-row button,
 .reaction,
 .jump-to-latest,
 .attachment-preview {

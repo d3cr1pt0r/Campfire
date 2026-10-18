@@ -259,8 +259,7 @@ export function SettingsPanel({
                                 <input readOnly value={state.me.username} />
                             </label>
                             <p className="muted">
-                                Your account username is permanent. Use it to sign in and add
-                                friends.
+                                Your account username is permanent. Use it to sign in.
                             </p>
                             <label>
                                 Nickname
@@ -324,8 +323,8 @@ export function SettingsPanel({
                             <input value={url} readOnly />
                         </label>
                         <p className="muted">
-                            Accounts and friend lists belong to this server. Sessions expire after
-                            30 days.
+                            Accounts and messages belong to this server. Sessions expire after 30
+                            days.
                         </p>
                         <button className="secondary" onClick={() => setModal('switch')}>
                             Connect to another server <ArrowRight size={16} />

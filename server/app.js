@@ -13,7 +13,6 @@ import { createSessions } from './sessions.js';
 import { registerAccounts } from './accounts.js';
 import { registerMessages } from './messages.js';
 import { registerProfiles } from './profiles.js';
-import { registerFriends } from './friends.js';
 import { registerAdministration } from './administration.js';
 import { registerCalls } from './calls.js';
 import { registerPresence } from './presence.js';
@@ -127,11 +126,6 @@ export function createApp({
                               visible.has(entry.channel),
                           )
                         : [],
-                friends: all(
-                    'SELECT * FROM friends WHERE sender=? OR recipient=?',
-                    req.user.id,
-                    req.user.id,
-                ),
                 online: [
                     ...new Set(
                         [...io.sockets.sockets.values()].map((socket) => socket.data.user.id),
@@ -146,7 +140,6 @@ export function createApp({
     );
     const messages = registerMessages(context);
     registerProfiles(context);
-    registerFriends(context);
     registerAdministration({ ...context, enforceCalls: calls.enforceCalls });
     const dist = fileURLToPath(new URL('../dist', import.meta.url));
     if (existsSync(dist)) {

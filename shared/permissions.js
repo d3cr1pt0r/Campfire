@@ -22,7 +22,7 @@ export const permissionGroups = [
         name: 'Calls',
         permissions: [
             ['calls.join', 'Join calls'],
-            ['calls.start', 'Start direct calls and invite friends'],
+            ['calls.start', 'Start direct calls and invite members'],
             ['calls.speak', 'Speak in calls'],
             ['calls.camera', 'Publish camera video'],
             ['calls.share', 'Share screen and audio'],

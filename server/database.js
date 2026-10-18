@@ -109,6 +109,9 @@ export function migrate(db) {
                 'ALTER TABLE channels ADD COLUMN reactionAuthors INTEGER NOT NULL DEFAULT 1 CHECK(reactionAuthors IN (0,1))',
             );
         },
+        () => {
+            db.exec('DROP TABLE IF EXISTS friends');
+        },
     ];
     migrations.forEach((apply, index) => {
         const version = index + 1;

@@ -5,7 +5,7 @@ This document describes the initial source implementation and is intended to be 
 ## Product decisions
 
 - English-only UI.
-- Independent self-hosted servers, identified by HTTP(S) origins. Each server owns accounts, friends, roles, messages, and files.
+- Independent self-hosted servers, identified by HTTP(S) origins. Each server owns accounts, roles, messages, and files.
 - The first account owns a new server. All later accounts use the Member role.
 - Up to eight peers per voice channel. Mesh WebRTC, not an SFU.
 - Text channels, DMs, attachments, all six requested messaging extras, and all six requested calling extras.
@@ -25,7 +25,7 @@ This document describes the initial source implementation and is intended to be 
 | `server/app.js` | App factory, REST endpoints, session/permission enforcement, live events, presence and call signaling |
 | `server/schema.sql` | Initial SQLite schema and indexes |
 | `server/security.js` | Password/token hashing and pure permission/conversation-access helpers |
-| `src/main.tsx` | Application/auth shell, chat, friend list, settings, dialogs, REST and socket state coordination, media tiles |
+| `src/main.tsx` | Application/auth shell, chat, member list, settings, dialogs, REST and socket state coordination, media tiles |
 | `src/media.ts` | Shared microphone acquisition, unavailable-device recovery and capture diagnostics |
 | `src/MicrophoneMeter.tsx`, `src/microphoneMonitor.ts` | On-demand settings input meter, signal measurement and capture/analysis resource lifecycle |
 | `src/signaling.ts` | Serialized peer signaling, offer ownership, collision handling and queued ICE |
@@ -43,7 +43,7 @@ This document describes the initial source implementation and is intended to be 
 | `test/desktop.test.js` | Desktop storage persistence, encryption integration, asset-host isolation and portable-build configuration |
 | `Dockerfile`, `compose.yaml` | Standalone web/server deployment and persistent data volume |
 
-The UI is shared by browser and Electron. No Node.js primitives are exposed to renderer content; the preload exposes only get/set/remove of the connection, preferences and rendererPort keys. The Electron shell hosts only renderer assets on localhost and does not import the community server or create a community database. Remote community connections go through HTTP and Socket.IO, so the backend can later be moved to another runtime without replacing the UI. The current renderer keeps components together for initial delivery; extract `ChatView`, `FriendsView`, and `SettingsDialog` into separate modules when extending their behavior.
+The UI is shared by browser and Electron. No Node.js primitives are exposed to renderer content; the preload exposes only get/set/remove of the connection, preferences and rendererPort keys. The Electron shell hosts only renderer assets on localhost and does not import the community server or create a community database. Remote community connections go through HTTP and Socket.IO, so the backend can later be moved to another runtime without replacing the UI. The renderer composes separate chat, call, member list, and settings components.
 
 ## Data model
 
@@ -56,13 +56,12 @@ SQLite runs in WAL mode with foreign keys. All SQL inputs use bound parameters. 
 - `messages`: UUID, conversation key, author FK, plain-text body, creation/edit timestamps, pinned flag, nullable `thread` FK to a top-level parent message.
 - `attachments`: UUID, message FK, original filename, sniffed raster MIME (otherwise binary), base64 payload. Cascade deletion with the message.
 - `reactions`: message/user/emoji primary key. Cascade deletion with the message.
-- `friends`: sender/recipient primary key, accepted flag. A reverse request accepts an incoming request.
 - `settings`: key/value store (currently server name).
 - `profiles`: user FK primary key and editable nickname, backfilled from usernames at startup. Username changes are rejected by a SQLite trigger.
 - `avatars`: version UUID, unique user FK, bounded PNG base64. Replacing an avatar replaces its ID.
 - `emojis`: UUID, unique shortcode name, author FK, bounded PNG base64. Private calls use in-memory state, not a table.
 
-Text conversation keys are channel IDs. DM keys are `dm:<smaller-user-UUID>:<larger-user-UUID>` using lexicographic sort in the client. The server checks exactly two existing, distinct participants and requester membership. All attachment access derives from its owning message's conversation. Account rosters are visible to server members. DMs can be initiated from any member, even before friendship acceptance.
+Text conversation keys are channel IDs. DM keys are `dm:<smaller-user-UUID>:<larger-user-UUID>` using lexicographic sort in the client. The server checks exactly two existing, distinct participants and requester membership. All attachment access derives from its owning message's conversation. Account rosters are visible to server members. DMs can be initiated from any member, without a relationship prerequisite.
 
 Attachments are capped at ten files and 5 MB combined per message. Before larger deployments, move file bytes out of SQLite, stream uploads/downloads, enforce disk quotas, and add retention controls. Message and attachment insertion run in one SQLite transaction, so a batch cannot create a partially attached message.
 
@@ -75,7 +74,7 @@ Owner always has all permissions. Other roles have independent `send`, `voice`, 
 | Permission | Capabilities |
 | --- | --- |
 | `send` | New messages, attachments, reactions and custom emoji uploads |
-| `voice` | Join voice channels/private calls, invite accepted friends, signal peers and publish activity |
+| `voice` | Join voice channels/private calls, invite server members, signal peers and publish activity |
 | `manage` | Server naming, channel creation, non-management role editing/creation, pin/unpin and deletion of other users' messages |
 
 Only Owner assigns user roles or grants/edits roles containing `manage`. Owner cannot be demoted by the current API. Message authors can edit/delete their existing messages and reactions require conversation access and the send permission. Pinning requires management permission and conversation access. Clients losing voice permission receive `call:revoked`, and all other participants receive an updated call roster so their connections close.
@@ -95,7 +94,7 @@ All `/api` routes except `/info` and `/auth/:action` require a session. Errors r
 | GET | `/api/info` | Server name and registration availability |
 | POST | `/api/auth/register`, `/api/auth/login` | `{username,password}`; register/sign in |
 | POST | `/api/logout` | Revoke current session |
-| GET | `/api/state` | Current user, users, roles, channels, friends, online IDs, visible call roster, private-call invitations/membership, custom emoji metadata, ICE config |
+| GET | `/api/state` | Current user, users, roles, channels, online IDs, visible call roster, private-call invitations/membership, custom emoji metadata, ICE config |
 | GET | `/api/messages?room=...&search=...` | Latest 500 accessible messages; optional substring filter |
 | POST | `/api/messages` | `{room,body,attachments?:[{name,data}]}`; legacy singular attachment remains accepted |
 | PATCH | `/api/messages/:id` | `{body? ,pinned?}` with separate permission checks |
@@ -107,11 +106,9 @@ All `/api` routes except `/info` and `/auth/:action` require a session. Errors r
 | GET | `/api/avatars/:id` | Authenticated PNG profile image |
 | POST | `/api/emojis` | `{name,data}` bounded PNG, send permission |
 | GET / DELETE | `/api/emojis/:id` | Authenticated image / author or manager deletion |
-| POST | `/api/calls` | `{user}` online accepted friend; returns private room `{id}` |
+| POST | `/api/calls` | `{user}` online server member; returns private room `{id}` |
 | POST | `/api/calls/:id/invite` | `{user}`; caller must participate in this private call |
 | POST | `/api/calls/:id/decline` | Reject invitation or remove own inactive membership |
-| POST | `/api/friends` | `{username}`; request or accept incoming request |
-| DELETE | `/api/friends/:id` | Remove friendship or request |
 | POST | `/api/channels` | `{name,kind}`; manager only |
 | POST | `/api/roles` | `{name,color,permissions}` |
 | PATCH | `/api/roles/:id` | Edit name/color/permissions, preserving Owner role |
@@ -183,7 +180,7 @@ The test uses a third-party STUN service for address discovery only. Outbound UD
 
 The workflow `.github/workflows/windows.yml` is workflow_dispatch only, uses a Windows runner/Node 24, installs application dependencies with npm ci, runs checks/tests, and uploads the EXE as the 14-day Campfire-Windows-x64-Portable Actions artifact. It does not create GitHub Releases. No workflow has been run from this environment.
 
-VITE_DEFAULT_SERVER_URL can prefill a public server origin when building. It is visible in the renderer bundle and must not contain credentials or secrets. Without this variable, Electron shows a blank required server field; browser clients default to their hosting origin (Vite development defaults to localhost:3001). Saved connections override defaults. The localhost port used by the desktop is UI infrastructure only, never the suggested community address. Friends run the shared server separately.
+VITE_DEFAULT_SERVER_URL can prefill a public server origin when building. It is visible in the renderer bundle and must not contain credentials or secrets. Without this variable, Electron shows a blank required server field; browser clients default to their hosting origin (Vite development defaults to localhost:3001). Saved connections override defaults. The localhost port used by the desktop is UI infrastructure only, never the suggested community address. Communities host the shared server separately.
 
 Client state is written atomically under userData/client-state.dat so sessions/preferences survive port changes, relaunch and replacement of the portable EXE. Electron uses safeStorage when available. Tests use an encryption-service stub; actual Windows DPAPI behavior is not validated here. Earlier embedded-server databases are neither migrated nor deleted; use their original standalone data directory if those accounts need to be preserved.
 
@@ -263,7 +260,7 @@ Device preferences now retain IDs and labels, including during temporary fallbac
 
 useSpeaking borrows the raw call microphone through createMicrophoneMonitor, samples at about 80 ms, and holds the activity outline for 250 ms after detected input. It never opens another microphone or monitors the mixed system-audio track. Small boolean activity hints are sent on changes and every second while active; the server rate-limits and relays only within the current call. Receivers expire stale hints after 2.5 seconds. Green outlines decorate call tiles and voice-channel avatars. These are user-reported activity hints for presentation, not trusted evidence or recordings. Mute/deafen/PTT gates the raw track and therefore the indicator. Analysis cleanup does not stop borrowed tracks.
 
-Private calls are in-memory invite-only rooms named private:<UUID>. Creation requires voice permission and an online accepted friend; every added invite also checks accepted friendship, target voice permission and the eight-member limit. A participant can invite their own accepted friends; outsiders cannot view the room/roster, join, invite or signal into it. The existing same-room signaling check and one-active-device rule apply. Invited users must explicitly join; no microphone is opened by receiving an invitation. Invite timestamps expire after two minutes, with 15-second housekeeping. Calls vanish when empty after starting (or expire before starting); accepted participants can rejoin while someone remains. Initial calls have a per-pair cooldown and per-creator pending-room cap. Decline removes access; changing voice permissions revokes active calls. Server restart discards calls and invitations. E2EE/peer identity properties are unchanged.
+Private calls are in-memory invite-only rooms named private:<UUID>. Creation requires voice permission and an online server member; every added invite checks server membership, target call permissions and the eight-member limit. A participant can invite other server members; outsiders cannot view the room/roster, join, invite or signal into it. The existing same-room signaling check and one-active-device rule apply. Invited users must explicitly join; no microphone is opened by receiving an invitation. Invite timestamps expire after two minutes, with 15-second housekeeping. Calls vanish when empty after starting (or expire before starting); accepted participants can rejoin while someone remains. Initial calls have a per-pair cooldown and per-creator pending-room cap. Decline removes access; changing voice permissions revokes active calls. Server restart discards calls and invitations. E2EE/peer identity properties are unchanged.
 
 Drag/drop and the file picker share validateFileSelection from shared/uploads.js. Both queue File objects for review in the composer, with individual removal, a ten-file cap and a 5 MB combined limit. Drops into read-only conversations or during an upload do not queue files. The chat area exposes a file-only overlay; root handlers prevent dropped files from navigating the app. Drag counters reset on drop/end and conversation changes. The send path reads the selected batch, targets the captured conversation, and submits attachments[]; the server still accepts legacy attachment. All payloads validate before insertion and message/attachment writes are atomic. Preview/download authorization is unchanged. Live drag/drop, including OS file-manager behavior and nested targets, still needs manual desktop testing.
 
@@ -311,7 +308,7 @@ SQLite represents pinned as 0/1. Message metadata must convert numeric flags to 
 
 The additive profiles table stores one nickname per user. Idempotent startup backfills missing rows from existing usernames and preserves changed nicknames. Registration still asks only for username/password, inserts the same nickname, and returns both fields. A binary-comparison BEFORE UPDATE trigger prevents username changes, including changes of case. PATCH /api/profile accepts only nickname, trims it, rejects blank/over-32-character/control-character values, updates the authenticated account, and broadcasts refresh. Other accounts cannot be selected through the route. No username-edit endpoint exists. Nicknames need not be unique.
 
-The nickname-first displayName helper is used for chat authors, avatars, friends/DMs, voice members, call titles/controls, member roles, typing notices and notifications. Friend acceptance/lookup and login continue using the account username. Settings shows a read-only username and editable nickname. Identity tooltips/friend rows also expose @username to distinguish duplicate nicknames. Older messages resolve the author's current nickname, matching the existing user-ID-based author model. A profile update does not reconnect the call or change account identifiers.
+The nickname-first displayName helper is used for chat authors, avatars, members/DMs, voice members, call titles/controls, member roles, typing notices and notifications. Login continues using the account username. Settings shows a read-only username and editable nickname. Member identity tooltips also expose @username to distinguish duplicate nicknames. Older messages resolve the author's current nickname, matching the existing user-ID-based author model. A profile update does not reconnect the call or change account identifiers.
 
 Schema tests exercise legacy backfill, restart preservation and immutable/case-sensitive username rejection. Request-handler tests cover defaults, nickname-only updates, caller isolation, invalid values, immutable username attempts, and login by the original username after display-name changes. Display-name fallback has a helper test. Current type check, production build and all 70 non-network checks pass. Live multi-client nickname refresh, watch/stop bandwidth behavior and independent audio/output playback still need testing. Update the backend and all clients; no dependency or extra port changes. Version remains 0.1.3.
 
@@ -339,3 +336,9 @@ Channels & access now groups text channels before voice channels and opens one c
 Settings → Notifications controls message sounds, incoming DMs, direct mentions, desktop notifications, and individual text-channel/DM overrides. Desktop alerts are off by default and shown only while the app is hidden or unfocused. Alerts omit message contents and disable the OS sound to avoid duplicating the app chime. Ordinary channel messages do not alert. Turning a conversation off suppresses both desktop and sound alerts, including its thread replies. Preferences are local to the device; overrides are keyed by server origin, account ID, and room ID. Global switches take precedence over conversation overrides. Previously saved preferences receive the new defaults through optional fields.
 
 The top-right green dot reports the Socket.IO server connection, not microphone activity or personal presence. Microphone capture still requests Chromium's built-in `noiseSuppression`, `echoCancellation`, and `autoGainControl` together through the existing noise toggle. No dedicated RNNoise/AI denoiser or replacement audio pipeline was added; Settings now describes this explicitly.
+
+## Member messaging
+
+The member list opens a DM with any other server member and shows live unread message counts, including offline senders. Its call buttons invite online members who have call access; starting a call still requires Join and Start permissions. The member-list toggle shows the total unread DM count when the list is closed. Viewing a conversation clears its badge; messages from the current account do not increment unread counts. Voice calls retain explicit acceptance, invitation-only membership, permission checks, and rate limits.
+
+Database migration 11 drops the obsolete relationship table and its index. Existing accounts, messages, attachments, roles, and sessions are preserved. The state API no longer exposes relationships, and the old relationship endpoints are removed. Upgrade the server and clients together.

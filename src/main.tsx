@@ -7,7 +7,7 @@ import { ChatMessages } from './ChatMessages';
 import type { ChatScrollPosition } from './chatScroll';
 import { CallPanel, type CallAreaMode } from './CallPanel';
 import { ConversationSection } from './ConversationSection';
-import { FriendsPanel } from './FriendsPanel';
+import { MemberList } from './MemberList';
 import { SettingsPanel } from './SettingsPanel';
 import { SimpleForm, RoleForm } from './forms';
 import { Avatar, initials } from './Avatar';
@@ -55,7 +55,7 @@ import type { State, Message, Preferences, User } from './types';
 import { useCall } from './useCall';
 import { displayName } from './profiles';
 import { PresenceDot } from './PresenceDot';
-import { statusLabels, userStatus } from './presence';
+import { userStatus } from './presence';
 import { usePresence } from './usePresence';
 
 import { AssetContext, Emoji } from './ChatContent';
@@ -175,13 +175,12 @@ function App() {
         };
     }, [authUrl, token]);
     const [room, setRoom] = useState('general'),
-        [view, setView] = useState<'chat' | 'friends'>('chat'),
         [draft, setDraft] = useState(''),
         [attachments, setAttachments] = useState<File[]>([]);
     const [thread, setThread] = useState<Message | null>(null);
     const [composerFocus, setComposerFocus] = useState(0);
     const [threadFocus, setThreadFocus] = useState(0);
-    useEffect(() => setThread(null), [room, url, token, view]);
+    useEffect(() => setThread(null), [room, url, token]);
     const [search, setSearch] = useState(''),
         [pins, setPins] = useState(false),
         [members, setMembers] = useState(() => window.innerWidth > 1100),
@@ -224,8 +223,6 @@ function App() {
     }, []);
     const [draggingFiles, setDraggingFiles] = useState(false);
     const dragDepth = useRef(0);
-    const viewRef = useRef(view);
-    viewRef.current = view;
     const { modal, setModal, resetModals } = useModalNavigation();
     const [edit, setEdit] = useState<Message | null>(null),
         [devices, setDevices] = useState<MediaDeviceInfo[]>([]),
@@ -340,7 +337,7 @@ function App() {
             notify(
                 `${displayName(
                     stateRef.current?.users.find((u) => u.id === from),
-                    'A friend',
+                    'A member',
                 )} invited you to a call. Open the call invitation to join.`,
             ),
         );
@@ -351,7 +348,12 @@ function App() {
             if (seenMessages.has(m.id)) return;
             seenMessages.add(m.id);
             if (seenMessages.size > 1000) seenMessages.delete(seenMessages.values().next().value!);
-            if (m.room !== roomRef.current || viewRef.current !== 'chat')
+            if (
+                m.author !== stateRef.current?.me.id &&
+                (m.room !== roomRef.current ||
+                    !document.hasFocus() ||
+                    document.visibilityState === 'hidden')
+            )
                 setUnread((prev) => ({ ...prev, [m.room]: (prev[m.room] || 0) + 1 }));
             const me = stateRef.current?.me;
             const preferences = prefsRef.current;
@@ -400,7 +402,7 @@ function App() {
     useEffect(() => {
         dragDepth.current = 0;
         setDraggingFiles(false);
-    }, [room, view]);
+    }, [room]);
     useEffect(() => {
         const t = setInterval(
             () =>
@@ -414,8 +416,18 @@ function App() {
         return () => clearInterval(t);
     }, []);
     useEffect(() => {
-        if (view === 'chat') setUnread((prev) => ({ ...prev, [room]: 0 }));
-    }, [view, room]);
+        const markRead = () => {
+            if (document.visibilityState === 'visible' && document.hasFocus()) {
+                setUnread((previous) => ({ ...previous, [roomRef.current]: 0 }));
+            }
+        };
+        window.addEventListener('focus', markRead);
+        document.addEventListener('visibilitychange', markRead);
+        return () => {
+            window.removeEventListener('focus', markRead);
+            document.removeEventListener('visibilitychange', markRead);
+        };
+    }, []);
     useEffect(() => {
         if (modal !== 'settings') return;
         const refreshDevices = () =>
@@ -507,8 +519,9 @@ function App() {
     const dm = (id: string) => {
         if (!state) return;
         setComposerFocus((request) => request + 1);
-        setRoom(canonicalRoom(`dm:${state.me.id}:${id}`));
-        setView('chat');
+        const destination = canonicalRoom(`dm:${state.me.id}:${id}`);
+        setUnread((previous) => ({ ...previous, [destination]: 0 }));
+        setRoom(destination);
         setNavigationOpen(false);
         setSearch('');
         setPins(false);
@@ -516,7 +529,6 @@ function App() {
     const selectRoom = (id: string) => {
         setComposerFocus((request) => request + 1);
         setRoom(id);
-        setView('chat');
         setNavigationOpen(false);
         setSearch('');
         setPins(false);
@@ -681,7 +693,6 @@ function App() {
             if ((event.ctrlKey || event.metaKey) && !event.altKey) {
                 if (key === 'f' && !event.shiftKey && !modal) {
                     event.preventDefault();
-                    setView('chat');
                     requestAnimationFrame(() => {
                         const input = document.querySelector<HTMLInputElement>('.search input');
                         input?.focus();
@@ -723,14 +734,10 @@ function App() {
         setSettingsTab(tab);
         setModal('settings');
     };
-    const removingFriend = state?.friends.find((friend) =>
-        [friend.sender, friend.recipient].includes(modal?.split(':')[1] || ''),
+    const unreadDirectMessages = Object.entries(unread).reduce(
+        (sum, [key, count]) => sum + (key.startsWith('dm:') ? count : 0),
+        0,
     );
-    const friendAction = removingFriend?.accepted
-        ? 'Remove friend'
-        : removingFriend?.sender === state?.me.id
-          ? 'Cancel request'
-          : 'Decline request';
     const showError = error && (
         <div className="toast" role="alert">
             <span>{error}</span>
@@ -951,8 +958,12 @@ function App() {
                     <nav className="server-rail" aria-label="Servers">
                         <button
                             className="brand-icon"
-                            title="Friends"
-                            onClick={() => setView('friends')}
+                            title="Campfire"
+                            onClick={() =>
+                                selectRoom(
+                                    state.channels.find((c) => c.kind === 'text')?.id || 'general',
+                                )
+                            }
                         >
                             <CampfireMark />
                         </button>
@@ -1013,16 +1024,6 @@ function App() {
                             <ChevronDown size={18} />
                         </button>
                         <div className="sidebar-content">
-                            <button
-                                className={`nav-item ${view === 'friends' ? 'selected' : ''}`}
-                                aria-current={view === 'friends' ? 'page' : undefined}
-                                onClick={() => setView('friends')}
-                            >
-                                <Users size={19} /> Friends{' '}
-                                {state.friends.some(
-                                    (f) => !f.accepted && f.recipient === state.me.id,
-                                ) && <span className="count">!</span>}
-                            </button>
                             <div className="category">
                                 <span>TEXT CHANNELS</span>
                                 {['channels.edit', 'channels.reorder', 'channels.delete'].some(
@@ -1049,10 +1050,8 @@ function App() {
                                 .map((c) => (
                                     <button
                                         key={c.id}
-                                        className={`nav-item channel ${room === c.id && view === 'chat' ? 'selected' : ''}`}
-                                        aria-current={
-                                            room === c.id && view === 'chat' ? 'page' : undefined
-                                        }
+                                        className={`nav-item channel ${room === c.id ? 'selected' : ''}`}
+                                        aria-current={room === c.id ? 'page' : undefined}
                                         onClick={() => selectRoom(c.id)}
                                     >
                                         <Hash size={20} />
@@ -1193,42 +1192,6 @@ function App() {
                                         connected
                                     </button>
                                 ))}
-                            <div className="category">
-                                <span>DIRECT MESSAGES</span>
-                                <button
-                                    title="Start a direct message"
-                                    onClick={() => setView('friends')}
-                                >
-                                    <Plus size={16} />
-                                </button>
-                            </div>
-                            {state.friends
-                                .filter((f) => f.accepted)
-                                .map((f) => {
-                                    const id = f.sender === state.me.id ? f.recipient : f.sender;
-                                    const u = user(id);
-                                    const dmRoom = canonicalRoom(`dm:${state.me.id}:${id}`);
-                                    return (
-                                        <button
-                                            className={`nav-item ${room === dmRoom && view === 'chat' ? 'selected' : ''}`}
-                                            key={id}
-                                            onClick={() => dm(id)}
-                                        >
-                                            <Avatar user={u} color={color(u)} small />
-                                            {displayName(u)}
-                                            {unread[dmRoom] > 0 && (
-                                                <span className="count">{unread[dmRoom]}</span>
-                                            )}
-                                        </button>
-                                    );
-                                })}
-                            {!state.friends.some((f) => f.accepted) && (
-                                <p className="sidebar-hint">
-                                    Good conversations start
-                                    <br />
-                                    with a hello. Add a friend.
-                                </p>
-                            )}
                         </div>
                         {call.channel && (
                             <div className="voice-connected">
@@ -1329,7 +1292,7 @@ function App() {
                             <header className="topbar">
                                 <button
                                     className="navigation-toggle"
-                                    title="Channels and friends"
+                                    title="Channels and members"
                                     aria-label="Open navigation"
                                     aria-expanded={navigationOpen}
                                     onClick={() => setNavigationOpen(true)}
@@ -1337,130 +1300,136 @@ function App() {
                                     <Menu size={22} />
                                 </button>
                                 <div className="channel-title">
-                                    {view === 'friends' ? (
-                                        <Users size={23} />
-                                    ) : dmUser ? (
-                                        <MessageCircle size={23} />
-                                    ) : (
-                                        <Hash size={25} />
-                                    )}
+                                    {dmUser ? <MessageCircle size={23} /> : <Hash size={25} />}
                                     <strong>
-                                        {view === 'friends'
-                                            ? 'Friends'
-                                            : displayName(dmUser, '') ||
-                                              currentChannel?.name ||
-                                              'Conversation'}
+                                        {displayName(dmUser, '') ||
+                                            currentChannel?.name ||
+                                            'Conversation'}
                                     </strong>
-                                    {(view === 'friends' ||
-                                        dmUser ||
-                                        currentChannel?.description) && (
+                                    {(dmUser || currentChannel?.description) && (
                                         <span className="title-divider" />
                                     )}
                                     <span
                                         className="channel-description"
-                                        title={
-                                            view === 'chat' && !dmUser
-                                                ? currentChannel?.description
-                                                : undefined
-                                        }
+                                        title={!dmUser ? currentChannel?.description : undefined}
                                     >
-                                        {view === 'friends'
-                                            ? 'Better together.'
-                                            : dmUser
-                                              ? 'A space for the two of you.'
-                                              : currentChannel?.description}
+                                        {dmUser
+                                            ? 'A space for the two of you.'
+                                            : currentChannel?.description}
                                     </span>
                                 </div>
                                 <div className="top-actions">
-                                    {view === 'chat' && (
-                                        <>
-                                            {dmUser && (
-                                                <button
-                                                    title="Call friend"
-                                                    disabled={
-                                                        !!call.channel ||
-                                                        !permission('calls.join') ||
-                                                        !permission('calls.start')
-                                                    }
-                                                    onClick={() => void startDirectCall(dmUser.id)}
+                                    <>
+                                        {dmUser && (
+                                            <button
+                                                title="Call member"
+                                                disabled={
+                                                    !!call.channel ||
+                                                    !permission('calls.join') ||
+                                                    !permission('calls.start') ||
+                                                    !state.online.includes(dmUser.id) ||
+                                                    !hasRolePermission(
+                                                        dmUser.role,
+                                                        state.roles.find(
+                                                            (role) => role.id === dmUser.role,
+                                                        )?.permissions || [],
+                                                        'calls.join',
+                                                    )
+                                                }
+                                                onClick={() => void startDirectCall(dmUser.id)}
+                                            >
+                                                <Phone size={20} />
+                                            </button>
+                                        )}
+                                        <button
+                                            title="Pinned messages"
+                                            aria-label="Pinned messages"
+                                            aria-pressed={pins}
+                                            className={pins ? 'highlight' : ''}
+                                            onClick={() => setPins(!pins)}
+                                        >
+                                            <Pin size={20} />
+                                        </button>
+                                        <button
+                                            title="Toggle member list"
+                                            aria-label="Members"
+                                            aria-expanded={members && !thread}
+                                            aria-controls="community-members"
+                                            onClick={() => {
+                                                if (thread) {
+                                                    setThread(null);
+                                                    setMembers(true);
+                                                } else setMembers(!members);
+                                            }}
+                                        >
+                                            <Users size={21} />
+                                            {unreadDirectMessages > 0 && (
+                                                <span
+                                                    className="count"
+                                                    aria-live="polite"
+                                                    aria-label={`${unreadDirectMessages} unread direct messages`}
                                                 >
-                                                    <Phone size={20} />
-                                                </button>
-                                            )}
-                                            <button
-                                                title="Pinned messages"
-                                                aria-label="Pinned messages"
-                                                aria-pressed={pins}
-                                                className={pins ? 'highlight' : ''}
-                                                onClick={() => setPins(!pins)}
-                                            >
-                                                <Pin size={20} />
-                                            </button>
-                                            <button
-                                                title="Toggle member list"
-                                                aria-label="Members"
-                                                aria-expanded={members}
-                                                aria-controls="community-members"
-                                                onClick={() => setMembers(!members)}
-                                            >
-                                                <Users size={21} />
-                                            </button>
-                                            <button
-                                                title={
-                                                    prefs.channelNotifications?.[
-                                                        notificationKey(url, state.me.id, room)
-                                                    ] === false
-                                                        ? 'Unmute conversation'
-                                                        : 'Mute conversation'
-                                                }
-                                                aria-label="Mute conversation"
-                                                aria-pressed={
-                                                    prefs.channelNotifications?.[
-                                                        notificationKey(url, state.me.id, room)
-                                                    ] === false
-                                                }
-                                                onClick={() =>
-                                                    setPrefs((previous) => {
-                                                        const key = notificationKey(
-                                                            url,
-                                                            state.me.id,
-                                                            room,
-                                                        );
-                                                        return {
-                                                            ...previous,
-                                                            channelNotifications: {
-                                                                ...previous.channelNotifications,
-                                                                [key]:
-                                                                    previous.channelNotifications?.[
-                                                                        key
-                                                                    ] === false,
-                                                            },
-                                                        };
-                                                    })
-                                                }
-                                            >
-                                                {prefs.channelNotifications?.[
-                                                    notificationKey(url, state.me.id, room)
-                                                ] === false ? (
-                                                    <BellOff size={19} />
-                                                ) : (
-                                                    <Bell size={19} />
-                                                )}
-                                            </button>
-                                            <label className="search">
-                                                <span className="sr-only">
-                                                    Search this conversation
+                                                    {unreadDirectMessages > 99
+                                                        ? '99+'
+                                                        : unreadDirectMessages}
                                                 </span>
-                                                <input
-                                                    type="search"
-                                                    placeholder="Search messages (Ctrl+F)"
-                                                    value={search}
-                                                    onChange={(e) => setSearch(e.target.value)}
-                                                />
-                                                <Search size={16} />
-                                            </label>
-                                        </>
-                                    )}
+                                            )}
+                                        </button>
+                                        <button
+                                            title={
+                                                prefs.channelNotifications?.[
+                                                    notificationKey(url, state.me.id, room)
+                                                ] === false
+                                                    ? 'Unmute conversation'
+                                                    : 'Mute conversation'
+                                            }
+                                            aria-label="Mute conversation"
+                                            aria-pressed={
+                                                prefs.channelNotifications?.[
+                                                    notificationKey(url, state.me.id, room)
+                                                ] === false
+                                            }
+                                            onClick={() =>
+                                                setPrefs((previous) => {
+                                                    const key = notificationKey(
+                                                        url,
+                                                        state.me.id,
+                                                        room,
+                                                    );
+                                                    return {
+                                                        ...previous,
+                                                        channelNotifications: {
+                                                            ...previous.channelNotifications,
+                                                            [key]:
+                                                                previous.channelNotifications?.[
+                                                                    key
+                                                                ] === false,
+                                                        },
+                                                    };
+                                                })
+                                            }
+                                        >
+                                            {prefs.channelNotifications?.[
+                                                notificationKey(url, state.me.id, room)
+                                            ] === false ? (
+                                                <BellOff size={19} />
+                                            ) : (
+                                                <Bell size={19} />
+                                            )}
+                                        </button>
+                                        <label className="search">
+                                            <span className="sr-only">
+                                                Search this conversation
+                                            </span>
+                                            <input
+                                                type="search"
+                                                placeholder="Search messages (Ctrl+F)"
+                                                value={search}
+                                                onChange={(e) => setSearch(e.target.value)}
+                                            />
+                                            <Search size={16} />
+                                        </label>
+                                    </>
                                     {call.channel && (
                                         <button
                                             className="panel-expand"
@@ -1488,7 +1457,7 @@ function App() {
                                 .map((c) => (
                                     <div key={c.id}>
                                         <span>
-                                            {displayName(user(c.creator)) || 'A friend'} invited you
+                                            {displayName(user(c.creator)) || 'A member'} invited you
                                             to a private call
                                         </span>
                                         <button
@@ -1511,123 +1480,108 @@ function App() {
                                 ))}
                         </div>
                         <div className="main-columns">
-                            {view === 'friends' ? (
-                                <FriendsPanel
-                                    state={state}
-                                    call={call}
-                                    startDirectCall={startDirectCall}
-                                    permission={permission}
+                            <section
+                                className={`chat-area ${draggingFiles ? 'dragging-files' : ''}`}
+                                onDragEnter={(e) => {
+                                    if (e.dataTransfer.types.includes('Files')) {
+                                        e.preventDefault();
+                                        dragDepth.current++;
+                                        setDraggingFiles(true);
+                                    }
+                                }}
+                                onDragLeave={() => {
+                                    dragDepth.current = Math.max(0, dragDepth.current - 1);
+                                    if (!dragDepth.current) setDraggingFiles(false);
+                                }}
+                                onDragOver={(e) => {
+                                    if (e.dataTransfer.types.includes('Files')) {
+                                        e.preventDefault();
+                                        e.dataTransfer.dropEffect =
+                                            canPost && !busy ? 'copy' : 'none';
+                                    }
+                                }}
+                                onDrop={(e) => {
+                                    if (e.dataTransfer.types.includes('Files')) {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        resetDrop();
+                                        addFiles(Array.from(e.dataTransfer.files));
+                                    }
+                                }}
+                            >
+                                {draggingFiles && (
+                                    <div className="file-drop-overlay">
+                                        <Paperclip size={42} />
+                                        <strong>
+                                            {canPost
+                                                ? 'Drop files to attach'
+                                                : 'This conversation is read-only'}
+                                        </strong>
+                                        <span>
+                                            Up to 10 files · 5 MB total · Review before sending
+                                        </span>
+                                    </div>
+                                )}
+                                <ChatMessages
+                                    key={`${url}:${state.me.id}:${room}:${search}:${pins}`}
+                                    scrollMemory={chatScrollMemory.current}
+                                    scrollKey={JSON.stringify([
+                                        url,
+                                        state.me.id,
+                                        room,
+                                        search,
+                                        pins,
+                                    ])}
+                                    onReply={(message) => {
+                                        setThread(message);
+                                        setThreadFocus((request) => request + 1);
+                                    }}
+                                    permission={conversationPermission}
+                                    conversation={conversation}
+                                    search={search}
+                                    pins={pins}
+                                    dmUser={dmUser}
+                                    currentChannel={currentChannel}
+                                    visibleMessages={visibleMessages}
                                     user={user}
                                     color={color}
+                                    state={state}
                                     dm={dm}
-                                    setModal={setModal}
+                                    download={download}
                                     act={act}
                                     api={api}
+                                    setModal={setModal}
+                                    setEdit={setEdit}
+                                    clearFilters={() => {
+                                        setSearch('');
+                                        setPins(false);
+                                    }}
                                 />
-                            ) : (
-                                <section
-                                    className={`chat-area ${draggingFiles ? 'dragging-files' : ''}`}
-                                    onDragEnter={(e) => {
-                                        if (e.dataTransfer.types.includes('Files')) {
-                                            e.preventDefault();
-                                            dragDepth.current++;
-                                            setDraggingFiles(true);
-                                        }
-                                    }}
-                                    onDragLeave={() => {
-                                        dragDepth.current = Math.max(0, dragDepth.current - 1);
-                                        if (!dragDepth.current) setDraggingFiles(false);
-                                    }}
-                                    onDragOver={(e) => {
-                                        if (e.dataTransfer.types.includes('Files')) {
-                                            e.preventDefault();
-                                            e.dataTransfer.dropEffect =
-                                                canPost && !busy ? 'copy' : 'none';
-                                        }
-                                    }}
-                                    onDrop={(e) => {
-                                        if (e.dataTransfer.types.includes('Files')) {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            resetDrop();
-                                            addFiles(Array.from(e.dataTransfer.files));
-                                        }
-                                    }}
-                                >
-                                    {draggingFiles && (
-                                        <div className="file-drop-overlay">
-                                            <Paperclip size={42} />
-                                            <strong>
-                                                {canPost
-                                                    ? 'Drop files to attach'
-                                                    : 'This conversation is read-only'}
-                                            </strong>
-                                            <span>
-                                                Up to 10 files · 5 MB total · Review before sending
-                                            </span>
-                                        </div>
-                                    )}
-                                    <ChatMessages
-                                        key={`${url}:${state.me.id}:${room}:${search}:${pins}`}
-                                        scrollMemory={chatScrollMemory.current}
-                                        scrollKey={JSON.stringify([
-                                            url,
-                                            state.me.id,
-                                            room,
-                                            search,
-                                            pins,
-                                        ])}
-                                        onReply={(message) => {
-                                            setThread(message);
-                                            setThreadFocus((request) => request + 1);
-                                        }}
-                                        permission={conversationPermission}
-                                        conversation={conversation}
-                                        search={search}
-                                        pins={pins}
-                                        dmUser={dmUser}
-                                        currentChannel={currentChannel}
-                                        visibleMessages={visibleMessages}
-                                        user={user}
-                                        color={color}
-                                        state={state}
-                                        dm={dm}
-                                        download={download}
-                                        act={act}
-                                        api={api}
-                                        setModal={setModal}
-                                        setEdit={setEdit}
-                                        clearFilters={() => {
-                                            setSearch('');
-                                            setPins(false);
-                                        }}
-                                    />
-                                    <ChatComposer
-                                        focusRequest={composerFocus}
-                                        canAttach={canPost && permission('files.attach')}
-                                        users={state.users}
-                                        emojis={state.emojis}
-                                        attachments={attachments}
-                                        setAttachments={setAttachments}
-                                        draft={draft}
-                                        setDraft={setDraft}
-                                        busy={busy}
-                                        canPost={canPost}
-                                        connected={connected}
-                                        fileInput={fileInput}
-                                        lastTyping={lastTyping}
-                                        addFiles={addFiles}
-                                        send={send}
-                                        pasteDesktop={pasteDesktop}
-                                        onEmoji={() => setModal('emoji')}
-                                        onTyping={() => socket?.emit('typing', room)}
-                                        typing={typing}
-                                        user={user}
-                                        placeholder={`Message ${dmUser ? '@' + displayName(dmUser) : '#' + (currentChannel?.name || 'general')}`}
-                                    />
-                                </section>
-                            )}
-                            {thread && thread.room === room && view === 'chat' && roomVisible && (
+                                <ChatComposer
+                                    focusRequest={composerFocus}
+                                    canAttach={canPost && permission('files.attach')}
+                                    users={state.users}
+                                    emojis={state.emojis}
+                                    attachments={attachments}
+                                    setAttachments={setAttachments}
+                                    draft={draft}
+                                    setDraft={setDraft}
+                                    busy={busy}
+                                    canPost={canPost}
+                                    connected={connected}
+                                    fileInput={fileInput}
+                                    lastTyping={lastTyping}
+                                    addFiles={addFiles}
+                                    send={send}
+                                    pasteDesktop={pasteDesktop}
+                                    onEmoji={() => setModal('emoji')}
+                                    onTyping={() => socket?.emit('typing', room)}
+                                    typing={typing}
+                                    user={user}
+                                    placeholder={`Message ${dmUser ? '@' + displayName(dmUser) : '#' + (currentChannel?.name || 'general')}`}
+                                />
+                            </section>
+                            {thread && thread.room === room && roomVisible && (
                                 <ThreadPanel
                                     focusRequest={threadFocus}
                                     key={`${url}:${state.me.id}:${room}:${thread.id}`}
@@ -1648,73 +1602,18 @@ function App() {
                                 />
                             )}
                             {members && !thread && (
-                                <aside
-                                    className="member-list"
-                                    id="community-members"
-                                    aria-label="Community members"
-                                >
-                                    <div className="member-list-heading">
-                                        <span>Members · {state.users.length}</span>
-                                        <button
-                                            aria-label="Close member list"
-                                            title="Close member list"
-                                            onClick={() => setMembers(false)}
-                                        >
-                                            <X size={18} />
-                                        </button>
-                                    </div>
-                                    {(['online', 'idle', 'dnd', 'offline'] as const).map(
-                                        (status) => {
-                                            const group = state.users.filter(
-                                                (u) => userStatus(state, u.id) === status,
-                                            );
-                                            return group.length ? (
-                                                <React.Fragment key={status}>
-                                                    <div className="member-category">
-                                                        {statusLabels[status].toUpperCase()} —{' '}
-                                                        {group.length}
-                                                    </div>
-                                                    {group.map((u) => (
-                                                        <button
-                                                            className="member"
-                                                            key={u.id}
-                                                            onClick={() => {
-                                                                if (u.id !== state.me.id) dm(u.id);
-                                                                else openSettings();
-                                                            }}
-                                                        >
-                                                            <div className="avatar-status">
-                                                                <Avatar user={u} color={color(u)} />
-                                                                <PresenceDot status={status} />
-                                                            </div>
-                                                            <span>
-                                                                <strong style={{ color: color(u) }}>
-                                                                    {displayName(u)}
-                                                                    {u.id === state.me.id && (
-                                                                        <small>you</small>
-                                                                    )}
-                                                                </strong>
-                                                                <small>
-                                                                    {
-                                                                        state.roles.find(
-                                                                            (r) => r.id === u.role,
-                                                                        )?.name
-                                                                    }
-                                                                </small>
-                                                            </span>
-                                                            {u.role === 'owner' && (
-                                                                <Shield
-                                                                    size={14}
-                                                                    className="owner-shield"
-                                                                />
-                                                            )}
-                                                        </button>
-                                                    ))}
-                                                </React.Fragment>
-                                            ) : null;
-                                        },
-                                    )}
-                                </aside>
+                                <MemberList
+                                    state={state}
+                                    unread={unread}
+                                    room={room}
+                                    color={color}
+                                    dm={dm}
+                                    startCall={startDirectCall}
+                                    callActive={!!call.channel}
+                                    busy={busy}
+                                    onClose={() => setMembers(false)}
+                                    onSettings={() => openSettings()}
+                                />
                             )}
                         </div>
                     </ConversationSection>
@@ -1773,23 +1672,29 @@ function App() {
                                 />
                             ) : modal === 'invite-call' ? (
                                 <>
-                                    <h2 id="action-dialog-title">Invite a friend to this call</h2>
-                                    <p>Your friend can accept or decline the invitation.</p>
-                                    {state.friends
-                                        .filter((f) => f.accepted)
-                                        .map((f) => {
-                                            const id =
-                                                f.sender === state.me.id ? f.recipient : f.sender;
+                                    <h2 id="action-dialog-title">Invite a member to this call</h2>
+                                    <p>Members can accept or decline the invitation.</p>
+                                    {state.users
+                                        .filter((member) => member.id !== state.me.id)
+                                        .map((member) => {
+                                            const id = member.id;
                                             const room = state.directCalls?.find(
                                                 (c) => c.id === call.channel,
                                             );
                                             return (
                                                 <button
-                                                    className="invite-friend"
+                                                    className="invite-member"
                                                     key={id}
                                                     disabled={
                                                         busy ||
                                                         !state.online.includes(id) ||
+                                                        !hasRolePermission(
+                                                            member.role,
+                                                            state.roles.find(
+                                                                (role) => role.id === member.role,
+                                                            )?.permissions || [],
+                                                            'calls.join',
+                                                        ) ||
                                                         room?.members.includes(id) ||
                                                         room?.invited.includes(id)
                                                     }
@@ -1842,25 +1747,6 @@ function App() {
                                     >
                                         Sign out & connect
                                     </button>
-                                </>
-                            ) : modal === 'friend' ? (
-                                <>
-                                    <Users size={35} className="settings-hero" />
-                                    <h2 id="action-dialog-title">Find your people.</h2>
-                                    <p className="muted">
-                                        Enter their exact username on this server.
-                                    </p>
-                                    <SimpleForm
-                                        label="Username"
-                                        submit="Send friend request"
-                                        busy={busy}
-                                        onSubmit={(value) =>
-                                            act(async () => {
-                                                await api('/friends', 'POST', { username: value });
-                                                setModal(null);
-                                            })
-                                        }
-                                    />
                                 </>
                             ) : modal.startsWith('channel:') ? (
                                 <>
@@ -1974,15 +1860,10 @@ function App() {
                                 </>
                             ) : (
                                 <>
-                                    <h2 id="action-dialog-title">
-                                        {modal.startsWith('delete:')
-                                            ? 'Delete this message?'
-                                            : `${friendAction}?`}
-                                    </h2>
+                                    <h2 id="action-dialog-title">Delete this message?</h2>
                                     <p className="muted">
-                                        {modal.startsWith('delete:')
-                                            ? 'This will permanently delete the message, its thread replies, and their attachments.'
-                                            : 'You can send another friend request later.'}
+                                        This will permanently delete the message, its thread
+                                        replies, and their attachments.
                                     </p>
                                     <div className="dialog-actions">
                                         <button
@@ -1997,22 +1878,13 @@ function App() {
                                             disabled={busy}
                                             onClick={() =>
                                                 void act(async () => {
-                                                    const [action, id] = modal.split(':');
-                                                    await api(
-                                                        action === 'delete'
-                                                            ? `/messages/${id}`
-                                                            : `/friends/${id}`,
-                                                        'DELETE',
-                                                    );
+                                                    const [, id] = modal.split(':');
+                                                    await api(`/messages/${id}`, 'DELETE');
                                                     setModal(null);
                                                 })
                                             }
                                         >
-                                            {busy
-                                                ? 'Working…'
-                                                : modal.startsWith('delete:')
-                                                  ? 'Delete message'
-                                                  : friendAction}
+                                            {busy ? 'Working…' : 'Delete message'}
                                         </button>
                                     </div>
                                 </>

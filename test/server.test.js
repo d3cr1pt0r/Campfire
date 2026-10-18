@@ -158,15 +158,6 @@ test(
             es.off('message', listener);
             assert.equal(leaked, false);
         });
-        await t.test('friend requests require acceptance by the recipient', async () => {
-            await api(alice, '/friends', 'POST', { username: 'Bob' });
-            let state = await api(bob, '/state');
-            assert.equal(state.friends[0].accepted, 0);
-            await api(bob, '/friends', 'POST', { username: 'Alice' });
-            state = await api(alice, '/state');
-            assert.equal(state.friends[0].accepted, 1);
-            assert.equal((await api(eve, '/state')).friends.length, 0);
-        });
         await t.test('message ownership, editing, reactions, pinning, and search', async () => {
             await api(bob, `/messages/${textMessage.id}`, 'PATCH', { body: 'No' }, 403);
             await api(bob, `/messages/${textMessage.id}`, 'DELETE', undefined, 403);
@@ -285,7 +276,10 @@ test(
             await new Promise((resolve) => service.http.listen(0, '127.0.0.1', resolve));
             base = `http://127.0.0.1:${service.http.address().port}`;
             assert.equal((await api(alice, '/messages?room=general'))[0].body, 'Edited hello');
-            assert.equal((await api(alice, '/state')).friends[0].accepted, 1);
+            assert.equal(
+                (await api(alice, `/messages?room=${encodeURIComponent(dmMessage.room)}`))[0].body,
+                'Private hello',
+            );
             await api(alice, `/messages/${textMessage.id}`, 'DELETE');
             assert.equal((await api(alice, '/messages?room=general')).length, 0);
         });

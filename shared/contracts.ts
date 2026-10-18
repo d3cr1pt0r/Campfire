@@ -46,11 +46,6 @@ export type State = {
     roles: Role[];
     channels: Channel[];
     channelPermissions: ChannelAccess[];
-    friends: {
-        sender: string;
-        recipient: string;
-        accepted: number;
-    }[];
     online: string[];
     presence: Record<string, PresenceStatus>;
     calls: CallMember[];

@@ -1186,61 +1186,12 @@ small {
     margin-left: auto;
     color: var(--muted);
 }
-.friends-view {
-    flex: 1;
-    min-width: 0;
-    padding: 35px;
-    overflow: auto;
-}
-.friends-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 25px;
-    padding: 20px 0 28px;
-}
-.friends-header h1 {
-    font-size: 25px;
-    margin: 10px 0;
-}
-.friends-header .primary {
-    white-space: nowrap;
-    font-size: 13px;
-}
 .section-label {
     color: #a1856b;
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 1px;
     margin: 20px 0;
-}
-.friend-row {
-    display: flex;
-    gap: 15px;
-    align-items: center;
-    padding: 18px 5px;
-    border-top: 1px solid var(--border);
-}
-.friend-row > div {
-    flex: 1;
-}
-.friend-row > .friend-avatar {
-    flex: 0 0 auto;
-}
-.friend-row strong {
-    font-size: 14px;
-}
-.friend-row small {
-    display: block;
-    color: #a88f77;
-    margin-top: 5px;
-    font-size: 11px;
-}
-.friend-row button {
-    padding: 9px;
-    background: #29221d;
-    color: #c0ae9d;
-    border-radius: 50%;
 }
 .empty-state {
     text-align: center;
@@ -1758,13 +1709,6 @@ small {
         flex-direction: column;
         gap: 12px;
     }
-    .friends-header {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-    .friends-view {
-        padding: 25px;
-    }
 }
 
 .media-notices {
@@ -2221,7 +2165,7 @@ small {
 .call-invitations > div span {
     flex: 1;
 }
-.invite-friend {
+.invite-member {
     display: block;
     width: 100%;
     text-align: left;
@@ -2607,7 +2551,6 @@ label textarea {
 }
 .channel-welcome h1,
 .channel-welcome p,
-.friend-row strong,
 .profile-card h3,
 .role-member > span,
 .role-row strong {
@@ -2717,47 +2660,6 @@ label textarea {
 .member-category,
 .section-label {
     color: var(--muted);
-}
-.friends-view {
-    padding: 24px 32px;
-}
-.friends-header {
-    padding: 0 0 20px;
-}
-.friends-header h1 {
-    font-size: 28px;
-}
-.friend-filters {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    padding-bottom: 16px;
-}
-.friend-filters button {
-    min-height: 36px;
-    padding: 8px 12px;
-    color: var(--muted);
-}
-.friend-filters [aria-pressed='true'] {
-    background: #f5c19622;
-    color: #fbe6d4;
-}
-.friend-row {
-    gap: 10px;
-}
-.friend-row > div {
-    min-width: 0;
-}
-.friend-row small {
-    overflow-wrap: anywhere;
-    color: var(--muted);
-    line-height: 1.5;
-}
-.friend-row button {
-    min-width: 36px;
-    min-height: 36px;
-    padding: 7px;
-    border-radius: 9px;
 }
 .modal-backdrop {
     padding: 20px;
@@ -3064,9 +2966,6 @@ label textarea {
     .connection-status {
         margin-left: auto;
     }
-    .friends-header {
-        gap: 12px;
-    }
 }
 @media (max-width: 800px) {
     .app-shell {
@@ -3132,13 +3031,6 @@ label textarea {
     }
     .top-actions {
         gap: 4px;
-    }
-    .friends-view {
-        padding: 20px;
-    }
-    .friends-header {
-        flex-direction: column;
-        align-items: flex-start;
     }
     .channel-welcome {
         padding: 24px 16px 12px;
@@ -3213,8 +3105,6 @@ label textarea {
         flex-basis: calc(100% - 100px);
     }
     .nav-item,
-    .friend-filters button,
-    .friend-row button,
     .settings-nav button,
     .composer > button,
     .composer > button:first-child,
@@ -3222,16 +3112,9 @@ label textarea {
     .emoji-picker button {
         min-height: 44px;
     }
-    .friend-row button,
     .composer > button,
     .composer > button:first-child {
         min-width: 44px;
-    }
-    .friend-row {
-        flex-wrap: wrap;
-    }
-    .friend-row > div {
-        flex-basis: calc(100% - 58px);
     }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -3811,16 +3694,6 @@ h2,
     border-color: #e6bb8b26;
     border-radius: 13px;
 }
-.friends-header {
-    padding-bottom: 24px;
-    border-bottom: 1px solid var(--border);
-}
-.friend-row {
-    background: #f5bd7106;
-    border: 1px solid #e6bb8b16;
-    border-radius: 13px;
-    margin-top: 10px;
-}
 .call-panel {
     background: linear-gradient(135deg, #3a2b20, #261f1b);
     border-color: #e6bb8b26;
@@ -3920,4 +3793,56 @@ body.stream-popout-body {
 }
 .stream-popout input[type='range'] {
     width: 90px;
+}
+
+.member-row {
+    display: flex;
+    align-items: center;
+    border-radius: 8px;
+    gap: 2px;
+}
+.member-row .member {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    padding-right: 4px;
+}
+.member-row .member[aria-current='page'],
+.member-row.has-unread {
+    background: var(--soft-accent);
+}
+.member-row.has-unread .member strong {
+    font-weight: 800;
+}
+.member-row .member-call {
+    flex: 0 0 28px;
+    width: 28px;
+    height: 32px;
+    padding: 0;
+    color: var(--muted);
+}
+.member-row .member-call:hover:not(:disabled) {
+    color: var(--ink);
+    background: var(--soft-accent);
+}
+.member-row .member-unread {
+    flex: 0 0 auto;
+    margin-left: auto;
+    min-width: 22px;
+    width: auto;
+    padding: 3px 6px;
+    color: var(--accent-ink);
+    background: var(--accent);
+    font-size: 11px;
+    text-align: center;
+    border-radius: 12px;
+}
+.top-actions > button[aria-controls='community-members'] .count {
+    min-width: 18px;
+    padding: 2px 5px;
+    border-radius: 12px;
+    font-size: 10px;
+    line-height: 14px;
+    background: var(--accent);
+    color: var(--accent-ink);
 }

@@ -51,11 +51,6 @@ export const state = {
         access: 'full',
     })),
     channelPermissions: [],
-    friends: ['mia', 'sam', 'priya'].map((recipient) => ({
-        sender: 'alex',
-        recipient,
-        accepted: 1,
-    })),
     online: users.map((user) => user.id),
     presence: Object.fromEntries(users.map((user) => [user.id, user.status])),
     calls: [

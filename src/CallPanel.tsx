@@ -380,8 +380,8 @@ export function CallPanel({
                             <div className="call-controls">
                                 {canInvite && (
                                     <button
-                                        title="Invite friend"
-                                        aria-label="Invite friend"
+                                        title="Invite member"
+                                        aria-label="Invite member"
                                         onClick={() => setModal('invite-call')}
                                     >
                                         <UserPlus />

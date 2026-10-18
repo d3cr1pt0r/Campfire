@@ -13,12 +13,12 @@ existing eight-person cap and media protocol version 2.
 | Password derivation, sessions, expiry, revocation | `server/security.js`, `server/sessions.js`, `server/accounts.js` |
 | Conversation history, messages, reactions, attachments | `server/messages.js` |
 | Profiles, avatars, custom emojis | `server/profiles.js` |
-| Friends, administration, private calls and signaling | `server/friends.js`, `server/administration.js`, `server/calls.js` |
+| Administration, private calls and signaling | `server/administration.js`, `server/calls.js` |
 | Origin policy, bounded authentication limiter, role validation | `server/policies.js` |
 | Shared domain/event/media types and DM identity | `shared/contracts.ts`, `shared/rooms.js` |
 | JSON/blob transport and coalesced state refresh | `src/api.ts`, `src/stateRefresh.ts` |
 | Conversation snapshots, events, cancellation, pagination | `src/conversation.ts`, `src/useConversation.ts` |
-| Chat, calls, friends, settings, common forms and avatars | `src/ChatMessages.tsx`, `src/CallPanel.tsx`, `src/FriendsPanel.tsx`, `src/SettingsPanel.tsx`, `src/forms.tsx`, `src/Avatar.tsx` |
+| Chat, calls, members, settings, common forms and avatars | `src/ChatMessages.tsx`, `src/CallPanel.tsx`, `src/MemberList.tsx`, `src/SettingsPanel.tsx`, `src/forms.tsx`, `src/Avatar.tsx` |
 | Dialog lifecycle, expanded media shell, volume controls | `src/useDialog.ts`, `src/ExpandedViewer.tsx`, `src/VolumeControl.tsx` |
 | Capture and peer ownership | `src/useCall.ts` and existing media helpers |
 

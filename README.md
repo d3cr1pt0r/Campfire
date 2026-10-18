@@ -10,7 +10,7 @@ A place to catch up, share what you're working on, or just hang out together. Us
 
 ## What you can do
 
-- **Chat together:** organize conversations into text channels, reply in threads, and message friends directly.
+- **Chat together:** organize conversations into text channels, reply in threads, and message any server member directly from the member list, with unread message indicators.
 - **Hop into a call:** join a voice channel or start a private voice or video call with up to eight people.
 - **Share your screen:** show a game, a project, or whatever you're watching, and choose whose streams to follow.
 - **Share the little things:** send files and images, react with emojis, and add your community's own custom emojis.

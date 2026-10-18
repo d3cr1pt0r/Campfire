@@ -272,15 +272,14 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
         return socket;
     }
     await t.test(
-        'private calls require accepted friends and invitations, hide roster, and allow group invites',
+        'members can call without relationships; invitations protect private calls and group invites',
         async () => {
             const as = attach(alice, 'alice-socket'),
                 bs = attach(bob, 'bob-socket'),
                 es = attach(eve, 'eve-socket');
             const join = (s, id) => new Promise((resolve) => s.emit('call:join', id, resolve));
-            await api(alice, '/calls', 'POST', { user: bob.user.id }, 403);
-            await api(alice, '/friends', 'POST', { username: 'Bob' });
-            await api(bob, '/friends', 'POST', { username: 'Alice' });
+            await api(alice, '/calls', 'POST', { user: alice.user.id }, 403);
+            await api(alice, '/calls', 'POST', { user: 'unknown-member' }, 403);
             const room = (await api(alice, '/calls', 'POST', { user: bob.user.id })).data.id;
             assert.equal((await api(eve, '/state')).data.directCalls.length, 0);
             assert.ok((await join(es, room)).error);
@@ -314,8 +313,6 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
             as.emit('signal', { to: es.id, data: watch });
             assert.equal(leakedWatch, undefined);
             await api(eve, `/calls/${room}/invite`, 'POST', { user: alice.user.id }, 403);
-            await api(alice, '/friends', 'POST', { username: 'Eve' });
-            await api(eve, '/friends', 'POST', { username: 'Alice' });
             await api(alice, `/calls/${room}/invite`, 'POST', { user: eve.user.id });
             await api(eve, `/calls/${room}/decline`, 'POST');
             assert.ok((await join(es, room)).error);

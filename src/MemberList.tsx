@@ -1,0 +1,147 @@
+import { Fragment } from 'react';
+import { Phone, Shield, X } from 'lucide-react';
+import { hasRolePermission } from '../shared/permissions.js';
+import { canonicalRoom } from '../shared/rooms.js';
+import { Avatar } from './Avatar';
+import { PresenceDot } from './PresenceDot';
+import { displayName } from './profiles';
+import { statusLabels, userStatus } from './presence';
+import type { State, User } from './types';
+
+export function MemberList({
+    state,
+    unread,
+    room,
+    color,
+    dm,
+    startCall,
+    callActive,
+    busy,
+    onClose,
+    onSettings,
+}: {
+    state: State;
+    unread: Record<string, number>;
+    room: string;
+    color: (user?: User) => string | undefined;
+    dm: (id: string) => void;
+    startCall: (id: string) => Promise<unknown>;
+    callActive: boolean;
+    busy: boolean;
+    onClose: () => void;
+    onSettings: () => void;
+}) {
+    return (
+        <aside className="member-list" id="community-members" aria-label="Community members">
+            <div className="member-list-heading">
+                <span>Members · {state.users.length}</span>
+                <button aria-label="Close member list" title="Close member list" onClick={onClose}>
+                    <X size={18} />
+                </button>
+            </div>
+            {(['online', 'idle', 'dnd', 'offline'] as const).map((status) => {
+                const group = state.users.filter((user) => userStatus(state, user.id) === status);
+                return group.length ? (
+                    <Fragment key={status}>
+                        <div className="member-category">
+                            {statusLabels[status].toUpperCase()} — {group.length}
+                        </div>
+                        {group.map((user) => {
+                            const self = user.id === state.me.id;
+                            const destination = canonicalRoom(`dm:${state.me.id}:${user.id}`);
+                            const count = self ? 0 : unread[destination] || 0;
+                            const name = displayName(user);
+                            const unavailable = busy
+                                ? 'Please wait'
+                                : callActive
+                                  ? 'Leave your current call first'
+                                  : status === 'offline'
+                                    ? 'This member is offline'
+                                    : !hasRolePermission(
+                                            state.me.role,
+                                            state.roles.find((role) => role.id === state.me.role)
+                                                ?.permissions || [],
+                                            'calls.join',
+                                        ) ||
+                                        !hasRolePermission(
+                                            state.me.role,
+                                            state.roles.find((role) => role.id === state.me.role)
+                                                ?.permissions || [],
+                                            'calls.start',
+                                        )
+                                      ? 'You do not have permission to start calls'
+                                      : !hasRolePermission(
+                                              user.role,
+                                              state.roles.find((role) => role.id === user.role)
+                                                  ?.permissions || [],
+                                              'calls.join',
+                                          )
+                                        ? 'This member cannot join calls'
+                                        : '';
+                            return (
+                                <div
+                                    className={`member-row ${count ? 'has-unread' : ''}`}
+                                    key={user.id}
+                                >
+                                    <button
+                                        className="member"
+                                        aria-current={
+                                            !self && room === destination ? 'page' : undefined
+                                        }
+                                        aria-label={
+                                            self
+                                                ? 'Open your settings'
+                                                : `Message ${name}${count ? `, ${count} unread messages` : ''}`
+                                        }
+                                        title={`@${user.username}`}
+                                        onClick={() => (self ? onSettings() : dm(user.id))}
+                                    >
+                                        <div className="avatar-status">
+                                            <Avatar user={user} color={color(user)} />
+                                            <PresenceDot status={status} />
+                                        </div>
+                                        <span>
+                                            <strong style={{ color: color(user) }}>
+                                                {name}
+                                                {self && <small>you</small>}
+                                            </strong>
+                                            <small>
+                                                {
+                                                    state.roles.find(
+                                                        (role) => role.id === user.role,
+                                                    )?.name
+                                                }
+                                            </small>
+                                        </span>
+                                        {count > 0 && (
+                                            <span
+                                                className="count member-unread"
+                                                aria-label={`${count} unread messages`}
+                                            >
+                                                {count > 99 ? '99+' : count}
+                                            </span>
+                                        )}
+                                        {user.role === 'owner' && (
+                                            <Shield size={14} className="owner-shield" />
+                                        )}
+                                    </button>
+                                    {!self && (
+                                        <button
+                                            className="member-call"
+                                            title={unavailable || `Call ${name}`}
+                                            aria-label={`Call ${name}`}
+                                            disabled={!!unavailable}
+                                            onClick={() => void startCall(user.id)}
+                                        >
+                                            <Phone size={15} />
+                                        </button>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </Fragment>
+                ) : null;
+            })}
+        </aside>
+    );
+}

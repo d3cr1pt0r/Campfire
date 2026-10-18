@@ -34,7 +34,13 @@ export function request(app, endpoint, token, method = 'GET', body, headers = {}
             resolve({ status: res.statusCode, data, headers: res.getHeaders() });
             return res;
         };
-        app.handle(req, res, reject);
+        app.handle(req, res, (error) => {
+            if (error) reject(error);
+            else {
+                res.statusCode = 404;
+                res.end();
+            }
+        });
         if (raw) req.push(raw);
         req.push(null);
     });

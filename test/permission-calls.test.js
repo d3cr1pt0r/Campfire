@@ -101,8 +101,7 @@ test(
             (await api(owner, '/state')).calls.some((c) => c.user === member.user.id),
             false,
         );
-        // An accepted friend can be called only with both Join and Start permissions.
-        service.db.prepare('INSERT INTO friends VALUES(?,?,1)').run(owner.user.id, member.user.id);
+        // Calling another member requires both Join and Start permissions.
         await flags(['calls.join']);
         await api(member, '/calls', 'POST', { user: owner.user.id }, 403);
         await flags(['calls.start']);
