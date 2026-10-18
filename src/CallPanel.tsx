@@ -43,6 +43,7 @@ export function CallPanel({
     user: (id: string) => User | undefined;
 }) {
     const dock = useRef<HTMLDivElement>(null);
+    const splitter = useRef<HTMLDivElement>(null);
     const stage = useRef<HTMLDivElement>(null);
     const toolbar = useRef<HTMLDivElement>(null);
     const drag = useRef<{ pointer: number; y: number; height: number } | null>(null);
@@ -71,14 +72,17 @@ export function CallPanel({
         const serverHeading = workspace.closest('.app-shell')?.querySelector('.server-heading');
         const update = () => {
             const headerHeight = serverHeading?.getBoundingClientRect().height || 76;
-            setMinimum(headerHeight);
+            const splitterHeight = splitter.current?.getBoundingClientRect().height || 8;
+            // Include the divider in the compact height so its bottom aligns with the sidebar.
+            setMinimum(Math.max(0, headerHeight - splitterHeight));
             setWorkspaceHeight(workspace.clientHeight);
-            // The conversation can collapse to its header. The divider is 8px.
-            setConversationMinimum(headerHeight + 8);
+            // Reserve the conversation header and the divider at maximum call height.
+            setConversationMinimum(headerHeight + splitterHeight);
         };
         update();
         const observer = new ResizeObserver(update);
         observer.observe(workspace);
+        if (splitter.current) observer.observe(splitter.current);
         if (serverHeading) observer.observe(serverHeading);
         return () => observer.disconnect();
     });
@@ -376,6 +380,7 @@ export function CallPanel({
                 </section>
             </div>
             <div
+                ref={splitter}
                 className={`call-splitter ${resizing ? 'resizing' : ''}`}
                 role="separator"
                 tabIndex={0}
