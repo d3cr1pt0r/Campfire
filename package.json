@@ -12,6 +12,7 @@
         "server": "node --env-file-if-exists=.env server/index.js",
         "build": "vite build",
         "start": "npm run build && electron .",
+        "showcase": "node scripts/showcase.mjs",
         "test": "node --experimental-strip-types --test",
         "check": "tsc --noEmit",
         "test:unit": "node --experimental-strip-types test/theme.test.js && node test/permissions.test.js && node test/registration.test.js && node test/security.test.js && node test/schema.test.js && node test/desktop.test.js && node --experimental-strip-types test/media.test.js && node --experimental-strip-types test/voice.test.js && node --experimental-strip-types test/microphone-monitor.test.js && node --experimental-strip-types test/features.test.js && node test/app.test.js && node --experimental-strip-types test/peer-media.test.js && node test/rework.test.js && node --experimental-strip-types test/conversation.test.js && node test/channels.test.js && node test/roles.test.js && node --experimental-strip-types test/modal-navigation.test.js && node --experimental-strip-types test/avatar-crop.test.js && node --experimental-strip-types test/presence.test.js && node test/thumbnails.test.js && node test/threads.test.js && node test/thread-events.test.js && node --experimental-strip-types test/mentions-notifications.test.js",

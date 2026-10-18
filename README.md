@@ -4,9 +4,9 @@ A cozy, self-hosted place for friends and communities to gather. Text, voice, vi
 
 A place to catch up, share what you're working on, or just hang out together. Use Campfire in your browser or through the desktop app, with your community's own server at the center.
 
-![Campfire desktop client showing a populated conversation, reactions, member list, and a voice channel with stream sharing](Docs/screenshots/campfire-desktop.png)
+![Campfire desktop client showing a voice call with screen sharing, a populated conversation, reactions, and an open thread](Docs/screenshots/campfire-desktop.png)
 
-*A demo community with sample messages, avatars, and an active voice channel.*
+*A demo community with sample messages, avatars, an active voice channel, and a thread conversation.*
 
 ## What you can do
 
@@ -66,6 +66,7 @@ Enter your community server's address when prompted. The desktop app connects to
 - [Configuration](.env.example)
 - [Architecture and upgrade guide](REWORK.md)
 - [Implementation notes](IMPLEMENTATION.md)
+- [Refresh the README showcase](Docs/screenshots/README.md) with `npm run showcase`.
 
 To check a code change:
 

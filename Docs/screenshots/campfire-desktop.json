@@ -1,0 +1,13 @@
+{
+  "scenario": "community-call-and-thread-v1",
+  "appVersion": "0.1.9",
+  "viewport": {
+    "width": 1600,
+    "height": 1100,
+    "scale": 1
+  },
+  "timezone": "UTC",
+  "theme": "dark",
+  "data": "Synthetic community, avatars, and shared screen; no live account or call.",
+  "sha256": "9a74132865e8e8c54383e3b18e8557510d59016a48c4906f8ba93bdd81eaf799"
+}
