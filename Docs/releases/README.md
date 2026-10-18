@@ -36,6 +36,6 @@ The working `package.json` declares version 0.1.7. The local checkout has no v0.
 
 ## v0.1.8 draft
 
-[Prepared description](v0.1.8.md). Covers the 11 commits after local tag v0.1.7 (`f7e55c1`) through `9470439`: theme updates, chat and desktop controls, saved channel reading positions, call-layout improvements, and existing-database discovery.
+[Prepared description](v0.1.8.md). Covers the 18 commits after local tag v0.1.7 (`f7e55c1`) through `ed4e95f`: theme updates, Inter typography, compact message rows, smaller reaction controls, participant hover controls and stream actions, chat and desktop controls, saved channel reading positions, call-layout improvements, and existing-database discovery.
 
 The working `package.json` declares version 0.1.8. No local v0.1.8 tag exists. The changelog link uses the v0.1.7 tag and the current source cutoff; reconcile it with the final v0.1.8 tag before publication. No live release lookup was performed, and no publication date or uploaded assets are assumed. This draft has not been published to GitHub.
