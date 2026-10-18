@@ -73,6 +73,7 @@ export type Message = {
         emoji: string;
     }[];
 };
+export type ChannelNotificationMode = 'all' | 'mentions' | 'muted';
 export type Preferences = {
     theme?: 'system' | 'dark' | 'light';
     autoIdle?: boolean;
@@ -81,7 +82,7 @@ export type Preferences = {
     messageSounds?: boolean;
     dmNotifications?: boolean;
     mentionNotifications?: boolean;
-    channelNotifications?: Record<string, boolean>;
+    channelNotifications?: Record<string, ChannelNotificationMode | boolean>;
     serverNotifications?: Record<string, boolean>;
     closeToTray?: boolean;
     input: string;

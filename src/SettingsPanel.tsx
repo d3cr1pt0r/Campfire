@@ -1,6 +1,7 @@
 import { permissionGroups } from '../shared/permissions.js';
 import { RegistrationSettings } from './RegistrationSettings';
-import { notificationKey } from './notifications';
+import { notificationKey, channelNotificationMode } from './notifications';
+import { ChannelNotificationSelect } from './ChannelNotificationSelect';
 import { canonicalRoom } from '../shared/rooms.js';
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { AvatarCropper } from './AvatarCropper';
@@ -37,7 +38,9 @@ export function SettingsPanel({
     call,
     uploadEmoji,
     permission,
+    testNotificationSound,
 }: {
+    testNotificationSound: () => Promise<void>;
     state: State;
     prefs: Preferences;
     setPrefs: Dispatch<SetStateAction<Preferences>>;
@@ -561,8 +564,8 @@ export function SettingsPanel({
                         <Bell className="settings-hero" size={42} />
                         <p className="muted">
                             Get a desktop notification for new messages while the app is in the
-                            background for DMs and direct @mentions. Message text stays out of
-                            notifications.
+                            background for DMs and channel activity you choose below. Message text
+                            stays out of notifications.
                         </p>
                         <Toggle
                             title="Desktop notifications"
@@ -591,6 +594,13 @@ export function SettingsPanel({
                                 setPrefs((previous) => ({ ...previous, messageSounds: value }))
                             }
                         />
+                        <button
+                            className="secondary"
+                            disabled={busy}
+                            onClick={() => void act(testNotificationSound)}
+                        >
+                            Test notification sound
+                        </button>
                         <Toggle
                             title="Notify for direct messages"
                             value={prefs.dmNotifications !== false}
@@ -610,9 +620,10 @@ export function SettingsPanel({
                         />
                         <p className="muted">
                             Do not disturb silences message sounds and desktop notifications. Sounds
-                            start after you interact with the app. These preferences are saved on
-                            this device; conversation overrides below apply to your current account
-                            on this server.
+                            use your selected audio output. Browser clients may require an initial
+                            click; use Test notification sound to check playback. These preferences
+                            are saved on this device; conversation overrides below apply to your
+                            current account on this server.
                         </p>
                         <Toggle
                             title={`Mute ${state.name}`}
@@ -637,19 +648,23 @@ export function SettingsPanel({
                         </p>
                         <h3>Text channels</h3>
                         <p className="muted">
-                            Turn a channel off to silence its direct mentions, including thread
-                            replies. Ordinary channel messages do not trigger alerts.
+                            Choose All messages, Mentions only, or Muted for each channel. These
+                            choices include thread replies. Mentions only uses the @mention
+                            preference above; All messages includes every message. Server mute and
+                            Do not disturb silence all modes. Unread indicators remain visible.
                         </p>
                         {state.channels
                             .filter((channel) => channel.kind === 'text')
                             .map((channel) => {
                                 const key = notificationKey(url, state.me.id, channel.id);
                                 return (
-                                    <Toggle
+                                    <ChannelNotificationSelect
                                         key={key}
-                                        title={`#${channel.name} notifications`}
-                                        value={prefs.channelNotifications?.[key] !== false}
-                                        set={(value) =>
+                                        label={`#${channel.name} notifications`}
+                                        mode={channelNotificationMode(
+                                            prefs.channelNotifications?.[key],
+                                        )}
+                                        onChange={(value) =>
                                             setPrefs((previous) => ({
                                                 ...previous,
                                                 channelNotifications: {
@@ -675,7 +690,11 @@ export function SettingsPanel({
                                         <Toggle
                                             key={key}
                                             title={`@${candidate.username} notifications`}
-                                            value={prefs.channelNotifications?.[key] !== false}
+                                            value={
+                                                channelNotificationMode(
+                                                    prefs.channelNotifications?.[key],
+                                                ) !== 'muted'
+                                            }
                                             set={(value) =>
                                                 setPrefs((previous) => ({
                                                     ...previous,

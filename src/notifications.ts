@@ -1,9 +1,16 @@
-import type { Message, Preferences, User } from './types';
+import type { ChannelNotificationMode, Message, Preferences, User } from './types';
 import { mentionSegments } from './mentions.ts';
 import { messageParts } from './messageText.ts';
+import { rememberedDevice } from './devices.ts';
 
 export function notificationKey(server: string, user: string, room: string) {
     return JSON.stringify([server.replace(/\/$/, ''), user, room]);
+}
+
+// Keep old on/off preferences: on meant mentions, while off muted the conversation.
+export function channelNotificationMode(value: unknown): ChannelNotificationMode {
+    if (value === false || value === 'muted') return 'muted';
+    return value === 'all' ? 'all' : 'mentions';
 }
 
 export function shouldNotify(
@@ -15,9 +22,12 @@ export function shouldNotify(
 ) {
     if (message.author === me.id || me.status === 'dnd') return false;
     if (prefs.serverNotifications?.[notificationKey(server, me.id, '*')] === false) return false;
-    if (prefs.channelNotifications?.[notificationKey(server, me.id, message.room)] === false)
-        return false;
+    const mode = channelNotificationMode(
+        prefs.channelNotifications?.[notificationKey(server, me.id, message.room)],
+    );
+    if (mode === 'muted') return false;
     if (message.room.startsWith('dm:')) return prefs.dmNotifications !== false;
+    if (mode === 'all') return true;
     return (
         prefs.mentionNotifications !== false &&
         messageParts(message.body).some(
@@ -28,49 +38,104 @@ export function shouldNotify(
     );
 }
 
-// A single quiet chime context is unlocked by a user gesture and reused for incoming messages.
-export function createNotificationSound() {
-    let context: AudioContext | null = null;
+// Reuse one context, but initialize on playback too: saved sessions can receive DMs
+// before the user has interacted with the document (including while hidden in the tray).
+export function createNotificationSound(
+    output: () => Pick<Preferences, 'output' | 'outputLabel'> = () => ({ output: '' }),
+) {
+    let context:
+        | (AudioContext & {
+              readonly sinkId?: string | { type: string };
+              setSinkId?: (id: string) => Promise<void>;
+          })
+        | null = null;
     let lastPlayed = -Infinity;
+    let closed = false;
+    const ensureContext = () => {
+        if (closed) return null;
+        if (!context || context.state === 'closed') context = new AudioContext();
+        return context;
+    };
     const unlock = () => {
         try {
-            context ??= new AudioContext();
-            if (context.state === 'suspended') void context.resume().catch(() => {});
+            const current = ensureContext();
+            if (current && current.state !== 'running') void current.resume().catch(() => {});
         } catch {
-            /* Notifications still work when Web Audio is unavailable. */
+            /* A later playback or interaction can retry unavailable audio. */
         }
     };
-    document.addEventListener('pointerdown', unlock);
-    document.addEventListener('keydown', unlock);
+    document.addEventListener('pointerdown', unlock, true);
+    document.addEventListener('keydown', unlock, true);
     return {
-        play() {
-            if (!context || context.state !== 'running' || Date.now() - lastPlayed < 700) return;
-            lastPlayed = Date.now();
-            const now = context.currentTime;
-            for (const [frequency, offset] of [
-                [660, 0],
-                [880, 0.12],
-            ]) {
-                const tone = context.createOscillator();
-                const gain = context.createGain();
-                tone.type = 'sine';
-                tone.frequency.value = frequency;
-                gain.gain.setValueAtTime(0, now + offset);
-                gain.gain.linearRampToValueAtTime(0.035, now + offset + 0.015);
-                gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.22);
-                tone.connect(gain);
-                gain.connect(context.destination);
-                tone.start(now + offset);
-                tone.stop(now + offset + 0.24);
-                tone.onended = () => {
-                    tone.disconnect();
-                    gain.disconnect();
-                };
+        async play(): Promise<boolean> {
+            const requestedAt = Date.now();
+            try {
+                const current = ensureContext();
+                if (!current || requestedAt - lastPlayed < 700) return false;
+                if (current.state !== 'running') await current.resume();
+                const selected = output();
+                if (typeof current.setSinkId === 'function') {
+                    let sink = selected.output === 'default' ? '' : selected.output;
+                    try {
+                        if (
+                            sink &&
+                            selected.outputLabel &&
+                            navigator.mediaDevices?.enumerateDevices
+                        ) {
+                            sink = rememberedDevice(
+                                await navigator.mediaDevices.enumerateDevices(),
+                                'audiooutput',
+                                sink,
+                                selected.outputLabel,
+                            );
+                        }
+                        if ((current.sinkId ?? '') !== sink) await current.setSinkId(sink);
+                    } catch {
+                        // A disconnected or unavailable output must not silence notifications.
+                        if ((current.sinkId ?? '') !== '') await current.setSinkId('');
+                    }
+                }
+                // Browsers may leave resume pending until a later gesture. Do not replay
+                // stale DMs after that gesture or after signing out.
+                if (
+                    closed ||
+                    context !== current ||
+                    current.state !== 'running' ||
+                    Date.now() - requestedAt > 1500 ||
+                    Date.now() - lastPlayed < 700
+                )
+                    return false;
+                lastPlayed = Date.now();
+                const now = current.currentTime;
+                for (const [frequency, offset] of [
+                    [660, 0],
+                    [880, 0.12],
+                ]) {
+                    const tone = current.createOscillator();
+                    const gain = current.createGain();
+                    tone.type = 'sine';
+                    tone.frequency.value = frequency;
+                    gain.gain.setValueAtTime(0, now + offset);
+                    gain.gain.linearRampToValueAtTime(0.035, now + offset + 0.015);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.22);
+                    tone.connect(gain);
+                    gain.connect(current.destination);
+                    tone.start(now + offset);
+                    tone.stop(now + offset + 0.24);
+                    tone.onended = () => {
+                        tone.disconnect();
+                        gain.disconnect();
+                    };
+                }
+                return true;
+            } catch {
+                return false;
             }
         },
         close() {
-            document.removeEventListener('pointerdown', unlock);
-            document.removeEventListener('keydown', unlock);
+            closed = true;
+            document.removeEventListener('pointerdown', unlock, true);
+            document.removeEventListener('keydown', unlock, true);
             if (context) void context.close().catch(() => {});
             context = null;
         },

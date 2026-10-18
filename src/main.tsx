@@ -1,5 +1,11 @@
 import { hasRolePermission } from '../shared/permissions.js';
-import { notificationKey, shouldNotify, createNotificationSound } from './notifications';
+import {
+    notificationKey,
+    shouldNotify,
+    createNotificationSound,
+    channelNotificationMode,
+} from './notifications';
+import { ChannelNotificationSelect } from './ChannelNotificationSelect';
 import { version as appVersion } from '../package.json';
 import { ChatComposer } from './ChatComposer';
 import { ThreadPanel } from './ThreadPanel';
@@ -236,6 +242,7 @@ function App() {
     roomRef.current = room;
     stateRef.current = state;
     prefsRef.current = prefs;
+    const messageSoundRef = useRef<ReturnType<typeof createNotificationSound> | null>(null);
     const notify = useCallback((text: string) => setError(text), []);
     const client = useMemo(() => createApiClient(url, token), [url, token]);
     const api = client.json;
@@ -343,7 +350,8 @@ function App() {
             ),
         );
         s.on('calls', (calls) => setState((prev) => (prev ? { ...prev, calls } : null)));
-        const messageSound = createNotificationSound();
+        const messageSound = createNotificationSound(() => prefsRef.current);
+        messageSoundRef.current = messageSound;
         const seenMessages = new Set<string>();
         s.on('message', (m: Message) => {
             if (seenMessages.has(m.id)) return;
@@ -359,7 +367,13 @@ function App() {
             const me = stateRef.current?.me;
             const preferences = prefsRef.current;
             if (!me || !shouldNotify(m, me, preferences, url, stateRef.current?.users)) return;
-            if (preferences.messageSounds !== false) messageSound.play();
+            if (
+                preferences.messageSounds !== false &&
+                (m.room !== roomRef.current ||
+                    document.visibilityState !== 'visible' ||
+                    !document.hasFocus())
+            )
+                void messageSound.play();
             if (
                 preferences.notifications &&
                 (document.visibilityState === 'hidden' || !document.hasFocus()) &&
@@ -374,7 +388,7 @@ function App() {
                     new Notification(stateRef.current?.name || 'Campfire', {
                         body: m.room.startsWith('dm:')
                             ? `${sender} sent you a direct message`
-                            : `${sender} mentioned you`,
+                            : `${sender} ${m.thread ? 'replied' : 'posted'} in #${stateRef.current?.channels.find((channel) => channel.id === m.room)?.name || 'channel'}`,
                         silent: true,
                     });
                 } catch {
@@ -387,6 +401,7 @@ function App() {
                 setTyping((prev) => ({ ...prev, [user]: Date.now() + 3500 }));
         });
         return () => {
+            messageSoundRef.current = null;
             messageSound.close();
             s.disconnect();
             setSocket(null);
@@ -1376,48 +1391,82 @@ function App() {
                                                 </span>
                                             )}
                                         </button>
-                                        <button
-                                            title={
-                                                prefs.channelNotifications?.[
-                                                    notificationKey(url, state.me.id, room)
-                                                ] === false
-                                                    ? 'Unmute conversation'
-                                                    : 'Mute conversation'
-                                            }
-                                            aria-label="Mute conversation"
-                                            aria-pressed={
-                                                prefs.channelNotifications?.[
-                                                    notificationKey(url, state.me.id, room)
-                                                ] === false
-                                            }
-                                            onClick={() =>
-                                                setPrefs((previous) => {
-                                                    const key = notificationKey(
-                                                        url,
-                                                        state.me.id,
-                                                        room,
-                                                    );
-                                                    return {
+                                        {dmUser ? (
+                                            <button
+                                                title={
+                                                    channelNotificationMode(
+                                                        prefs.channelNotifications?.[
+                                                            notificationKey(url, state.me.id, room)
+                                                        ],
+                                                    ) === 'muted'
+                                                        ? 'Unmute conversation'
+                                                        : 'Mute conversation'
+                                                }
+                                                aria-label="Mute conversation"
+                                                aria-pressed={
+                                                    channelNotificationMode(
+                                                        prefs.channelNotifications?.[
+                                                            notificationKey(url, state.me.id, room)
+                                                        ],
+                                                    ) === 'muted'
+                                                }
+                                                onClick={() =>
+                                                    setPrefs((previous) => {
+                                                        const key = notificationKey(
+                                                            url,
+                                                            state.me.id,
+                                                            room,
+                                                        );
+                                                        return {
+                                                            ...previous,
+                                                            channelNotifications: {
+                                                                ...previous.channelNotifications,
+                                                                [key]:
+                                                                    channelNotificationMode(
+                                                                        previous
+                                                                            .channelNotifications?.[
+                                                                            key
+                                                                        ],
+                                                                    ) === 'muted',
+                                                            },
+                                                        };
+                                                    })
+                                                }
+                                            >
+                                                {channelNotificationMode(
+                                                    prefs.channelNotifications?.[
+                                                        notificationKey(url, state.me.id, room)
+                                                    ],
+                                                ) === 'muted' ? (
+                                                    <BellOff size={19} />
+                                                ) : (
+                                                    <Bell size={19} />
+                                                )}
+                                            </button>
+                                        ) : (
+                                            <ChannelNotificationSelect
+                                                compact
+                                                label="Channel notifications"
+                                                mode={channelNotificationMode(
+                                                    prefs.channelNotifications?.[
+                                                        notificationKey(url, state.me.id, room)
+                                                    ],
+                                                )}
+                                                onChange={(mode) =>
+                                                    setPrefs((previous) => ({
                                                         ...previous,
                                                         channelNotifications: {
                                                             ...previous.channelNotifications,
-                                                            [key]:
-                                                                previous.channelNotifications?.[
-                                                                    key
-                                                                ] === false,
+                                                            [notificationKey(
+                                                                url,
+                                                                state.me.id,
+                                                                room,
+                                                            )]: mode,
                                                         },
-                                                    };
-                                                })
-                                            }
-                                        >
-                                            {prefs.channelNotifications?.[
-                                                notificationKey(url, state.me.id, room)
-                                            ] === false ? (
-                                                <BellOff size={19} />
-                                            ) : (
-                                                <Bell size={19} />
-                                            )}
-                                        </button>
+                                                    }))
+                                                }
+                                            />
+                                        )}
                                         <label className="search">
                                             <span className="sr-only">
                                                 Search this conversation
@@ -1651,6 +1700,13 @@ function App() {
                                 <SettingsPanel
                                     state={state}
                                     prefs={prefs}
+                                    testNotificationSound={async () => {
+                                        const played = await messageSoundRef.current?.play();
+                                        if (!played)
+                                            throw new Error(
+                                                'Notification audio could not play. Check your output device and try again.',
+                                            );
+                                    }}
                                     setPrefs={setPrefs}
                                     settingsTab={settingsTab}
                                     setSettingsTab={setSettingsTab}

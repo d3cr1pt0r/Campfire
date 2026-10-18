@@ -1,7 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mentionSegments, mentionQuery, completeMention } from '../src/mentions.ts';
-import { notificationKey, shouldNotify, createNotificationSound } from '../src/notifications.ts';
+import {
+    notificationKey,
+    shouldNotify,
+    createNotificationSound,
+    channelNotificationMode,
+} from '../src/notifications.ts';
 
 const me = {
     id: 'me',
@@ -55,7 +60,7 @@ test('autocomplete uses the caret, supports spaces, replaces a partial token, an
     );
 });
 
-test('notification policy alerts only DMs and direct mentions and respects DND, self, and opt-outs', () => {
+test('default notification policy alerts only DMs and direct mentions and respects DND, self, and opt-outs', () => {
     const notify = (body, prefs = {}, extra = {}, person = me) =>
         shouldNotify(message(body, extra), person, prefs, 'https://chat.example', users);
     assert.equal(notify('ordinary message'), false);
@@ -108,26 +113,126 @@ test('conversation opt-outs are scoped to the account, server and parent room in
     );
 });
 
-test('notification sound unlocks on interaction, reuses its context, bounds bursts, and cleans up', async (t) => {
+test('channel modes preserve legacy settings and choose all, mentions, or muted', () => {
+    for (const value of [undefined, true, 'mentions', 'invalid'])
+        assert.equal(channelNotificationMode(value), 'mentions');
+    for (const value of [false, 'muted']) assert.equal(channelNotificationMode(value), 'muted');
+    assert.equal(channelNotificationMode('all'), 'all');
+    const server = 'https://chat.example';
+    const key = notificationKey(server, me.id, 'general');
+    for (const [mode, ordinary, mention] of [
+        ['all', true, true],
+        ['mentions', false, true],
+        ['muted', false, false],
+        [true, false, true],
+        [false, false, false],
+    ]) {
+        const prefs = { channelNotifications: { [key]: mode } };
+        assert.equal(shouldNotify(message('ordinary'), me, prefs, server, users), ordinary);
+        assert.equal(shouldNotify(message('@d3cr1pt0r'), me, prefs, server, users), mention);
+        assert.equal(
+            shouldNotify(message('thread reply', { thread: 'parent' }), me, prefs, server, users),
+            ordinary,
+        );
+        assert.equal(
+            shouldNotify(message('@d3cr1pt0r', { thread: 'parent' }), me, prefs, server, users),
+            mention,
+        );
+    }
+});
+
+test('all-message channels remain scoped and respect server mute, DND, and self-message exclusions', () => {
+    const server = 'https://chat.example';
+    const prefs = {
+        channelNotifications: { [notificationKey(server, me.id, 'general')]: 'all' },
+        mentionNotifications: false,
+    };
+    assert.equal(shouldNotify(message('ordinary'), me, prefs, server, users), true);
+    assert.equal(shouldNotify(message('@d3cr1pt0r'), me, prefs, server, users), true);
+    assert.equal(
+        shouldNotify(message('ordinary', { room: 'other' }), me, prefs, server, users),
+        false,
+    );
+    assert.equal(
+        shouldNotify(message('ordinary'), me, prefs, 'https://other.example', users),
+        false,
+    );
+    assert.equal(
+        shouldNotify(message('ordinary'), { ...me, status: 'dnd' }, prefs, server, users),
+        false,
+    );
+    assert.equal(
+        shouldNotify(message('ordinary', { author: me.id }), me, prefs, server, users),
+        false,
+    );
+    assert.equal(
+        shouldNotify(
+            message('ordinary'),
+            me,
+            { ...prefs, serverNotifications: { [notificationKey(server, me.id, '*')]: false } },
+            server,
+            users,
+        ),
+        false,
+    );
+    assert.equal(
+        shouldNotify(message('@d3cr1pt0r', { room: 'other' }), me, prefs, server, users),
+        false,
+    );
+    const dm = 'dm:bob:me';
+    assert.equal(
+        shouldNotify(
+            message('hello', { room: dm }),
+            me,
+            {
+                dmNotifications: false,
+                channelNotifications: { [notificationKey(server, me.id, dm)]: 'all' },
+            },
+            server,
+            users,
+        ),
+        false,
+    );
+    assert.equal(
+        shouldNotify(
+            message('hello', { room: dm }),
+            me,
+            { channelNotifications: { [notificationKey(server, me.id, dm)]: 'muted' } },
+            server,
+            users,
+        ),
+        false,
+    );
+});
+
+function soundFixture(t, { resume, sink } = {}) {
     const handlers = new Map();
     const originalDocument = globalThis.document,
         originalAudio = globalThis.AudioContext;
-    let created = 0,
-        played = 0,
-        closed = 0;
+    const counts = { created: 0, played: 0, closed: 0, resumed: 0, sinks: [] };
+    let context;
     class Context {
         state = 'suspended';
+        sinkId = '';
         currentTime = 0;
         destination = {};
         constructor() {
-            created++;
+            counts.created++;
+            context = this;
         }
         async resume() {
+            counts.resumed++;
+            if (resume) await resume();
             this.state = 'running';
+        }
+        async setSinkId(id) {
+            counts.sinks.push(id);
+            if (sink) await sink(id);
+            this.sinkId = id;
         }
         async close() {
             this.state = 'closed';
-            closed++;
+            counts.closed++;
         }
         createOscillator() {
             return {
@@ -135,7 +240,7 @@ test('notification sound unlocks on interaction, reuses its context, bounds burs
                 connect() {},
                 disconnect() {},
                 start() {
-                    played++;
+                    counts.played++;
                 },
                 stop() {},
             };
@@ -163,19 +268,92 @@ test('notification sound unlocks on interaction, reuses its context, bounds burs
         if (originalAudio === undefined) delete globalThis.AudioContext;
         else globalThis.AudioContext = originalAudio;
     });
+    return { handlers, counts, context: () => context };
+}
+
+test('first message initializes audio without an earlier gesture, reuses context, and bounds bursts', async (t) => {
+    const fixture = soundFixture(t);
     const sound = createNotificationSound();
-    sound.play();
-    assert.equal(played, 0);
-    handlers.get('pointerdown')();
-    handlers.get('keydown')();
-    await Promise.resolve();
-    sound.play();
-    sound.play();
-    assert.equal(created, 1);
-    assert.equal(played, 2);
+    assert.equal(await sound.play(), true);
+    assert.equal(await sound.play(), false);
+    assert.equal(fixture.counts.created, 1);
+    assert.equal(fixture.counts.resumed, 1);
+    assert.equal(fixture.counts.played, 2);
+    fixture.handlers.get('pointerdown')();
+    fixture.handlers.get('keydown')();
+    assert.equal(fixture.counts.created, 1);
     sound.close();
-    assert.equal(closed, 1);
-    assert.equal(handlers.size, 0);
+    assert.equal(fixture.counts.closed, 1);
+    assert.equal(fixture.handlers.size, 0);
+    assert.equal(await sound.play(), false);
+    assert.equal(fixture.counts.created, 1);
+});
+
+test('notification playback resumes a context suspended after initial interaction', async (t) => {
+    const fixture = soundFixture(t);
+    const sound = createNotificationSound();
+    fixture.handlers.get('pointerdown')();
+    await Promise.resolve();
+    fixture.context().state = 'suspended';
+    assert.equal(await sound.play(), true);
+    assert.equal(fixture.counts.resumed, 2);
+    assert.equal(fixture.counts.played, 2);
+    sound.close();
+});
+
+test('notification output follows preferences and falls back from a disconnected device', async (t) => {
+    const fixture = soundFixture(t, {
+        sink: async (id) => {
+            if (id === 'missing') throw Error('Disconnected');
+        },
+    });
+    let output = 'headphones';
+    const sound = createNotificationSound(() => ({ output }));
+    fixture.handlers.get('pointerdown')();
+    await Promise.resolve();
+    // Device switching is asynchronous, so this also verifies that the chime is not
+    // scheduled before output selection completes.
+    assert.equal(await sound.play(), true);
+    assert.equal(fixture.context().sinkId, 'headphones');
+    sound.close();
+    const fallback = createNotificationSound(() => ({ output }));
+    fixture.handlers.get('pointerdown')();
+    await Promise.resolve();
+    fixture.context().sinkId = 'old-headphones';
+    output = 'missing';
+    assert.equal(await fallback.play(), true);
+    assert.equal(fixture.context().sinkId, '');
+    assert.deepEqual(fixture.counts.sinks, ['headphones', 'missing', '']);
+    fallback.close();
+});
+
+test('closing notification sound while resume is pending never plays a late message', async (t) => {
+    let finish;
+    const pending = new Promise((resolve) => {
+        finish = resolve;
+    });
+    const fixture = soundFixture(t, { resume: () => pending });
+    const sound = createNotificationSound();
+    const playing = sound.play();
+    sound.close();
+    finish();
+    assert.equal(await playing, false);
+    assert.equal(fixture.counts.played, 0);
+});
+
+test('failed audio startup is contained and a later attempt can recover', async (t) => {
+    let blocked = true;
+    const fixture = soundFixture(t, {
+        resume: async () => {
+            if (blocked) throw Error('Blocked');
+        },
+    });
+    const sound = createNotificationSound();
+    assert.equal(await sound.play(), false);
+    blocked = false;
+    assert.equal(await sound.play(), true);
+    assert.equal(fixture.counts.played, 2);
+    sound.close();
 });
 
 test('server muting silences mentions, thread replies and DMs only for the selected account/server', () => {

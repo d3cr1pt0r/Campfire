@@ -6,6 +6,7 @@ import electron from 'electron';
 import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
 const root = path.resolve(import.meta.dirname, '..');
+const sound = process.argv.includes('--sound');
 const directory = await mkdtemp(path.join(tmpdir(), 'campfire-member-ui-'));
 const output = '/tmp/campfire-member-review';
 const service = createApp({
@@ -33,10 +34,19 @@ try {
         MEMBER_OUTPUT: output,
     };
     delete env.ELECTRON_RUN_AS_NODE;
-    const child = spawn(electron, [path.join(root, 'test-support/member-messaging.cjs')], {
-        env,
-        stdio: 'inherit',
-    });
+    const child = spawn(
+        electron,
+        [
+            path.join(
+                root,
+                sound ? 'test-support/notification-sound.cjs' : 'test-support/member-messaging.cjs',
+            ),
+        ],
+        {
+            env,
+            stdio: 'inherit',
+        },
+    );
     process.exitCode = await new Promise((resolve, reject) => {
         child.once('exit', (code) => resolve(code ?? 1));
         child.once('error', reject);

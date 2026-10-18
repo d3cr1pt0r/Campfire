@@ -3846,3 +3846,28 @@ body.stream-popout-body {
     background: var(--accent);
     color: var(--accent-ink);
 }
+
+.channel-notification-select {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 0;
+}
+.channel-notification-select > select {
+    width: auto;
+    max-width: 100%;
+    min-height: 36px;
+}
+.channel-notification-select.compact {
+    flex-wrap: nowrap;
+    gap: 5px;
+    padding: 0;
+    color: var(--muted);
+}
+.channel-notification-select.compact > select {
+    max-width: 140px;
+    padding: 6px;
+    font-size: 12px;
+}
