@@ -33,3 +33,9 @@ The local checkout has no v0.1.5 or v0.1.6 tag. No live release lookup was perfo
 [Prepared description](v0.1.7.md). Covers changes after the v0.1.6 source cutoff `2103793` through `2236428`: owner-controlled registration and invitations (`00ac065`), channel descriptions and interface alignment/cleanup (`d84bdaa`), and granular role permissions with role-first channel access (`2236428`).
 
 The working `package.json` declares version 0.1.7. The local checkout has no v0.1.6 or v0.1.7 tag. No live release lookup was performed, and no publication date or uploaded assets are assumed. The changelog link uses the source commits; reconcile it with the final release tags before publication. This draft has not been published to GitHub.
+
+## v0.1.8 draft
+
+[Prepared description](v0.1.8.md). Covers the 11 commits after local tag v0.1.7 (`f7e55c1`) through `9470439`: theme updates, chat and desktop controls, saved channel reading positions, call-layout improvements, and existing-database discovery.
+
+The working `package.json` declares version 0.1.8. No local v0.1.8 tag exists. The changelog link uses the v0.1.7 tag and the current source cutoff; reconcile it with the final v0.1.8 tag before publication. No live release lookup was performed, and no publication date or uploaded assets are assumed. This draft has not been published to GitHub.
