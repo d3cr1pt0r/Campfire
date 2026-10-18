@@ -707,9 +707,6 @@ label,
     background: var(--panel);
     color: var(--ink);
 }
-.thread-context {
-    color: var(--muted);
-}
 .thread-tools {
     border-color: var(--line);
 }

@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MessageCircle, Pin, Search, X } from 'lucide-react';
-import { ChatMessages } from './ChatMessages';
+import { ChatMessage, ChatMessages } from './ChatMessages';
 import { ChatComposer } from './ChatComposer';
 import { Emoji } from './ChatContent';
 import { useConversation } from './useConversation';
-import { displayName } from './profiles';
 import type { ApiClient } from './api';
 import type { AppSocket, Message, State, User } from './types';
 import { validateFileSelection } from '../shared/uploads.js';
@@ -199,8 +198,6 @@ export function ThreadPanel(props: Props) {
         setSearch('');
         setPins(false);
     };
-    const threadMessages =
-        search || pins ? conversation.messages : [root, ...conversation.messages];
     return (
         <aside
             className="thread-panel"
@@ -249,9 +246,10 @@ export function ThreadPanel(props: Props) {
                     <X size={20} />
                 </button>
             </header>
-            <p className="thread-context">
-                Replying to {displayName(user(root.author), 'Former member')}
-            </p>
+            <section className="thread-original" aria-label="Original message">
+                <div className="thread-original-label">Original message</div>
+                <ChatMessage {...props} message={root} thread />
+            </section>
             {rootError && (
                 <p className="inline-notice" role="alert">
                     {rootError}
@@ -266,7 +264,7 @@ export function ThreadPanel(props: Props) {
                 pins={pins}
                 currentChannel={state.channels.find((channel) => channel.id === parent.room)}
                 dmUser={parent.room.startsWith('dm:') ? state.me : undefined}
-                visibleMessages={threadMessages}
+                visibleMessages={conversation.messages}
                 clearFilters={clearFilters}
             />
             {error && (

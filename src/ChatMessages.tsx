@@ -287,7 +287,6 @@ function ChatMessageList({
                         (() => {
                             const i = item.index - 1;
                             const m = visibleMessages[i];
-                            const u = user(m.author);
                             const previous = visibleMessages[i - 1];
                             const date = new Date(m.created).toDateString();
                             const showDate =
@@ -317,185 +316,21 @@ function ChatMessageList({
                                             </span>
                                         </div>
                                     )}
-                                    <article className="message">
-                                        <time
-                                            className="message-time"
-                                            dateTime={new Date(m.created).toISOString()}
-                                        >
-                                            <span>
-                                                {new Date(m.created).toLocaleTimeString('en-US', {
-                                                    hour: 'numeric',
-                                                    minute: '2-digit',
-                                                })}
-                                            </span>
-                                        </time>
-                                        <Avatar user={u} color={color(u)} />
-                                        <div className="message-body">
-                                            <div className="message-line">
-                                                <span className="message-meta">
-                                                    <button
-                                                        title={`@${u?.username || 'unknown'}`}
-                                                        style={{ color: color(u) }}
-                                                        onClick={() => {
-                                                            if (u && u.id !== state.me.id) dm(u.id);
-                                                        }}
-                                                    >
-                                                        {displayName(u, 'Former member')}
-                                                    </button>
-                                                    {Boolean(m.pinned) && <Pin size={12} />}
-                                                </span>
-                                                <span className="message-text">
-                                                    <ChatContent
-                                                        users={state.users}
-                                                        text={m.body}
-                                                        custom={state.emojis || []}
-                                                    />
-                                                    {Boolean(m.edited) && (
-                                                        <small className="edited"> (edited)</small>
-                                                    )}
-                                                </span>
-                                            </div>
-                                            {m.attachments.map((a) => (
-                                                <React.Fragment key={a.id}>
-                                                    {(/^image\/(png|jpeg|gif|webp)$/.test(a.mime) ||
-                                                        /\.(png|jpe?g|gif|webp)$/i.test(
-                                                            a.name,
-                                                        )) && (
-                                                        <AuthImage
-                                                            path={`/attachments/${a.id}/preview`}
-                                                            originalPath={`/attachments/${a.id}?inline=1`}
-                                                            alt={a.name}
-                                                            className="chat-image"
-                                                            expandable
-                                                        />
-                                                    )}
-                                                    <button
-                                                        className="attachment"
-                                                        key={a.id}
-                                                        onClick={() => void download(a.id, a.name)}
-                                                    >
-                                                        <Paperclip size={21} />
-                                                        <span>
-                                                            {a.name}
-                                                            <small>Download attachment</small>
-                                                        </span>
-                                                        <Download size={18} />
-                                                    </button>
-                                                </React.Fragment>
-                                            ))}
-                                            <div className="reactions">
-                                                {[...new Set(m.reactions.map((r) => r.emoji))].map(
-                                                    (emoji) => (
-                                                        <ReactionChip
-                                                            key={emoji}
-                                                            emoji={emoji}
-                                                            people={m.reactions
-                                                                .filter((r) => r.emoji === emoji)
-                                                                .map((r) => ({
-                                                                    id: r.user,
-                                                                    user: user(r.user),
-                                                                }))}
-                                                            mine={m.reactions.some(
-                                                                (r) =>
-                                                                    r.emoji === emoji &&
-                                                                    r.user === state.me.id,
-                                                            )}
-                                                            showNames={
-                                                                state.reactionAuthors !== false &&
-                                                                state.channels.find(
-                                                                    (c) => c.id === m.room,
-                                                                )?.reactionAuthors !== 0 &&
-                                                                state.channels.find(
-                                                                    (c) => c.id === m.room,
-                                                                )?.reactionAuthors !== false
-                                                            }
-                                                            canReact={permission('reactions.add')}
-                                                            custom={state.emojis || []}
-                                                            onReact={() =>
-                                                                void act(() =>
-                                                                    api(
-                                                                        `/messages/${m.id}/reaction`,
-                                                                        'POST',
-                                                                        { emoji },
-                                                                    ),
-                                                                )
-                                                            }
-                                                        />
-                                                    ),
-                                                )}
-                                            </div>
-                                            {!thread && !!m.replyCount && (
-                                                <button
-                                                    className="thread-replies"
-                                                    onClick={() => onReply?.(m)}
-                                                >
-                                                    <MessageCircle size={15} />
-                                                    {m.replyCount}{' '}
-                                                    {m.replyCount === 1 ? 'reply' : 'replies'}
-                                                </button>
-                                            )}
-                                        </div>
-                                        <div className="message-actions">
-                                            {!thread && !m.thread && onReply && (
-                                                <button
-                                                    title="Reply in thread"
-                                                    aria-label="Reply in thread"
-                                                    disabled={
-                                                        !permission('threads.reply') ||
-                                                        !permission('messages.send') ||
-                                                        (!m.replyCount &&
-                                                            !permission('threads.create'))
-                                                    }
-                                                    onClick={() => onReply(m)}
-                                                >
-                                                    <Reply size={16} />
-                                                </button>
-                                            )}
-                                            <button
-                                                title="React"
-                                                disabled={!permission('reactions.add')}
-                                                onClick={() => setModal(`reaction:${m.id}`)}
-                                            >
-                                                <Smile size={16} />
-                                            </button>
-                                            {m.author === state.me.id &&
-                                                permission('messages.editOwn') && (
-                                                    <button
-                                                        title="Edit"
-                                                        onClick={() => {
-                                                            setEdit(m);
-                                                            setModal('edit');
-                                                        }}
-                                                    >
-                                                        <Pencil size={16} />
-                                                    </button>
-                                                )}
-                                            {permission('messages.pin') && (
-                                                <button
-                                                    title={m.pinned ? 'Unpin' : 'Pin'}
-                                                    onClick={() =>
-                                                        void act(() =>
-                                                            api(`/messages/${m.id}`, 'PATCH', {
-                                                                pinned: !m.pinned,
-                                                            }),
-                                                        )
-                                                    }
-                                                >
-                                                    <Pin size={16} />
-                                                </button>
-                                            )}
-                                            {(m.author === state.me.id
-                                                ? permission('messages.deleteOwn')
-                                                : permission('messages.deleteOthers')) && (
-                                                <button
-                                                    title="Delete"
-                                                    onClick={() => setModal(`delete:${m.id}`)}
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            )}
-                                        </div>
-                                    </article>
+                                    <ChatMessage
+                                        message={m}
+                                        permission={permission}
+                                        state={state}
+                                        user={user}
+                                        color={color}
+                                        dm={dm}
+                                        download={download}
+                                        act={act}
+                                        api={api}
+                                        setModal={setModal}
+                                        setEdit={setEdit}
+                                        onReply={onReply}
+                                        thread={thread}
+                                    />
                                 </div>
                             );
                         })()
@@ -517,5 +352,190 @@ function ChatMessageList({
                 </button>
             )}
         </div>
+    );
+}
+
+export function ChatMessage({
+    message: m,
+    permission,
+    state,
+    user,
+    color,
+    dm,
+    download,
+    act,
+    api,
+    setModal,
+    setEdit,
+    onReply,
+    thread = false,
+}: Pick<
+    React.ComponentProps<typeof ChatMessageList>,
+    | 'permission'
+    | 'state'
+    | 'user'
+    | 'color'
+    | 'dm'
+    | 'download'
+    | 'act'
+    | 'api'
+    | 'setModal'
+    | 'setEdit'
+    | 'onReply'
+    | 'thread'
+> & { message: Message }) {
+    const u = user(m.author);
+    return (
+        <article className="message">
+            <time className="message-time" dateTime={new Date(m.created).toISOString()}>
+                <span>
+                    {new Date(m.created).toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                    })}
+                </span>
+            </time>
+            <Avatar user={u} color={color(u)} />
+            <div className="message-body">
+                <div className="message-line">
+                    <span className="message-meta">
+                        <button
+                            title={`@${u?.username || 'unknown'}`}
+                            style={{ color: color(u) }}
+                            onClick={() => {
+                                if (u && u.id !== state.me.id) dm(u.id);
+                            }}
+                        >
+                            {displayName(u, 'Former member')}
+                        </button>
+                        {Boolean(m.pinned) && <Pin size={12} />}
+                    </span>
+                    <span className="message-text">
+                        <ChatContent
+                            users={state.users}
+                            text={m.body}
+                            custom={state.emojis || []}
+                        />
+                        {Boolean(m.edited) && <small className="edited"> (edited)</small>}
+                    </span>
+                </div>
+                {m.attachments.map((a) => (
+                    <React.Fragment key={a.id}>
+                        {(/^image\/(png|jpeg|gif|webp)$/.test(a.mime) ||
+                            /\.(png|jpe?g|gif|webp)$/i.test(a.name)) && (
+                            <AuthImage
+                                path={`/attachments/${a.id}/preview`}
+                                originalPath={`/attachments/${a.id}?inline=1`}
+                                alt={a.name}
+                                className="chat-image"
+                                expandable
+                            />
+                        )}
+                        <button
+                            className="attachment"
+                            key={a.id}
+                            onClick={() => void download(a.id, a.name)}
+                        >
+                            <Paperclip size={21} />
+                            <span>
+                                {a.name}
+                                <small>Download attachment</small>
+                            </span>
+                            <Download size={18} />
+                        </button>
+                    </React.Fragment>
+                ))}
+                <div className="reactions">
+                    {[...new Set(m.reactions.map((r) => r.emoji))].map((emoji) => (
+                        <ReactionChip
+                            key={emoji}
+                            emoji={emoji}
+                            people={m.reactions
+                                .filter((r) => r.emoji === emoji)
+                                .map((r) => ({
+                                    id: r.user,
+                                    user: user(r.user),
+                                }))}
+                            mine={m.reactions.some(
+                                (r) => r.emoji === emoji && r.user === state.me.id,
+                            )}
+                            showNames={
+                                state.reactionAuthors !== false &&
+                                state.channels.find((c) => c.id === m.room)?.reactionAuthors !==
+                                    0 &&
+                                state.channels.find((c) => c.id === m.room)?.reactionAuthors !==
+                                    false
+                            }
+                            canReact={permission('reactions.add')}
+                            custom={state.emojis || []}
+                            onReact={() =>
+                                void act(() => api(`/messages/${m.id}/reaction`, 'POST', { emoji }))
+                            }
+                        />
+                    ))}
+                </div>
+                {!thread && !!m.replyCount && (
+                    <button className="thread-replies" onClick={() => onReply?.(m)}>
+                        <MessageCircle size={15} />
+                        {m.replyCount} {m.replyCount === 1 ? 'reply' : 'replies'}
+                    </button>
+                )}
+            </div>
+            <div className="message-actions">
+                {!thread && !m.thread && onReply && (
+                    <button
+                        title="Reply in thread"
+                        aria-label="Reply in thread"
+                        disabled={
+                            !permission('threads.reply') ||
+                            !permission('messages.send') ||
+                            (!m.replyCount && !permission('threads.create'))
+                        }
+                        onClick={() => onReply(m)}
+                    >
+                        <Reply size={16} />
+                    </button>
+                )}
+                <button
+                    title="React"
+                    disabled={!permission('reactions.add')}
+                    onClick={() => setModal(`reaction:${m.id}`)}
+                >
+                    <Smile size={16} />
+                </button>
+                {m.author === state.me.id && permission('messages.editOwn') && (
+                    <button
+                        title="Edit"
+                        onClick={() => {
+                            setEdit(m);
+                            setModal('edit');
+                        }}
+                    >
+                        <Pencil size={16} />
+                    </button>
+                )}
+                {permission('messages.pin') && (
+                    <button
+                        title={m.pinned ? 'Unpin' : 'Pin'}
+                        onClick={() =>
+                            void act(() =>
+                                api(`/messages/${m.id}`, 'PATCH', {
+                                    pinned: !m.pinned,
+                                }),
+                            )
+                        }
+                    >
+                        <Pin size={16} />
+                    </button>
+                )}
+                {(m.author === state.me.id
+                    ? permission('messages.deleteOwn')
+                    : permission('messages.deleteOthers')) && (
+                    <button title="Delete" onClick={() => setModal(`delete:${m.id}`)}>
+                        <Trash2 size={16} />
+                    </button>
+                )}
+            </div>
+        </article>
     );
 }
