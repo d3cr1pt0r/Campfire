@@ -433,6 +433,12 @@ label,
     border-color: var(--line);
 }
 .call-dock {
+    --call-control-size: 40px;
+    --call-control-gap: 8px;
+    --call-controls-width: calc(
+        var(--call-control-count) * var(--call-control-size) + (var(--call-control-count) - 1) *
+            var(--call-control-gap)
+    );
     flex: 0 0 auto;
     min-height: 0;
     overflow: hidden;
@@ -486,7 +492,9 @@ label,
 }
 .call-identity {
     flex: 1;
-    max-width: calc(50% - 152px);
+}
+.call-dock.compact .call-identity {
+    max-width: calc(50% - var(--call-controls-width) / 2 - 36px);
 }
 .call-heading-actions {
     margin-left: auto;
@@ -537,28 +545,99 @@ label,
     overflow: hidden;
     margin-inline: 24px;
 }
+.call-stage.spotlight {
+    flex-direction: column;
+    gap: 12px;
+}
+.call-stage.spotlight .video-grid {
+    flex: 1 1 0;
+    min-height: 0;
+}
+.call-thumbnails {
+    display: flex;
+    justify-content: safe center;
+    flex: 0 0 88px;
+    width: 100%;
+    min-width: 0;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 4px 2px;
+}
+.call-thumbnail {
+    flex: 0 0 112px;
+    min-width: 0;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid var(--line);
+    background: var(--field);
+    color: var(--ink);
+}
+.call-thumbnail .avatar {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    font-size: 14px;
+}
+.call-thumbnail > span:last-child {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+}
 .call-stage .video-grid {
     display: flex;
     flex-wrap: wrap;
     flex: 0 0 auto;
     justify-content: center;
-    align-content: center;
+    align-content: stretch;
     gap: 12px;
     overflow: visible;
 }
 .call-participant {
-    flex: 0 0 auto;
-    width: calc(290px * var(--participant-scale));
-    height: calc(160px * var(--participant-scale));
+    flex: 0 0 calc((100% - (var(--participant-columns) - 1) * 12px) / var(--participant-columns));
+    min-width: 0;
+    height: calc((100% - (var(--participant-rows) - 1) * 12px) / var(--participant-rows));
 }
 .call-participant > .media-tile {
-    width: 290px;
-    min-width: 290px;
-    height: 160px;
-    min-height: 160px;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    min-height: 0;
     aspect-ratio: auto;
-    transform: scale(var(--participant-scale));
-    transform-origin: top left;
+}
+.call-empty-state {
+    padding: 16px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+}
+.call-options-menu {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    width: 280px;
+    max-width: calc(100vw - 16px);
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+    color: var(--ink);
+    box-shadow: 0 8px 24px #0005;
+    font-size: 12px;
+}
+.call-options-menu > button {
+    width: 100%;
+    min-height: 40px;
+    justify-content: flex-start;
+    padding: 8px;
+    text-align: left;
+}
+.call-option-check {
+    display: flex;
+    width: 16px;
+    flex-shrink: 0;
 }
 .call-participant .media-name {
     white-space: nowrap;
@@ -594,14 +673,14 @@ label,
     padding: 0;
     margin: 0;
     justify-content: center;
-    gap: 8px;
+    gap: var(--call-control-gap);
 }
 .call-toolbar .call-controls > button {
     flex: 0 0 auto;
-    width: 40px;
-    height: 40px;
-    min-width: 40px;
-    min-height: 40px;
+    width: var(--call-control-size);
+    height: var(--call-control-size);
+    min-width: var(--call-control-size);
+    min-height: var(--call-control-size);
     padding: 8px;
     margin: 0;
 }
@@ -685,8 +764,9 @@ label,
     .workspace {
         --panel-header-inset: 12px;
     }
-    .call-identity {
-        max-width: calc(50% - 106px);
+    .call-dock.compact {
+        --call-control-size: 28px;
+        --call-control-gap: 2px;
     }
     .call-identity > svg,
     .call-summary-kind {
@@ -699,13 +779,9 @@ label,
         gap: 4px;
     }
     .call-dock.compact .call-controls {
-        gap: 4px;
+        gap: var(--call-control-gap);
     }
     .call-dock.compact .call-controls > button {
-        width: 28px;
-        min-width: 28px;
-        height: 28px;
-        min-height: 28px;
         padding: 6px;
     }
     .call-dock .call-heading {

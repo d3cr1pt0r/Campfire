@@ -1,5 +1,5 @@
 import type { State, User, Preferences } from './types';
-import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 
 import type { useCall } from './useCall';
 
@@ -16,8 +16,11 @@ import {
     UserPlus,
     Activity,
     Maximize2,
+    Ellipsis,
+    Check,
 } from 'lucide-react';
 import { MediaTile } from './MediaTile';
+import { Avatar } from './Avatar';
 import { fitCallParticipants } from './callLayout';
 
 export type CallAreaMode = 'split' | 'call' | 'conversation';
@@ -49,6 +52,13 @@ export function CallPanel({
     const splitter = useRef<HTMLDivElement>(null);
     const stage = useRef<HTMLDivElement>(null);
     const toolbar = useRef<HTMLDivElement>(null);
+    const optionsMenu = useRef<HTMLDivElement>(null);
+    const optionsId = useId();
+    const [optionsOpen, setOptionsOpen] = useState(false);
+    const [menuPosition, setMenuPosition] = useState({ left: 0, top: 0 });
+    const [showNonStreaming, setShowNonStreaming] = useState(true);
+    const [gridView, setGridView] = useState(true);
+    const [selectedParticipant, setSelectedParticipant] = useState<string | null>(null);
     const drag = useRef<{ pointer: number; y: number; height: number } | null>(null);
     const [workspaceHeight, setWorkspaceHeight] = useState(800);
     const [conversationMinimum, setConversationMinimum] = useState(84);
@@ -56,7 +66,23 @@ export function CallPanel({
     const [resizing, setResizing] = useState(false);
     const [minimum, setMinimum] = useState(76);
     const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
-    const gallery = fitCallParticipants(stageSize.width, stageSize.height, call.remote.length + 1);
+    const showLocal = showNonStreaming || call.camera || call.sharing;
+    const visibleRemote = call.remote.filter(
+        (participant) => showNonStreaming || participant.camera || participant.sharing,
+    );
+    const visibleIds = [...(showLocal ? ['local'] : []), ...visibleRemote.map((p) => p.id)];
+    const visibleParticipants = visibleIds.length;
+    const selectedId =
+        selectedParticipant && visibleIds.includes(selectedParticipant)
+            ? selectedParticipant
+            : visibleRemote.find((p) => p.sharing)?.id ||
+              visibleRemote.find((p) => p.camera)?.id ||
+              visibleIds[0];
+    const gallery = fitCallParticipants(
+        stageSize.width,
+        stageSize.height,
+        gridView ? visibleParticipants : Math.min(1, visibleParticipants),
+    );
     const participantOpacity = Math.max(0, Math.min(1, (stageSize.height - 24) / 96));
     const maximum = Math.max(minimum, workspaceHeight - conversationMinimum);
     const panelOpen = areaMode === 'call' || (areaMode === 'split' && call.panelOpen);
@@ -68,6 +94,12 @@ export function CallPanel({
               : minimum;
     const compactLayout = height < minimum + 64;
     const privateCall = call.channel?.startsWith('private:');
+    const canInvite =
+        privateCall &&
+        (state.me.role === 'owner' ||
+            state.roles
+                .find((role) => role.id === state.me.role)
+                ?.permissions.includes('calls.start'));
     const participants = new Set(
         state.calls
             .filter((participant) => participant.channel === call.channel)
@@ -122,7 +154,7 @@ export function CallPanel({
             <div
                 ref={dock}
                 className={`call-dock ${resizing ? 'resizing' : ''} ${compactLayout ? 'compact' : ''}`}
-                style={{ height }}
+                style={{ height, '--call-control-count': canInvite ? 7 : 6 } as CSSProperties}
             >
                 <section id="call-panel" className="call-panel" aria-label="Call details">
                     <div className="call-heading">
@@ -155,7 +187,7 @@ export function CallPanel({
                     </div>
                     <div className="call-panel-body" id="call-panel-body">
                         <div
-                            className="call-stage"
+                            className={`call-stage ${gridView ? '' : 'spotlight'}`}
                             ref={stage}
                             inert={compactLayout || participantOpacity === 0}
                             aria-hidden={compactLayout || participantOpacity === 0}
@@ -165,13 +197,19 @@ export function CallPanel({
                                 style={
                                     {
                                         width: gallery.width,
+                                        height: gridView ? gallery.height : undefined,
+                                        display: visibleParticipants === 0 ? 'none' : undefined,
                                         opacity: participantOpacity,
                                         visibility: participantOpacity === 0 ? 'hidden' : 'visible',
-                                        '--participant-scale': gallery.scale,
+                                        '--participant-columns': gallery.columns,
+                                        '--participant-rows': gallery.rows,
                                     } as CSSProperties
                                 }
                             >
-                                <div className="call-participant">
+                                <div
+                                    className="call-participant"
+                                    hidden={!showLocal || (!gridView && selectedId !== 'local')}
+                                >
                                     <MediaTile
                                         stream={call.local}
                                         name={`${displayName(state.me)} (you)`}
@@ -185,7 +223,14 @@ export function CallPanel({
                                     />
                                 </div>
                                 {call.remote.map((p) => (
-                                    <div className="call-participant" key={p.id}>
+                                    <div
+                                        className="call-participant"
+                                        key={p.id}
+                                        hidden={
+                                            (!showNonStreaming && !p.camera && !p.sharing) ||
+                                            (!gridView && selectedId !== p.id)
+                                        }
+                                    >
                                         <MediaTile
                                             stream={p.stream}
                                             streamAudio={p.streamAudio}
@@ -217,6 +262,42 @@ export function CallPanel({
                                     </div>
                                 ))}
                             </div>
+                            {!gridView && visibleParticipants > 1 && (
+                                <div className="call-thumbnails" aria-label="Select a participant">
+                                    {visibleIds
+                                        .filter((id) => id !== selectedId)
+                                        .map((id) => {
+                                            const participant = call.remote.find(
+                                                (p) => p.id === id,
+                                            );
+                                            const member =
+                                                id === 'local'
+                                                    ? state.me
+                                                    : user(participant?.user || '');
+                                            const name = `${displayName(member, 'Member')}${id === 'local' ? ' (you)' : ''}`;
+                                            return (
+                                                <button
+                                                    key={id}
+                                                    className="call-thumbnail"
+                                                    title={`Show ${name} in main view`}
+                                                    aria-label={`Show ${name} in main view`}
+                                                    onClick={() => setSelectedParticipant(id)}
+                                                >
+                                                    <Avatar
+                                                        user={member}
+                                                        speaking={speaking.has(member?.id || '')}
+                                                    />
+                                                    <span>{name}</span>
+                                                </button>
+                                            );
+                                        })}
+                                </div>
+                            )}
+                            {visibleParticipants === 0 && (
+                                <p className="call-empty-state" role="status">
+                                    No cameras or screen shares to show.
+                                </p>
+                            )}
                         </div>
                         {call.showDetails && (
                             <div
@@ -292,19 +373,15 @@ export function CallPanel({
                             }
                         >
                             <div className="call-controls">
-                                {call.channel?.startsWith('private:') &&
-                                    (state.me.role === 'owner' ||
-                                        state.roles
-                                            .find((r) => r.id === state.me.role)
-                                            ?.permissions.includes('calls.start')) && (
-                                        <button
-                                            title="Invite friend"
-                                            aria-label="Invite friend"
-                                            onClick={() => setModal('invite-call')}
-                                        >
-                                            <UserPlus />
-                                        </button>
-                                    )}
+                                {canInvite && (
+                                    <button
+                                        title="Invite friend"
+                                        aria-label="Invite friend"
+                                        onClick={() => setModal('invite-call')}
+                                    >
+                                        <UserPlus />
+                                    </button>
+                                )}
                                 <button
                                     className={call.muted ? 'danger-bg' : ''}
                                     disabled={!call.canSpeak}
@@ -352,6 +429,93 @@ export function CallPanel({
                                 >
                                     <PhoneOff />
                                 </button>
+                                <button
+                                    title="More call options"
+                                    aria-label="More call options"
+                                    aria-haspopup="menu"
+                                    aria-expanded={optionsOpen}
+                                    popoverTarget={optionsId}
+                                    onClick={(event) => {
+                                        const rect = event.currentTarget.getBoundingClientRect();
+                                        setMenuPosition({
+                                            left: Math.max(
+                                                8,
+                                                Math.min(rect.right - 280, window.innerWidth - 288),
+                                            ),
+                                            top: rect.top >= 112 ? rect.top - 104 : rect.bottom + 8,
+                                        });
+                                    }}
+                                >
+                                    <Ellipsis />
+                                </button>
+                                <div
+                                    ref={optionsMenu}
+                                    id={optionsId}
+                                    className="call-options-menu"
+                                    popover="auto"
+                                    role="menu"
+                                    aria-label="Call options"
+                                    style={menuPosition}
+                                    onToggle={(event) => {
+                                        const open = event.newState === 'open';
+                                        setOptionsOpen(open);
+                                        if (open)
+                                            optionsMenu.current
+                                                ?.querySelector<HTMLButtonElement>('button')
+                                                ?.focus({ preventScroll: true });
+                                    }}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Tab') optionsMenu.current?.hidePopover();
+                                        if (
+                                            ['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(
+                                                event.key,
+                                            )
+                                        ) {
+                                            event.preventDefault();
+                                            const items = [
+                                                ...(optionsMenu.current?.querySelectorAll<HTMLButtonElement>(
+                                                    '[role="menuitemcheckbox"]',
+                                                ) || []),
+                                            ];
+                                            const current = items.findIndex(
+                                                (item) => item === document.activeElement,
+                                            );
+                                            const next =
+                                                event.key === 'Home'
+                                                    ? 0
+                                                    : event.key === 'End'
+                                                      ? items.length - 1
+                                                      : (current +
+                                                            (event.key === 'ArrowDown' ? 1 : -1) +
+                                                            items.length) %
+                                                        items.length;
+                                            items[next]?.focus();
+                                        }
+                                    }}
+                                >
+                                    <button
+                                        type="button"
+                                        role="menuitemcheckbox"
+                                        aria-checked={showNonStreaming}
+                                        onClick={() => setShowNonStreaming((show) => !show)}
+                                    >
+                                        <span className="call-option-check">
+                                            {showNonStreaming && <Check size={16} />}
+                                        </span>
+                                        Show participants without video
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="menuitemcheckbox"
+                                        aria-checked={gridView}
+                                        onClick={() => setGridView((grid) => !grid)}
+                                    >
+                                        <span className="call-option-check">
+                                            {gridView && <Check size={16} />}
+                                        </span>
+                                        Grid View
+                                    </button>
+                                </div>
                                 <button
                                     title="Connection diagnostics"
                                     aria-label="Connection diagnostics"
