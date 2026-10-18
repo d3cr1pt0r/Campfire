@@ -1,4 +1,4 @@
-/* Ember (dark) and Canvas (light) are client themes. Forest remains a review study. */
+/* Ember (dark) and Canvas (light) are client themes. */
 :root {
     color-scheme: dark;
     --content: #1d1f1e;
@@ -33,21 +33,6 @@
     --nav: #302b24;
     --nav-ink: #eee1ca;
     --nav-muted: #bcad95;
-}
-:root[data-theme='forest'] {
-    --content: #152522;
-    --panel: #1c302a;
-    --raised: #263c32;
-    --field: #12241e;
-    --ink: #edf1df;
-    --muted: #adbca8;
-    --accent: #f1bf78;
-    --accent-ink: #202b1d;
-    --line: #c2d4b921;
-    --soft-accent: #f1bf7812;
-    --nav: #10231d;
-    --nav-ink: #e2e9d3;
-    --nav-muted: #9fb39d;
 }
 body {
     color: var(--ink);
@@ -911,9 +896,6 @@ label,
 :root[data-theme='canvas'] .message-body a,
 :root[data-theme='canvas'] .message-body button {
     color: var(--accent);
-}
-:root[data-theme='forest'] .auth-art {
-    background: radial-gradient(ellipse at 50% 50%, #e6a76015, transparent 70%), #10231d;
 }
 @media (max-width: 1100px) {
     .topbar {
