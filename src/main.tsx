@@ -1745,11 +1745,6 @@ function App() {
                                 </aside>
                             )}
                         </div>
-                        <footer className="status-bar">
-                            <span>
-                                Campfire <i /> Keep the conversation glowing
-                            </span>
-                        </footer>
                     </ConversationSection>
                 </main>
                 {modal && (
