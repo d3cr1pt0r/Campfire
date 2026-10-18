@@ -563,13 +563,6 @@ small {
     background: #df9b6322;
     font-size: 10px;
 }
-.voice-connected .call-panel-toggle {
-    margin: 8px 0 0;
-    padding: 6px 8px;
-    min-height: 32px;
-    font-size: 12px;
-    color: #f4d1b5;
-}
 .call-panel[hidden] {
     display: none;
 }
@@ -582,15 +575,6 @@ small {
     font-size: 12px;
     line-height: 1.8;
     margin: 8px 12px;
-}
-.server-owned {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    color: var(--muted);
-    font-size: 11px;
-    padding: 14px 0;
 }
 .user-bar {
     background: #231c18;
@@ -644,16 +628,25 @@ small {
     min-width: 0;
 }
 .voice-connected {
-    padding: 13px;
+    display: grid;
+    grid-template-columns: 17px minmax(0, 1fr) 36px;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
     background: #7ed2ad08;
     border-top: 1px solid #7ed2ad10;
-}
-.voice-connected > div {
-    display: flex;
-    gap: 7px;
-    align-items: center;
     color: #83d0b0;
     font-size: 12px;
+}
+.voice-connection-copy {
+    min-width: 0;
+}
+.voice-connection-copy strong,
+.voice-connection-copy small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .voice-connected button {
     margin-left: auto;
@@ -663,7 +656,7 @@ small {
     display: block;
     color: #808b88;
     font-size: 11px;
-    margin: 5px 0 0 23px;
+    margin-top: 3px;
 }
 .workspace {
     display: flex;

@@ -154,6 +154,17 @@ body {
     background: #1e201c;
     color: #e9ddca;
     border-top: 1px solid #e1c79816;
+    flex-wrap: nowrap;
+    padding: 8px 12px;
+}
+.user-bar .user-name {
+    flex-basis: 0;
+}
+.user-bar > button {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    min-height: 32px;
 }
 .server-rail .server-icon {
     background: #3f4636;

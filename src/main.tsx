@@ -1215,34 +1215,17 @@ function App() {
                                 </p>
                             )}
                         </div>
-                        <div className="server-owned">
-                            <Shield size={15} />
-                            <span>Self-hosted. Yours to keep.</span>
-                        </div>
                         {call.channel && (
                             <div className="voice-connected">
-                                <div>
-                                    <Radio size={17} />
+                                <Radio size={17} />
+                                <div className="voice-connection-copy">
                                     <strong>Voice connected</strong>
-                                    <button title="Disconnect call" onClick={call.leave}>
-                                        <PhoneOff size={17} />
-                                    </button>
+                                    <small title={`${callName} / ${state.name}`}>
+                                        {callName} / {state.name}
+                                    </small>
                                 </div>
-                                <small>
-                                    {callName} / {state.name}
-                                </small>
-                                <button
-                                    className="call-panel-toggle"
-                                    aria-expanded={call.panelOpen}
-                                    aria-controls="call-panel"
-                                    onClick={() => {
-                                        call.setPanelOpen(!call.panelOpen);
-                                        if (call.panelOpen) call.setShowDetails(false);
-                                        setNavigationOpen(false);
-                                    }}
-                                >
-                                    <MonitorPlay size={15} />
-                                    {call.panelOpen ? 'Hide call details' : 'Show call details'}
+                                <button title="Disconnect call" onClick={call.leave}>
+                                    <PhoneOff size={17} />
                                 </button>
                             </div>
                         )}
