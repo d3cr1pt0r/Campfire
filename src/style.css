@@ -873,7 +873,7 @@ small {
     min-height: 18px;
 }
 .message-meta button {
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 700;
     padding: 0;
     line-height: 1.4;
@@ -2614,7 +2614,8 @@ label textarea {
     flex-wrap: wrap;
 }
 .reactions button {
-    min-height: 32px;
+    min-height: 26px;
+    padding-block: 2px;
 }
 .composer-wrap {
     padding: 12px 20px;
