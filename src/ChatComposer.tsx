@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Emoji } from './ChatContent';
 import { emojiQuery, emojiMatches } from './emojiCompletion';
 import { mentionQuery, completeMention } from './mentions';
@@ -53,6 +53,29 @@ export function ChatComposer({
     emojis = [],
 }: Props) {
     const input = useRef<HTMLTextAreaElement>(null);
+    useLayoutEffect(() => {
+        const textarea = input.current;
+        const composer = textarea?.parentElement;
+        if (!textarea || !composer) return;
+        const resize = () => {
+            textarea.style.height = 'auto';
+            textarea.style.height = `${textarea.scrollHeight}px`;
+        };
+        resize();
+        let width = composer.clientWidth;
+        let frame = 0;
+        const observer = new ResizeObserver(() => {
+            if (composer.clientWidth === width) return;
+            width = composer.clientWidth;
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(resize);
+        });
+        observer.observe(composer);
+        return () => {
+            observer.disconnect();
+            cancelAnimationFrame(frame);
+        };
+    }, [draft]);
     const listId = useId();
     const [caret, setCaret] = useState(0);
     const [active, setActive] = useState(0);
@@ -219,13 +242,10 @@ export function ChatComposer({
                     disabled={!canPost}
                     maxLength={4000}
                     rows={1}
-                    style={!draft ? { height: 'auto' } : undefined}
                     onChange={(e) => {
                         setDraft(e.target.value);
                         setCaret(e.target.selectionStart);
                         setActive(0);
-                        e.target.style.height = 'auto';
-                        e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
                         if (Date.now() - lastTyping.current > 2000) {
                             onTyping();
                             lastTyping.current = Date.now();

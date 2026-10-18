@@ -242,6 +242,8 @@ body {
 }
 .composer {
     background: var(--raised);
+    align-items: flex-end;
+    padding-block: 6px;
     border: 1px solid var(--line);
     border-radius: 15px;
     box-shadow: 0 6px 24px #00000015;
@@ -249,8 +251,9 @@ body {
 .composer textarea {
     background: transparent;
     color: var(--ink);
-    padding-top: 15px;
-    padding-bottom: 15px;
+    min-height: 36px;
+    padding-top: 6px;
+    padding-bottom: 6px;
 }
 .composer .send-button {
     color: var(--accent-ink);
