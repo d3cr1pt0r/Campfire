@@ -135,9 +135,11 @@ else {
             );
             const trayEnabled = () => {
                 try {
-                    return JSON.parse(clientState.get('preferences') || '{}').closeToTray === true;
+                    return (
+                        JSON.parse(clientState.get('preferences') || '{}')?.closeToTray !== false
+                    );
                 } catch {
-                    return false;
+                    return true;
                 }
             };
             const showWindow = () => {

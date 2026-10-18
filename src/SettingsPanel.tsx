@@ -701,7 +701,7 @@ export function SettingsPanel({
                 {settingsTab === 'account' && window.campfire && (
                     <Toggle
                         title="Close to system tray"
-                        value={!!prefs.closeToTray}
+                        value={prefs.closeToTray !== false}
                         set={(value) =>
                             setPrefs((previous) => ({ ...previous, closeToTray: value }))
                         }

@@ -91,6 +91,7 @@ const defaultPrefs: Preferences = {
     noise: true,
     pushToTalk: false,
     sounds: true,
+    closeToTray: true,
 };
 function stored<T>(key: string, fallback: T): T {
     try {
