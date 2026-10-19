@@ -1,5 +1,17 @@
 import { hasRolePermission } from '../shared/permissions.js';
-import { notificationKey, shouldNotify, createNotificationSound } from './notifications';
+import {
+    notificationKey,
+    shouldNotify,
+    createNotificationSound,
+    migrateNotificationKeys,
+} from './notifications';
+import {
+    formatFingerprint,
+    parseServerLink,
+    restoreConnection,
+    type ServerLink,
+} from './serverLink';
+import { connectionHint, pinsFor, trustStep } from './serverTrust';
 import { version as appVersion } from '../package.json';
 import { ChatComposer } from './ChatComposer';
 import { ThreadPanel } from './ThreadPanel';
@@ -99,23 +111,29 @@ function stored<T>(key: string, fallback: T): T {
         return fallback;
     }
 }
-const initialPreferences: Preferences = {
+const initialPreferences: Preferences = migrateNotificationKeys({
     ...defaultPrefs,
     ...stored<Partial<Preferences>>('preferences', {}),
-};
+});
 initialPreferences.theme = themePreference(initialPreferences.theme);
 applyTheme(
     initialPreferences.theme,
     document.documentElement,
     window.matchMedia('(prefers-color-scheme: dark)').matches,
 );
-const initial = stored<{
-    url: string;
-    token: string;
-}>('connection', { url: defaultServerUrl, token: '' });
-const invitationFromLink = new URLSearchParams(window.location.hash.slice(1)).get('invite') || '';
-if (invitationFromLink)
+const initial = restoreConnection(stored<unknown>('connection', null), defaultServerUrl);
+// Browser links: https://server/#invite=…&setup=… (#pin= is only used by the desktop app).
+const hashLink = new URLSearchParams(window.location.hash.slice(1));
+const invitationFromLink = hashLink.get('invite') || '';
+const setupFromLink = hashLink.get('setup') || '';
+if (['invite', 'pin', 'setup'].some((key) => hashLink.has(key)))
     history.replaceState(null, '', window.location.pathname + window.location.search);
+type TrustPrompt = {
+    kind: 'confirm' | 'changed';
+    origin: string;
+    fingerprint: string;
+    resume?: () => void;
+};
 function App() {
     const chatScrollMemory = useRef(new Map<string, ChatScrollPosition>());
     const [url, setUrl] = useState(initial.url),
@@ -127,9 +145,45 @@ function App() {
         [busy, setBusy] = useState(false),
         [register, setRegister] = useState(true);
     const [authUrl, setAuthUrl] = useState(
-        invitationFromLink ? window.location.origin : initial.url,
+        invitationFromLink || setupFromLink ? window.location.origin : initial.url,
     );
     const [inviteCode, setInviteCode] = useState(invitationFromLink);
+    const [setupCode, setSetupCode] = useState(setupFromLink);
+    // Fingerprint carried by a pasted link, kept while the address field shows its origin.
+    const [linkPin, setLinkPin] = useState<{ origin: string; pin: string } | null>(null);
+    const [trustPrompt, setTrustPrompt] = useState<TrustPrompt | null>(null);
+    const [verifiedUrl, setVerifiedUrl] = useState<string | null>(null);
+    const [probe, setProbe] = useState(0);
+    const [infoNote, setInfoNote] = useState('');
+    const pinFor = (link: ServerLink) =>
+        link.pin ?? (linkPin?.origin === link.origin ? linkPin.pin : undefined);
+    // Resolves whether the desktop app may talk to a server: true to continue, false when the
+    // user must first answer a trust prompt (resume then continues), or throws on refusal.
+    const ensureTrusted = async (origin: string, pin?: string, resume?: () => void) => {
+        const pins = pinsFor(origin);
+        if (!pins) return true;
+        const step = trustStep(await pins.check(origin), pin);
+        if (step.kind === 'ready') return true;
+        if (step.kind === 'pin' || step.kind === 'replace') {
+            const result = await pins.trust(origin, step.fingerprint);
+            if (!result.ok)
+                throw new Error(
+                    result.reason === 'cancelled'
+                        ? 'The saved server identity was kept.'
+                        : result.reason || 'Could not save the server identity.',
+                );
+            return !result.restarting;
+        }
+        if (step.kind === 'confirm' || step.kind === 'changed') {
+            setTrustPrompt({ kind: step.kind, origin, fingerprint: step.fingerprint, resume });
+            return false;
+        }
+        if (step.kind === 'mismatch')
+            throw new Error(
+                'This server’s identity doesn’t match the link you used. Don’t sign in; ask the server owner for a new link.',
+            );
+        throw new Error(`Could not reach the server: ${step.message}`);
+    };
     const [serverInfo, setServerInfo] = useState<{
         registrationMode: 'open' | 'invite';
         setupRequired: boolean;
@@ -139,41 +193,60 @@ function App() {
         if (token) return;
         setServerInfo(null);
         setInfoError('');
+        setInfoNote('');
         const controller = new AbortController();
         const timer = setTimeout(() => {
+            let link: ServerLink;
             try {
-                const parsed = new URL(authUrl.trim());
-                if (
-                    !['http:', 'https:'].includes(parsed.protocol) ||
-                    parsed.username ||
-                    parsed.password ||
-                    parsed.pathname !== '/' ||
-                    parsed.search ||
-                    parsed.hash
-                )
-                    return;
-                void createApiClient(parsed.origin, '')
-                    .json<{ registrationMode: 'open' | 'invite'; setupRequired: boolean }>(
-                        '/info',
-                        'GET',
-                        undefined,
-                        controller.signal,
-                    )
-                    .then((info) => {
-                        if (!controller.signal.aborted) setServerInfo(info);
-                    })
-                    .catch((e) => {
-                        if (!controller.signal.aborted) setInfoError(e.message);
-                    });
+                link = parseServerLink(authUrl);
             } catch {
-                /* The submit handler explains invalid addresses. */
+                return; // The submit handler explains invalid addresses.
             }
+            const pins = pinsFor(link.origin);
+            void (async () => {
+                // The desktop app checks the identity before any request reaches the server.
+                const step = pins
+                    ? trustStep(await pins.check(link.origin), pinFor(link))
+                    : ({ kind: 'ready' } as const);
+                if (controller.signal.aborted) return;
+                if (step.kind === 'pin') {
+                    const result = await pins!.trust(link.origin, step.fingerprint);
+                    if (!result.ok) throw new Error(result.reason);
+                } else if (step.kind === 'confirm') {
+                    setInfoNote(
+                        'You’ll be asked to confirm this server’s identity when you continue.',
+                    );
+                    return;
+                } else if (step.kind === 'replace') {
+                    setInfoNote(
+                        'This link carries a new identity for this server. You’ll be asked to confirm it when you continue.',
+                    );
+                    return;
+                } else if (step.kind === 'changed' || step.kind === 'mismatch') {
+                    setInfoError(
+                        step.kind === 'changed'
+                            ? 'This server’s identity changed since you last connected. Campfire won’t connect to it.'
+                            : 'This server’s identity doesn’t match the link you used.',
+                    );
+                    return;
+                } else if (step.kind === 'unreachable') throw new Error(step.message);
+                const info = await createApiClient(link.origin, '').json<{
+                    registrationMode: 'open' | 'invite';
+                    setupRequired: boolean;
+                }>('/info', 'GET', undefined, controller.signal);
+                if (!controller.signal.aborted) setServerInfo(info);
+            })().catch((e) => {
+                if (!controller.signal.aborted)
+                    setInfoError(
+                        `Could not check registration: ${connectionHint(e, link.origin, window.location.origin, !!window.campfire)}`,
+                    );
+            });
         }, 350);
         return () => {
             clearTimeout(timer);
             controller.abort();
         };
-    }, [authUrl, token]);
+    }, [authUrl, token, linkPin, probe]);
     const [room, setRoom] = useState('general'),
         [view, setView] = useState<'chat' | 'friends'>('chat'),
         [draft, setDraft] = useState(''),
@@ -308,8 +381,21 @@ function App() {
     useEffect(() => {
         storage.setItem('preferences', JSON.stringify(prefs));
     }, [prefs]);
-    useEffect(() => {
+    // A saved session reconnects only after the desktop app has re-checked the server identity.
+    const verify = useCallback(async () => {
         if (!token) return;
+        try {
+            if (await ensureTrusted(url, undefined, () => setVerifiedUrl(url))) setVerifiedUrl(url);
+        } catch (e) {
+            notify((e as Error).message);
+        }
+    }, [url, token, notify]);
+    useEffect(() => {
+        setVerifiedUrl(null);
+        void verify();
+    }, [verify]);
+    useEffect(() => {
+        if (!token || verifiedUrl !== url) return;
         storage.setItem('connection', JSON.stringify({ url, token }));
         const s: AppSocket = io(url, { auth: { token }, reconnectionAttempts: 10 });
         setSocket(s);
@@ -325,6 +411,19 @@ function App() {
         s.on('connect_error', (e) => {
             setConnected(false);
             setError(`Connection: ${e.message}`);
+            // A reconnect failure may mean the server now presents a different identity.
+            void pinsFor(url)
+                ?.check(url)
+                .then((check) => {
+                    if (check.state !== 'changed') return;
+                    setVerifiedUrl(null);
+                    setTrustPrompt({
+                        kind: 'changed',
+                        origin: url,
+                        fingerprint: check.fingerprint,
+                    });
+                })
+                .catch(() => {});
         });
         s.on('refresh', refresh);
         s.on('presence', (presence) => {
@@ -389,7 +488,7 @@ function App() {
             setSocket(null);
             setConnected(false);
         };
-    }, [url, token, refresh]);
+    }, [url, token, refresh, verifiedUrl]);
     useEffect(() => {
         if (!token || !state) return;
         setUnread((prev) => ({ ...prev, [room]: 0 }));
@@ -521,36 +620,61 @@ function App() {
         setSearch('');
         setPins(false);
     };
-    const login = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        const f = new FormData(e.currentTarget);
+    const submitLogin = async (f: FormData) => {
         await act(async () => {
-            const target = String(f.get('url')).trim().replace(/\/$/, '');
-            const parsed = new URL(target);
-            if (
-                !['http:', 'https:'].includes(parsed.protocol) ||
-                parsed.username ||
-                parsed.password ||
-                parsed.search ||
-                parsed.hash ||
-                parsed.pathname !== '/'
-            )
-                throw new Error('Enter a server origin, for example https://chat.example.com');
-            const data = await createApiClient(target, '').json<{ token: string }>(
-                `/auth/${register ? 'register' : 'login'}`,
-                'POST',
-                {
-                    username: f.get('username'),
-                    password: f.get('password'),
-                    ...(register
-                        ? { inviteCode: inviteCode.trim(), setupCode: f.get('setupCode') }
-                        : {}),
-                },
-            );
-            setUrl(target);
+            const link = parseServerLink(String(f.get('url')));
+            const resume = () => {
+                setProbe((n) => n + 1);
+                void submitLogin(f);
+            };
+            if (!(await ensureTrusted(link.origin, pinFor(link), resume))) return;
+            let data: { token: string };
+            try {
+                data = await createApiClient(link.origin, '').json<{ token: string }>(
+                    `/auth/${register ? 'register' : 'login'}`,
+                    'POST',
+                    {
+                        username: f.get('username'),
+                        password: f.get('password'),
+                        ...(register
+                            ? {
+                                  inviteCode: (link.invite ?? inviteCode).trim(),
+                                  setupCode: (link.setup ?? setupCode).trim(),
+                              }
+                            : {}),
+                    },
+                );
+            } catch (e) {
+                throw new Error(
+                    connectionHint(
+                        e as Error,
+                        link.origin,
+                        window.location.origin,
+                        !!window.campfire,
+                    ),
+                );
+            }
+            setUrl(link.origin);
             setToken(data.token);
             setError('');
         });
+    };
+    const login = (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        void submitLogin(new FormData(e.currentTarget));
+    };
+    const trustServer = async () => {
+        const prompt = trustPrompt;
+        if (!prompt) return;
+        let trustedNow = false;
+        await act(async () => {
+            const result = await pinsFor(prompt.origin)!.trust(prompt.origin, prompt.fingerprint);
+            if (!result.ok) throw new Error(result.reason || 'Could not save the server identity.');
+            trustedNow = true;
+        });
+        if (!trustedNow) return;
+        setTrustPrompt(null);
+        prompt.resume?.();
     };
     const attachmentsRef = useRef(attachments);
     attachmentsRef.current = attachments;
@@ -739,7 +863,7 @@ function App() {
             </button>
         </div>
     );
-    if (!token || !state)
+    if (!token || !state || trustPrompt)
         return (
             <div className="auth-shell">
                 <div className="auth-art">
@@ -771,22 +895,102 @@ function App() {
                 <main className="auth-form">
                     <div className="mini-label">MAKE YOURSELF AT HOME</div>
                     <h2>
-                        {token
-                            ? 'Connecting to your server…'
-                            : register
-                              ? 'Good conversations start here.'
-                              : 'Welcome back.'}
+                        {trustPrompt
+                            ? 'Check this server.'
+                            : token
+                              ? 'Connecting to your server…'
+                              : register
+                                ? 'Good conversations start here.'
+                                : 'Welcome back.'}
                     </h2>
                     <p className="muted">
-                        {token
-                            ? 'Waiting for your server to respond.'
-                            : register
-                              ? 'Create an account on your community’s server.'
-                              : 'Your people are just a sign-in away.'}
+                        {trustPrompt
+                            ? 'Campfire remembers each server’s identity so nobody can impersonate it.'
+                            : token
+                              ? 'Waiting for your server to respond.'
+                              : register
+                                ? 'Create an account on your community’s server.'
+                                : 'Your people are just a sign-in away.'}
                     </p>
-                    {token ? (
+                    {trustPrompt ? (
+                        trustPrompt.kind === 'confirm' ? (
+                            <div
+                                className="trust-prompt"
+                                role="group"
+                                aria-labelledby="trust-title"
+                            >
+                                <h3 id="trust-title">Confirm this server</h3>
+                                <p>
+                                    This is your first connection to{' '}
+                                    <strong>{new URL(trustPrompt.origin).host}</strong>.
+                                </p>
+                                <p className="muted">
+                                    If the owner gave you a server link, paste that instead: it
+                                    carries the server’s identity. Otherwise check that this
+                                    fingerprint matches the one the owner shared:
+                                </p>
+                                <code className="fingerprint">
+                                    {formatFingerprint(trustPrompt.fingerprint)}
+                                </code>
+                                <button
+                                    className="primary"
+                                    disabled={busy}
+                                    onClick={() => void trustServer()}
+                                >
+                                    Trust this server
+                                    <ArrowRight size={18} />
+                                </button>
+                                <button disabled={busy} onClick={() => setTrustPrompt(null)}>
+                                    Cancel
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="trust-prompt trust-changed" role="alert">
+                                <h3>Server identity changed</h3>
+                                <p>
+                                    <strong>{new URL(trustPrompt.origin).host}</strong> is
+                                    presenting a different identity than the one saved on this
+                                    computer. Someone may be intercepting your connection, so
+                                    Campfire won’t connect.
+                                </p>
+                                <p className="muted">
+                                    If the owner reinstalled the server, ask them for a new server
+                                    link and paste it into the sign-in form.
+                                </p>
+                                <button
+                                    className="primary"
+                                    onClick={() => {
+                                        setTrustPrompt(null);
+                                        setToken('');
+                                        setAuthUrl(trustPrompt.origin);
+                                        setLinkPin(null);
+                                        storage.removeItem('connection');
+                                    }}
+                                >
+                                    Use a new server link
+                                    <ArrowRight size={18} />
+                                </button>
+                                <button
+                                    className="danger-text"
+                                    disabled={busy}
+                                    onClick={() =>
+                                        void act(async () => {
+                                            await pinsFor(trustPrompt.origin)?.forget(
+                                                trustPrompt.origin,
+                                            );
+                                        })
+                                    }
+                                >
+                                    Forget saved identity…
+                                </button>
+                            </div>
+                        )
+                    ) : token ? (
                         <>
-                            <button className="primary" onClick={() => void refresh()}>
+                            <button
+                                className="primary"
+                                onClick={() => void (verifiedUrl === url ? refresh() : verify())}
+                            >
                                 Retry connection
                             </button>
                             <button
@@ -804,11 +1008,35 @@ function App() {
                                 Server address
                                 <input
                                     name="url"
-                                    type="url"
+                                    type="text"
+                                    inputMode="url"
+                                    autoCapitalize="none"
+                                    spellCheck={false}
                                     value={authUrl}
-                                    onChange={(e) => setAuthUrl(e.target.value)}
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        if (value.includes('#')) {
+                                            try {
+                                                // A pasted server or invite link fills the form.
+                                                const link = parseServerLink(value);
+                                                setAuthUrl(link.origin);
+                                                setLinkPin(
+                                                    link.pin
+                                                        ? { origin: link.origin, pin: link.pin }
+                                                        : null,
+                                                );
+                                                if (link.invite) setInviteCode(link.invite);
+                                                if (link.setup) setSetupCode(link.setup);
+                                                if (link.invite || link.setup) setRegister(true);
+                                                return;
+                                            } catch {
+                                                /* Keep the text; submitting explains the problem. */
+                                            }
+                                        }
+                                        setAuthUrl(value);
+                                    }}
                                     required
-                                    placeholder="https://chat.example.com"
+                                    placeholder="Server address or link"
                                 />
                             </label>
                             <label>
@@ -851,6 +1079,8 @@ function App() {
                                     Owner setup code
                                     <input
                                         name="setupCode"
+                                        value={setupCode}
+                                        onChange={(e) => setSetupCode(e.target.value)}
                                         required
                                         autoComplete="off"
                                         maxLength={256}
@@ -881,9 +1111,10 @@ function App() {
                                         </span>
                                     </label>
                                 )}
+                            {infoNote && <p className="field-help">{infoNote}</p>}
                             {infoError && (
-                                <p className="field-help">
-                                    Could not check registration: {infoError}
+                                <p className="field-help" role="alert">
+                                    {infoError}
                                 </p>
                             )}
                             <button className="primary" disabled={busy}>
@@ -901,7 +1132,8 @@ function App() {
                     <div className="self-host-note">
                         <Server size={20} />
                         <p>
-                            New servers require an owner setup code from the server console.
+                            Paste the server or invite link you were given. New servers print an
+                            owner setup link in their console.
                             <br />
                             Your account and conversations stay on that server.
                         </p>

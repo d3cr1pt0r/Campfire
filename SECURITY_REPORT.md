@@ -112,3 +112,22 @@ Primary code references: `server/app.js`, `server/index.js`, `server/accounts.js
 ## Registration-control implementation update
 
 Owner-controlled Free for all / Invite only registration is now implemented. New databases default to Invite only; existing databases with accounts retain open registration. First-owner registration requires a random setup code printed to the server console. Owner-created invitations expire after seven days, are single use, can be revoked, and are stored as hashes. Account insertion and invitation redemption share one transaction. Switching to open registration revokes unused invitations. These changes supersede finding 3 and the first-account claim warning above; the transport, stored-content privacy, and wider availability findings remain applicable. See README for operation and limits.
+
+## Transport encryption update (v0.2.0)
+
+Servers now serve HTTPS with TLS 1.3 only (`server/app.js`, `server/identity.js`). By default each server creates an ECDSA P-256 key in `DATA_DIR/identity/` and a self-signed certificate re-issued from that key before expiry. Its fingerprint (base32 SHA-256 of the public key) is printed on start, recorded in the database, and carried in server and invite links (`#pin=`). A missing or replaced key stops the server from starting unless `CAMPFIRE_NEW_IDENTITY=1` is set. Plain HTTP is only accepted on a loopback `HOST` or behind a reverse proxy named in `TRUST_PROXY` (`server/config.js`); hosts can also supply certificate files.
+
+The desktop app pins server identities per origin (`electron/pins.cjs`). Before contacting a server, the main process reads its certificate over a separate TLS connection; Chromium's certificate verifier accepts a pinned host only with a pinned key. Unknown servers require a matching link fingerprint or explicit user confirmation, and a changed identity is refused; replacing or forgetting a pin requires a native confirmation dialog. Pins live in main-process-only client state. Clients reject remote `http://` servers and the content security policies only allow encrypted remote connections.
+
+Upgrading deletes all sessions and revokes unused invitations once (migration 11), because earlier versions exposed them over HTTP. Users can now change their password, which revokes their other sessions.
+
+This supersedes findings 1, 2 and 4 for servers using their own identity or a correctly configured certificate: a network observer can no longer read or alter credentials, messages, files or call signaling, and cannot impersonate a pinned server to the desktop app. Opus voice uses constant bitrate to reduce packet-length leakage.
+
+Remaining exposure:
+
+- **Browsers cannot pin.** Browser users rely on accepting the certificate warning once; a user who accepts a forged certificate is not protected. The desktop app is recommended.
+- **First connection without a link** is trust-on-first-use. An attacker present at that moment could present their own key; the app would then report a changed identity once the user reaches the real server.
+- **Finding 5 is unchanged.** Stored messages and attachments are not encrypted; the server operator, anyone with the database or backups, and anyone who compromises the server can read them. Call signaling passes through the server, so a malicious operator could intercept calls. Hosts should use full-disk encryption and protect backups.
+- **Metadata** such as IP addresses, timing and traffic volume remains visible on the network, and peers in direct calls see each other's IP addresses.
+- `TLS=off` with `TRUST_PROXY` makes the proxy and the proxy-to-backend link part of the trust boundary.
+- Finding 6 (availability) is unchanged.

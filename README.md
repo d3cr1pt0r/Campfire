@@ -21,7 +21,11 @@ A place to catch up, share what you're working on, or just hang out together. Us
 
 ## Join a campfire
 
-Ask your host for the server address and an invitation code if their community requires one. Open their browser link, or enter the address in the desktop app, then create an account or sign in.
+Ask your host for their **server link**, or an **invite link** if their community is invite only. Paste it into the desktop app's server field, then create an account or sign in.
+
+Links include the server's fingerprint, so the desktop app verifies it is talking to the real server from the very first connection. If you only have an address, the app shows the fingerprint once and asks you to confirm it; after that it refuses to connect if the server's identity ever changes.
+
+You can also open the link in a browser. Browsers can't verify the server's own certificate automatically, so they show a security warning the first time; accept it only for a server you trust. The desktop app is the safer way to connect.
 
 Visit [Releases](https://github.com/d3cr1pt0r/Campfire/releases) for available desktop downloads. Each community has its own accounts and conversations.
 
@@ -35,11 +39,18 @@ npm run build
 npm run server
 ```
 
-Open **http://localhost:3001**. Use the setup code printed in the server terminal to create the first account, which becomes the owner. New communities start in **Invite only** mode; manage invitations under **Settings → Server settings**.
+Every connection is encrypted with HTTPS, with no domain or certificate setup. On first start the server creates its own key and prints:
 
-Keep the server running for your community to stay connected. Your community's data is stored in `data/`; keep it backed up.
+- its **fingerprint** and a **server link** to share with your community;
+- an **owner setup link**. Paste it into the desktop app to create the first account, which becomes the owner.
 
-For internet hosting, use HTTPS and configure call connectivity. See [.env.example](.env.example) for the settings.
+Set `PUBLIC_ADDRESS` to your server's public IP or hostname so the printed links are ready to share. New communities start in **Invite only** mode; manage invitations and copy invite links under **Settings → Server settings**.
+
+Keep the server running for your community to stay connected. Your community's data is stored in `data/`, including the server's identity key in `data/identity/`. Back up the whole folder and keep it: without the identity key the server refuses to start, and creating a new identity means every desktop app refuses to connect until members get a new server link. Campfire doesn't encrypt stored messages and files, so use full-disk encryption and keep backups private.
+
+Already have a domain certificate or an HTTPS reverse proxy? See [.env.example](.env.example) for `TLS_CERT_FILE`/`TLS_KEY_FILE`, proxy mode and call connectivity settings.
+
+For local development, `npm run server:dev` serves plain HTTP on `127.0.0.1` only; open **http://localhost:3001**.
 
 Prefer Docker? Run:
 
@@ -47,7 +58,7 @@ Prefer Docker? Run:
 docker compose up --build -d
 ```
 
-The setup code appears in `docker compose logs campfire`. Community data is kept in a persistent Docker volume.
+The fingerprint, server link and owner setup link appear in `docker compose logs campfire`. Community data and the server's identity are kept in a persistent Docker volume; back it up.
 
 For an existing installation, follow the [Campfire branding upgrade steps](REWORK.md#campfire-branding-upgrade) before starting this version.
 
@@ -59,7 +70,7 @@ With the dependencies installed, open another terminal in the project folder and
 npm start
 ```
 
-Enter your community server's address when prompted. The desktop app connects to a server; it does not start one for you.
+Paste your community's server link when prompted. The desktop app connects to a server; it does not start one for you.
 
 ## For contributors and hosts
 

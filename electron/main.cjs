@@ -16,6 +16,15 @@ const path = require('node:path');
 const { clipboardAttachments } = require('./clipboard-files.cjs');
 const { createRendererServer, listenRendererServer } = require('./renderer-server.cjs');
 const { createClientState } = require('./client-state.cjs');
+const {
+    fingerprint,
+    normalizeFingerprint,
+    parseOrigin,
+    createPinStore,
+    verifyDecision,
+    checkState,
+    inspectServer,
+} = require('./pins.cjs');
 app.setAppUserModelId('org.campfire.desktop');
 let assetServer;
 let tray;
@@ -34,6 +43,20 @@ else {
         .then(async () => {
             Menu.setApplicationMenu(null);
             const clientState = createClientState(app.getPath('userData'), safeStorage);
+            const pinStore = createPinStore(
+                () => clientState.getInternal('pins'),
+                (value) => clientState.setInternal('pins', value),
+            );
+            // Every TLS connection the renderer makes is checked against the pinned identity.
+            session.defaultSession.setCertificateVerifyProc((request, callback) => {
+                let presented = null;
+                try {
+                    presented = fingerprint(request.certificate.data);
+                } catch {
+                    /* Unparseable certificates are rejected below. */
+                }
+                callback(verifyDecision(pinStore, request.hostname, presented, request.errorCode));
+            });
             assetServer = createRendererServer(path.join(__dirname, '..', 'dist'));
             const rendererPort = await listenRendererServer(
                 assetServer,
@@ -64,6 +87,90 @@ else {
                 const state = powerMonitor.getSystemIdleState(60);
                 if (state === 'unknown') return null;
                 return { seconds: powerMonitor.getSystemIdleTime(), locked: state === 'locked' };
+            });
+            // The identity each server presented to the latest check; trust must match it.
+            const observed = new Map();
+            const restart = () => {
+                app.relaunch();
+                app.exit(0);
+            };
+            ipcMain.handle('pins:check', async (event, origin) => {
+                if (!trusted(event.senderFrame?.url)) throw Error('Untrusted identity request');
+                const target = parseOrigin(origin);
+                try {
+                    const result = await inspectServer(target);
+                    observed.set(target.origin, result.fingerprint);
+                    return {
+                        state: checkState(
+                            pinStore,
+                            target.origin,
+                            result.fingerprint,
+                            result.authorized,
+                        ),
+                        fingerprint: result.fingerprint,
+                    };
+                } catch (error) {
+                    return { state: 'unreachable', message: error.message };
+                }
+            });
+            ipcMain.handle('pins:get', (event, origin) =>
+                trusted(event.senderFrame?.url) ? pinStore.get(origin) : null,
+            );
+            ipcMain.handle('pins:trust', async (event, origin, value) => {
+                if (!trusted(event.senderFrame?.url)) throw Error('Untrusted identity request');
+                const target = parseOrigin(origin);
+                const presented = normalizeFingerprint(value);
+                if (!presented || observed.get(target.origin) !== presented)
+                    return {
+                        ok: false,
+                        reason: 'The server presented a different identity. Check the address and try again.',
+                    };
+                const saved = pinStore.get(target.origin);
+                if (saved === presented) return { ok: true };
+                if (saved) {
+                    // Replacing a pin is exactly what an attacker needs, so the main process asks.
+                    const { response } = await dialog.showMessageBox(
+                        BrowserWindow.fromWebContents(event.sender),
+                        {
+                            type: 'warning',
+                            title: 'Server identity changed',
+                            message: `Trust a new identity for ${target.origin}?`,
+                            detail: 'Only continue if the server owner told you the server was reinstalled and you got this link directly from them. Otherwise someone may be intercepting your connection. Campfire restarts to apply the change.',
+                            buttons: ['Keep the saved identity', 'Trust new identity and restart'],
+                            defaultId: 0,
+                            cancelId: 0,
+                            noLink: true,
+                        },
+                    );
+                    if (response !== 1) return { ok: false, reason: 'cancelled' };
+                    pinStore.set(target.origin, presented);
+                    restart();
+                    return { ok: true, restarting: true };
+                }
+                pinStore.set(target.origin, presented);
+                return { ok: true };
+            });
+            ipcMain.handle('pins:forget', async (event, origin) => {
+                if (!trusted(event.senderFrame?.url)) throw Error('Untrusted identity request');
+                const target = parseOrigin(origin);
+                if (!pinStore.get(target.origin)) return { ok: true };
+                const { response } = await dialog.showMessageBox(
+                    BrowserWindow.fromWebContents(event.sender),
+                    {
+                        type: 'warning',
+                        title: 'Forget server identity',
+                        message: `Forget the saved identity for ${target.origin}?`,
+                        detail: 'Campfire will ask you to confirm this server again on your next connection. Only do this if the server owner told you the server changed. Campfire restarts to apply the change.',
+                        buttons: ['Cancel', 'Forget and restart'],
+                        defaultId: 0,
+                        cancelId: 0,
+                        noLink: true,
+                    },
+                );
+                if (response !== 1) return { ok: false, reason: 'cancelled' };
+                pinStore.remove(target.origin);
+                restart();
+                return { ok: true, restarting: true };
             });
             ipcMain.on('client-state:get', (event, key) => {
                 event.returnValue = trusted(event.senderFrame?.url) ? clientState.get(key) : null;

@@ -2,6 +2,11 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { createPassword, verifyPassword, tokenHash } from './security.js';
 import { check, route, createRateLimit } from './policies.js';
 import { transaction } from './database.js';
+const checkPassword = (password) =>
+    check(
+        typeof password === 'string' && password.length >= 10 && password.length <= 128,
+        'Password must contain 10–128 characters',
+    );
 export function registerAccounts({
     app,
     io,
@@ -31,10 +36,7 @@ export function registerAccounts({
                 typeof username === 'string' && /^[a-zA-Z0-9_ -]{2,32}$/.test(username),
                 'Username must be 2–32 letters, numbers, spaces, underscores or hyphens',
             );
-            check(
-                typeof password === 'string' && password.length >= 10 && password.length <= 128,
-                'Password must contain 10–128 characters',
-            );
+            checkPassword(password);
             let u = get('SELECT * FROM users WHERE username=?', username);
             if (req.params.action === 'register') {
                 registration.authorize(req.body);
@@ -79,4 +81,45 @@ export function registerAccounts({
             res.json({ token, user: publicUser(u) });
         }),
     );
+    const passwordLimit = createRateLimit({ maximum: 5 });
+    // Mounted after authentication by createApp.
+    const mount = () =>
+        app.post(
+            '/api/account/password',
+            route(async (req, res) => {
+                passwordLimit(req.user.id);
+                const { current, password } = req.body;
+                check(
+                    typeof current === 'string' && current.length <= 128,
+                    'Enter your current password',
+                );
+                checkPassword(password);
+                check(
+                    await verifyPassword(current, req.user.password),
+                    'Your current password is incorrect',
+                    403,
+                );
+                const passwordHash = await createPassword(password);
+                const token = req.headers.authorization.replace(/^Bearer /, '');
+                transaction(db, () => {
+                    check(
+                        get('SELECT id FROM users WHERE id=? AND banned=0', req.user.id),
+                        'Please sign in again',
+                        401,
+                    );
+                    run('UPDATE users SET password=? WHERE id=?', passwordHash, req.user.id);
+                    // Other devices may hold a session captured with the old password.
+                    run(
+                        'DELETE FROM sessions WHERE user=? AND token<>?',
+                        req.user.id,
+                        tokenHash(token),
+                    );
+                });
+                for (const socket of io.sockets.sockets.values())
+                    if (socket.data.user?.id === req.user.id && socket.data.token !== token)
+                        socket.disconnect(true);
+                res.json({ ok: true });
+            }),
+        );
+    return { mount };
 }

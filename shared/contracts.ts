@@ -57,6 +57,8 @@ export type State = {
     directCalls: { id: string; creator: string; invited: string[]; members: string[] }[];
     emojis: { id: string; name: string; author: string }[];
     iceServers: RTCIceServer[];
+    // Present when the server terminates TLS itself; fingerprint only for its own identity.
+    identity?: { fingerprint?: string; certificateSha256: string };
 };
 export type Message = {
     thread?: string | null;

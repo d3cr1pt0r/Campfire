@@ -1,3 +1,22 @@
+// Constant-bitrate Opus keeps voice packet sizes independent of speech, so encrypted traffic
+// does not reveal what is said through its packet lengths. RFC 7587 makes cbr a receiver
+// preference, so it is added to the description we receive and our sender honours it.
+export function preferConstantBitrate(sdp: string) {
+    let result = sdp;
+    for (const [, payload] of sdp.matchAll(/^a=rtpmap:(\d+) opus\/48000/gim)) {
+        const fmtp = new RegExp(`^a=fmtp:${payload} ([^\\r\\n]*)`, 'm');
+        const parameters = result.match(fmtp)?.[1];
+        if (parameters === undefined)
+            result = result.replace(
+                new RegExp(`^(a=rtpmap:${payload} opus/48000[^\\r\\n]*)(\\r?\\n)`, 'mi'),
+                `$1$2a=fmtp:${payload} cbr=1$2`,
+            );
+        else if (!/(^|;)\s*cbr=/.test(parameters))
+            result = result.replace(fmtp, `a=fmtp:${payload} ${parameters};cbr=1`);
+    }
+    return result;
+}
+
 export type PeerSignal = {
     description?: RTCSessionDescriptionInit;
     candidate?: RTCIceCandidateInit;
@@ -43,7 +62,12 @@ export function createPeerSignaling(
                         pending = [];
                         return;
                     }
-                    await pc.setRemoteDescription(data.description);
+                    const { description } = data;
+                    await pc.setRemoteDescription(
+                        description.sdp
+                            ? { ...description, sdp: preferConstantBitrate(description.sdp) }
+                            : description,
+                    );
                     if (closed) return;
                     if (data.description.type === 'offer') {
                         // Reuse the offer's transceivers and attach local tracks

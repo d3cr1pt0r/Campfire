@@ -109,6 +109,12 @@ export function migrate(db) {
                 'ALTER TABLE channels ADD COLUMN reactionAuthors INTEGER NOT NULL DEFAULT 1 CHECK(reactionAuthors IN (0,1))',
             );
         },
+        () => {
+            // Earlier versions served plain HTTP, so session tokens and invitation codes may
+            // have been observed in transit. Encrypted transport starts with fresh ones.
+            db.exec(`DELETE FROM sessions;
+                UPDATE invitations SET revoked=1 WHERE usedBy IS NULL AND revoked=0;`);
+        },
     ];
     migrations.forEach((apply, index) => {
         const version = index + 1;

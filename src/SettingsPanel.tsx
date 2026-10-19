@@ -2,7 +2,9 @@ import { permissionGroups } from '../shared/permissions.js';
 import { RegistrationSettings } from './RegistrationSettings';
 import { notificationKey } from './notifications';
 import { canonicalRoom } from '../shared/rooms.js';
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { formatFingerprint, serverLink } from './serverLink';
+import { pinsFor } from './serverTrust';
 import { AvatarCropper } from './AvatarCropper';
 import { ChannelSettings } from './ChannelSettings';
 import { ArrowRight, Bell, LogOut, Pencil, Plus, Trash2, X } from 'lucide-react';
@@ -65,6 +67,24 @@ export function SettingsPanel({
     const [removeUser, setRemoveUser] = useState<string | null>(null);
     const [deleteEmoji, setDeleteEmoji] = useState<string | null>(null);
     const [deleteRole, setDeleteRole] = useState<string | null>(null);
+    // The fingerprint this desktop app verified; links built from it protect new members.
+    const [pin, setPin] = useState<string | null>(null);
+    useEffect(() => {
+        let current = true;
+        void pinsFor(url)
+            ?.get(url)
+            .then((value) => current && setPin(value))
+            .catch(() => {});
+        return () => {
+            current = false;
+        };
+    }, [url]);
+    const reportedPin = state.identity?.fingerprint;
+    const copyServerLink = () =>
+        void act(async () => {
+            await navigator.clipboard.writeText(serverLink(url, { pin: pin ?? undefined }));
+            notify('Server link copied.');
+        });
     const sections = [
         ['account', 'My account'],
         ['appearance', 'Appearance'],
@@ -319,6 +339,64 @@ export function SettingsPanel({
                                 Remove profile picture
                             </button>
                         )}
+                        <form
+                            onSubmit={(event) => {
+                                event.preventDefault();
+                                const form = event.currentTarget;
+                                const data = new FormData(form);
+                                void act(async () => {
+                                    if (data.get('password') !== data.get('confirm'))
+                                        throw new Error('The new passwords don’t match.');
+                                    await api('/account/password', 'POST', {
+                                        current: data.get('current'),
+                                        password: data.get('password'),
+                                    });
+                                    form.reset();
+                                    notify('Password changed. Your other devices were signed out.');
+                                });
+                            }}
+                        >
+                            <h3>Change password</h3>
+                            <label>
+                                Current password
+                                <input
+                                    name="current"
+                                    type="password"
+                                    autoComplete="current-password"
+                                    maxLength={128}
+                                    required
+                                />
+                            </label>
+                            <label>
+                                New password
+                                <input
+                                    name="password"
+                                    type="password"
+                                    autoComplete="new-password"
+                                    minLength={10}
+                                    maxLength={128}
+                                    required
+                                    placeholder="At least 10 characters"
+                                />
+                            </label>
+                            <label>
+                                Confirm new password
+                                <input
+                                    name="confirm"
+                                    type="password"
+                                    autoComplete="new-password"
+                                    minLength={10}
+                                    maxLength={128}
+                                    required
+                                />
+                            </label>
+                            <p className="muted">
+                                Changing your password signs out every other device.
+                            </p>
+                            <button className="primary" disabled={busy}>
+                                Change password
+                            </button>
+                        </form>
                         <label>
                             Connected server
                             <input value={url} readOnly />
@@ -811,7 +889,9 @@ export function SettingsPanel({
                                 </p>
                             </>
                         )}
-                        {state.me.role === 'owner' && <RegistrationSettings api={api} url={url} />}
+                        {state.me.role === 'owner' && (
+                            <RegistrationSettings api={api} url={url} pin={pin} />
+                        )}
                         {state.me.role === 'owner' && (
                             <section className="server-members">
                                 <h3>Manage members</h3>
@@ -886,6 +966,36 @@ export function SettingsPanel({
                             Server address
                             <input readOnly value={url} />
                         </label>
+                        {(pin || reportedPin) && (
+                            <div className="server-identity">
+                                <span className="field-help">
+                                    {pin
+                                        ? 'Server fingerprint, verified by this device'
+                                        : 'Server fingerprint reported by the server. Compare it with the server console before sharing it.'}
+                                </span>
+                                <code className="fingerprint">
+                                    {formatFingerprint(pin || reportedPin!)}
+                                </code>
+                            </div>
+                        )}
+                        {pin && reportedPin && pin !== reportedPin && (
+                            <p role="alert">
+                                The server reports a different fingerprint than the one this device
+                                verified. Don’t share links until the owner has checked the server.
+                            </p>
+                        )}
+                        <button className="secondary" disabled={busy} onClick={copyServerLink}>
+                            Copy server link
+                        </button>
+                        <p className="muted">
+                            {pin
+                                ? 'The link includes the server fingerprint, so the desktop app verifies this server from the first connection.'
+                                : url.startsWith('http:')
+                                  ? 'This is a local development server; its connection is not encrypted.'
+                                  : window.campfire
+                                    ? 'This server uses a certificate from a trusted authority, so its link needs no fingerprint.'
+                                    : 'Links copied in a browser don’t include the fingerprint. Copy links from the desktop app or the server console so new members are protected from their first connection.'}
+                        </p>
                         <p className="muted">
                             For calls over the internet, your server may need a relay service. See
                             the hosting guide.

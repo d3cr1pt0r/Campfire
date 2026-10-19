@@ -3559,6 +3559,38 @@ button:disabled {
     font-family: monospace;
 }
 
+.trust-prompt {
+    margin-top: 22px;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    background: var(--panel);
+}
+.trust-prompt h3 {
+    margin: 0 0 8px;
+}
+.trust-prompt.trust-changed {
+    border-color: #ef929f;
+}
+.trust-prompt > button:not(.primary) {
+    margin-top: 10px;
+    margin-right: 8px;
+}
+.fingerprint {
+    display: block;
+    margin-top: 8px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--field);
+    font-family: monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+.server-identity {
+    margin-block: 12px;
+}
+
 .role-permission-group {
     border: 1px solid var(--border);
     border-radius: 12px;

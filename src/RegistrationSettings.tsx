@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ApiClient } from './api';
+import { serverLink } from './serverLink';
 type Invitation = {
     id: string;
     label: string;
@@ -9,7 +10,15 @@ type Invitation = {
     revoked: number;
 };
 type Registration = { mode: 'open' | 'invite'; invitations: Invitation[] };
-export function RegistrationSettings({ api, url }: { api: ApiClient; url: string }) {
+export function RegistrationSettings({
+    api,
+    url,
+    pin,
+}: {
+    api: ApiClient;
+    url: string;
+    pin: string | null;
+}) {
     const [data, setData] = useState<Registration | null>(null);
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
@@ -150,8 +159,11 @@ export function RegistrationSettings({ api, url }: { api: ApiClient; url: string
                                 />
                             </label>
                             <p className="muted">
-                                Copy this now. The full code is shown only here. Share it with the
-                                server address.
+                                Copy this now. The full code is shown only here. The invite link
+                                contains the server address
+                                {pin
+                                    ? ' and fingerprint, so the desktop app verifies the server.'
+                                    : '.'}
                             </p>
                             <button
                                 type="button"
@@ -163,12 +175,12 @@ export function RegistrationSettings({ api, url }: { api: ApiClient; url: string
                                 type="button"
                                 onClick={() =>
                                     void copy(
-                                        `${url.replace(/\/$/, '')}/#invite=${code}`,
-                                        'Browser invitation link copied.',
+                                        serverLink(url, { pin: pin ?? undefined, invite: code }),
+                                        'Invite link copied.',
                                     )
                                 }
                             >
-                                Copy browser link
+                                Copy invite link
                             </button>
                             <button type="button" onClick={() => setCode('')}>
                                 Dismiss code
