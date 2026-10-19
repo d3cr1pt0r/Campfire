@@ -50,6 +50,6 @@ The working `package.json` declares version 0.1.9. No local v0.1.8 or v0.1.9 tag
 
 ## v0.2.0 draft
 
-[Prepared description](v0.2.0.md). Covers the transport-encryption work after `4816289`: self-generated TLS server identity, desktop fingerprint pinning, server and invite links with fingerprints, the one-time sign-out on upgrade, change password, and constant-bitrate voice.
+[Prepared description](v0.2.0.md). Covers changes after local tag v0.1.9 (`0820d71`) through `7753def`: encrypted transport and desktop server identity verification, password changes, video pop-outs, channel notification modes, the removal of friends, left-sidebar direct messages and interface cleanup, and the redesigned roles and permissions with Default fallback and removal of Member.
 
-The working `package.json` declares version 0.2.0. No local v0.2.0 tag exists; the changelog link points at the future tag and must be reconciled before publication. This draft has not been published to GitHub.
+The package manifest and lockfile declare version 0.2.0. No local v0.2.0 tag exists. The changelog link uses the v0.1.9 tag and the recorded source cutoff; reconcile it with the final v0.2.0 tag before publication. No live release lookup was performed, and no publication date or uploaded assets are assumed. This draft has not been published to GitHub.
