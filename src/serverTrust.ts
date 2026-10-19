@@ -1,4 +1,4 @@
-// Desktop pinning applies to https:// servers; plain http:// is only allowed on this computer.
+// Desktop pinning applies only to HTTPS. HTTP approval is enforced separately.
 export const pinsFor = (origin: string) =>
     origin.startsWith('https:') ? globalThis.window?.campfire?.pins : undefined;
 

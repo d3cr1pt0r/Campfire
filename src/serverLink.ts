@@ -3,7 +3,7 @@
 export type ServerLink = { origin: string; pin?: string; invite?: string; setup?: string };
 
 export const isLoopbackHost = (hostname: string) =>
-    hostname === 'localhost' || hostname === '127.0.0.1';
+    hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
 
 export function normalizeFingerprint(value: string) {
     const compact = value.replace(/[\s-]/g, '').toUpperCase();
@@ -12,7 +12,7 @@ export function normalizeFingerprint(value: string) {
 
 export const formatFingerprint = (compact: string) => compact.match(/.{1,4}/g)!.join('-');
 
-export function parseServerLink(input: string): ServerLink {
+export function parseServerLink(input: string, allowInsecureHttp = false): ServerLink {
     const text = input.trim();
     if (!text) throw new Error('Enter a server address or link.');
     let url: URL;
@@ -25,9 +25,9 @@ export function parseServerLink(input: string): ServerLink {
     }
     if (!['https:', 'http:'].includes(url.protocol))
         throw new Error('Campfire server addresses start with https://');
-    if (url.protocol === 'http:' && !isLoopbackHost(url.hostname))
+    if (url.protocol === 'http:' && !isLoopbackHost(url.hostname) && !allowInsecureHttp)
         throw new Error(
-            'Campfire servers use https://. Plain http:// only works for a server on this computer.',
+            'Campfire servers use https://. To use remote HTTP, allow insecure HTTP for this server in the desktop app.',
         );
     if (url.username || url.password || url.search || url.pathname !== '/')
         throw new Error('Enter only the server address, for example https://chat.example.com');
@@ -35,6 +35,10 @@ export function parseServerLink(input: string): ServerLink {
     const link: ServerLink = { origin: url.origin };
     const pin = params.get('pin');
     if (pin !== null) {
+        if (url.protocol !== 'https:')
+            throw new Error(
+                'Server fingerprints require HTTPS. HTTP cannot verify a server identity.',
+            );
         const fingerprint = normalizeFingerprint(pin);
         if (!fingerprint)
             throw new Error(
@@ -61,14 +65,22 @@ export function serverLink(origin: string, { pin, invite }: { pin?: string; invi
     return `${origin.replace(/\/$/, '')}/${params.length ? `#${params.join('&')}` : ''}`;
 }
 
-// Earlier versions connected over plain HTTP. Upgrade saved remote addresses to HTTPS and
-// require a new sign-in, because those sessions were revoked when the server upgraded.
-export function restoreConnection(saved: unknown, fallback: string) {
+// Upgrade legacy remote HTTP sessions to HTTPS unless the desktop app has explicitly
+// approved that exact HTTP origin. Browsers never supply an approval callback.
+export function restoreConnection(
+    saved: unknown,
+    fallback: string,
+    allowInsecureHttp: (origin: string) => boolean = () => false,
+) {
     const { url, token } = (saved || {}) as { url?: unknown; token?: unknown };
     if (typeof url !== 'string' || !url) return { url: fallback, token: '' };
     try {
         const parsed = new URL(url);
-        if (parsed.protocol === 'http:' && !isLoopbackHost(parsed.hostname)) {
+        if (
+            parsed.protocol === 'http:' &&
+            !isLoopbackHost(parsed.hostname) &&
+            !allowInsecureHttp(parsed.origin)
+        ) {
             parsed.protocol = 'https:';
             return { url: parsed.origin, token: '' };
         }

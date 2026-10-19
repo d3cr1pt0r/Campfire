@@ -28,7 +28,7 @@ export function createApp({
     maxStoredUploadBytes = 1024 * 1024 * 1024,
     setupCode,
     sessionLifetimeMs = 30 * 86400000,
-    // null: plain HTTP (loopback development, tests or behind a TLS proxy).
+    // null: plain HTTP (development, TLS proxy, or explicitly enabled direct HTTP).
     // { directory, address, allowNew }: self-managed identity. { certFile, keyFile }: host files.
     tls = null,
 } = {}) {

@@ -39,7 +39,7 @@ npm run build
 npm run server
 ```
 
-Every connection is encrypted with HTTPS, with no domain or certificate setup. On first start the server creates its own key and prints:
+By default, connections use HTTPS, with no domain or certificate setup. On first start the server creates its own key and prints:
 
 - its **fingerprint** and a **server link** to share with your community;
 - an **owner setup link**. Paste it into the desktop app to create the first account, which becomes the owner.
@@ -51,6 +51,17 @@ Keep the server running for your community to stay connected. Your community's d
 Already have a domain certificate or an HTTPS reverse proxy? See [.env.example](.env.example) for `TLS_CERT_FILE`/`TLS_KEY_FILE`, proxy mode and call connectivity settings.
 
 For local development, `npm run server:dev` serves plain HTTP on `127.0.0.1` only; open **http://localhost:3001**.
+
+To choose the transport for a terminal run, use:
+
+```bash
+npm run server:http    # Explicitly enable direct, unencrypted HTTP
+npm run server:https   # Force HTTPS, overriding TLS=off in .env
+```
+
+These shortcuts override the transport setting in `.env` for that run. `npm run server` uses HTTPS by default unless configured otherwise in the environment.
+
+To persist direct HTTP hosting in the environment instead, set both `TLS=off` and `ALLOW_INSECURE_HTTP=1`. In the **desktop app**, enter the full `http://address:port`, enable **Allow insecure HTTP for this server**, and accept the confirmation. Approval is saved for that exact address and port, including across restarts; uncheck it at sign-in to revoke it. The connected sidebar identifies insecure HTTP. Passwords, session tokens, messages and files are exposed in transit, and HTTP cannot verify the server identity. Bare addresses still default to HTTPS, and remote HTTP remains blocked in the browser client.
 
 Prefer Docker? Run:
 

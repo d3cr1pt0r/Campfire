@@ -6,6 +6,10 @@ interface Window {
             text: string;
         }>;
         getIdleState?: () => Promise<{ seconds: number; locked: boolean } | null>;
+        insecureHttp?: {
+            isAllowed(origin: string): boolean;
+            setAllowed(origin: string, enabled: boolean): Promise<boolean>;
+        };
         pins?: {
             check(origin: string): Promise<import('./serverTrust').ServerCheck>;
             get(origin: string): Promise<string | null>;

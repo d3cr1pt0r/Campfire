@@ -14,7 +14,7 @@ import { preferConstantBitrate } from '../src/signaling.ts';
 const pin = 'WMCFB4XOUTLT2JV4NRB45NS7MHMYODME7WWVQCCLSBMAY2ZQBEJQ';
 const invite = 'a'.repeat(64);
 
-test('addresses default to HTTPS and plain HTTP is only accepted for this computer', () => {
+test('addresses default to HTTPS and reject remote HTTP without an opt-in', () => {
     assert.deepEqual(parseServerLink('203.0.113.5:3001'), { origin: 'https://203.0.113.5:3001' });
     assert.deepEqual(parseServerLink(' https://Chat.Example.com/ '), {
         origin: 'https://chat.example.com',
@@ -46,6 +46,37 @@ test('server and invite links carry a normalised fingerprint, invitation and set
     });
     assert.throws(() => parseServerLink('https://chat.example.com/#pin=ABCD'), /fingerprint/);
     assert.throws(() => parseServerLink('https://chat.example.com/#invite=nope'), /invitation/);
+});
+
+test('remote HTTP needs explicit approval and cannot claim fingerprint verification', () => {
+    const origin = 'http://192.168.1.5:3001';
+    assert.deepEqual(parseServerLink(`${origin}/#invite=${invite}&setup=owner-code`, true), {
+        origin,
+        invite,
+        setup: 'owner-code',
+    });
+    assert.throws(() => parseServerLink(`${origin}/#invite=${invite}`), /allow insecure HTTP/i);
+    assert.throws(
+        () => parseServerLink(`${origin}/#pin=${pin}`, true),
+        /fingerprints require HTTPS/,
+    );
+    assert.deepEqual(parseServerLink('192.168.1.5:3001', true), {
+        origin: 'https://192.168.1.5:3001',
+    });
+    assert.deepEqual(
+        restoreConnection({ url: origin, token: 'saved' }, '', (value) => value === origin),
+        {
+            url: origin,
+            token: 'saved',
+        },
+    );
+    assert.deepEqual(
+        restoreConnection({ url: origin, token: 'saved' }, '', () => false),
+        {
+            url: 'https://192.168.1.5:3001',
+            token: '',
+        },
+    );
 });
 
 test('saved plain-HTTP connections upgrade to HTTPS and require signing in again', () => {

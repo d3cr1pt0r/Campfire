@@ -17,6 +17,7 @@ const { installWindowPolicy } = require('./window-policy.cjs');
 const { clipboardAttachments } = require('./clipboard-files.cjs');
 const { createRendererServer, listenRendererServer } = require('./renderer-server.cjs');
 const { createClientState } = require('./client-state.cjs');
+const { installHttpPolicy } = require('./http-policy.cjs');
 const {
     fingerprint,
     normalizeFingerprint,
@@ -72,6 +73,28 @@ else {
                     return false;
                 }
             };
+            installHttpPolicy({
+                session: session.defaultSession,
+                ipcMain,
+                clientState,
+                trusted,
+                confirm: async (event, target) => {
+                    const { response } = await dialog.showMessageBox(
+                        BrowserWindow.fromWebContents(event.sender),
+                        {
+                            type: 'warning',
+                            title: 'Allow insecure HTTP',
+                            message: `Allow insecure HTTP for ${target}?`,
+                            detail: 'Passwords, session tokens, messages and files can be read or changed in transit. This connection has no server identity verification. This choice is saved only for this address and port.',
+                            buttons: ['Cancel', 'Allow insecure HTTP'],
+                            defaultId: 0,
+                            cancelId: 0,
+                            noLink: true,
+                        },
+                    );
+                    return response === 1;
+                },
+            });
             let readingClipboard = false;
             ipcMain.handle('clipboard:attachments', async (event) => {
                 if (!trusted(event.senderFrame?.url)) throw Error('Untrusted clipboard request');

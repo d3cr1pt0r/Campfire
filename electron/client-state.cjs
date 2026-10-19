@@ -2,7 +2,7 @@ const { readFileSync, writeFileSync, renameSync, mkdirSync } = require('node:fs'
 const path = require('node:path');
 const allowedKeys = new Set(['connection', 'preferences', 'rendererPort']);
 // Written only by the main process; the renderer's storage bridge cannot reach these.
-const internalKeys = new Set(['pins']);
+const internalKeys = new Set(['pins', 'http-origins']);
 const isAllowedKey = (key) =>
     typeof key === 'string' &&
     (allowedKeys.has(key) ||

@@ -10,6 +10,8 @@
     "scripts": {
         "dev": "vite --host 127.0.0.1",
         "server": "node --env-file-if-exists=.env server/index.js",
+        "server:http": "node --env-file-if-exists=.env server/index.js --http",
+        "server:https": "node --env-file-if-exists=.env server/index.js --https",
         "server:dev": "node --env-file-if-exists=.env server/index.js --dev-http",
         "build": "vite build",
         "start": "npm run build && electron .",

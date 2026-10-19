@@ -7,6 +7,7 @@ import {
 import { shouldNotify, createNotificationSound, migrateNotificationKeys } from './notifications';
 import {
     formatFingerprint,
+    isLoopbackHost,
     parseServerLink,
     restoreConnection,
     type ServerLink,
@@ -121,7 +122,26 @@ applyTheme(
     document.documentElement,
     window.matchMedia('(prefers-color-scheme: dark)').matches,
 );
-const initial = restoreConnection(stored<unknown>('connection', null), defaultServerUrl);
+const insecureHttpAllowed = (origin: string) =>
+    window.campfire?.insecureHttp?.isAllowed(origin) === true;
+function remoteHttpOrigin(input: string) {
+    try {
+        const { origin } = parseServerLink(input, true);
+        const parsed = new URL(origin);
+        return parsed.protocol === 'http:' && !isLoopbackHost(parsed.hostname) ? origin : null;
+    } catch {
+        return null;
+    }
+}
+function parseConnectionLink(input: string) {
+    const candidate = remoteHttpOrigin(input);
+    return parseServerLink(input, candidate !== null && insecureHttpAllowed(candidate));
+}
+const initial = restoreConnection(
+    stored<unknown>('connection', null),
+    defaultServerUrl,
+    insecureHttpAllowed,
+);
 // Browser links: https://server/#invite=…&setup=… (#pin= is only used by the desktop app).
 const hashLink = new URLSearchParams(window.location.hash.slice(1));
 const invitationFromLink = hashLink.get('invite') || '';
@@ -154,6 +174,21 @@ function App() {
     const [trustPrompt, setTrustPrompt] = useState<TrustPrompt | null>(null);
     const [verifiedUrl, setVerifiedUrl] = useState<string | null>(null);
     const [probe, setProbe] = useState(0);
+    const [httpBusy, setHttpBusy] = useState(false);
+    const httpTarget = remoteHttpOrigin(authUrl);
+    const httpApproved = httpTarget !== null && insecureHttpAllowed(httpTarget);
+    const setHttpApproval = async (enabled: boolean) => {
+        if (!httpTarget || httpBusy || !window.campfire?.insecureHttp) return;
+        setHttpBusy(true);
+        try {
+            await window.campfire.insecureHttp.setAllowed(httpTarget, enabled);
+            setProbe((n) => n + 1);
+        } catch (e) {
+            setError((e as Error).message);
+        } finally {
+            setHttpBusy(false);
+        }
+    };
     const [infoNote, setInfoNote] = useState('');
     const pinFor = (link: ServerLink) =>
         link.pin ?? (linkPin?.origin === link.origin ? linkPin.pin : undefined);
@@ -198,7 +233,7 @@ function App() {
         const timer = setTimeout(() => {
             let link: ServerLink;
             try {
-                link = parseServerLink(authUrl);
+                link = parseConnectionLink(authUrl);
             } catch {
                 return; // The submit handler explains invalid addresses.
             }
@@ -653,7 +688,7 @@ function App() {
     };
     const submitLogin = async (f: FormData) => {
         await act(async () => {
-            const link = parseServerLink(String(f.get('url')));
+            const link = parseConnectionLink(String(f.get('url')));
             const resume = () => {
                 setProbe((n) => n + 1);
                 void submitLogin(f);
@@ -1040,7 +1075,10 @@ function App() {
                                         if (value.includes('#')) {
                                             try {
                                                 // A pasted server or invite link fills the form.
-                                                const link = parseServerLink(value);
+                                                const link = parseServerLink(
+                                                    value,
+                                                    !!window.campfire?.insecureHttp,
+                                                );
                                                 setAuthUrl(link.origin);
                                                 setLinkPin(
                                                     link.pin
@@ -1061,6 +1099,32 @@ function App() {
                                     placeholder="Server address or link"
                                 />
                             </label>
+                            {httpTarget && !window.campfire?.insecureHttp && (
+                                <p className="field-help" role="alert">
+                                    Use HTTPS in your browser. Remote HTTP requires an explicit
+                                    opt-in in the Campfire desktop app.
+                                </p>
+                            )}
+                            {window.campfire?.insecureHttp && httpTarget && (
+                                <div className="http-approval">
+                                    <label className="http-approval-toggle">
+                                        <input
+                                            type="checkbox"
+                                            checked={httpApproved}
+                                            disabled={busy || httpBusy}
+                                            onChange={(event) =>
+                                                void setHttpApproval(event.target.checked)
+                                            }
+                                        />
+                                        Allow insecure HTTP for this server
+                                    </label>
+                                    <p className="field-help">
+                                        HTTP exposes passwords, messages and files in transit.
+                                        Server identity cannot be verified. This choice applies only
+                                        to {httpTarget}.
+                                    </p>
+                                </div>
+                            )}
                             <label>
                                 Username
                                 <input
@@ -1139,7 +1203,10 @@ function App() {
                                     {infoError}
                                 </p>
                             )}
-                            <button className="primary" disabled={busy}>
+                            <button
+                                className="primary"
+                                disabled={busy || httpBusy || (!!httpTarget && !httpApproved)}
+                            >
                                 {busy ? 'Just a moment…' : register ? 'Create account' : 'Sign in'}
                                 <ArrowRight size={18} />
                             </button>
@@ -1249,7 +1316,11 @@ function App() {
                                     }
                                 >
                                     <i aria-hidden="true" />
-                                    {connected ? 'Connected to server' : 'Reconnecting…'}
+                                    {connected
+                                        ? remoteHttpOrigin(url)
+                                            ? 'Connected · Insecure HTTP'
+                                            : 'Connected to server'
+                                        : 'Reconnecting…'}
                                 </small>
                             </span>
                             <ChevronDown size={18} />

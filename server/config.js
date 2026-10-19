@@ -17,10 +17,13 @@ export function publicAddress(value) {
     return fail('PUBLIC_ADDRESS must be a hostname or IP address without a scheme or port.');
 }
 
-// Transport rules: every server is HTTPS unless plain HTTP is either confined to this
-// machine (development) or explicitly placed behind a trusted HTTPS reverse proxy.
+// HTTPS by default. Direct remote HTTP requires its own explicit opt-in.
 export function serverConfig(env = process.env, argv = []) {
     const devHttp = argv.includes('--dev-http');
+    const directHttp = argv.includes('--http');
+    const forceHttps = argv.includes('--https');
+    if ([devHttp, directHttp, forceHttps].filter(Boolean).length > 1)
+        fail('Use only one transport option: --http, --https, or --dev-http.');
     const port = Number(env.PORT || 3001);
     if (!Number.isInteger(port) || port < 1 || port > 65535) fail('PORT must be 1–65535.');
     const host = devHttp ? '127.0.0.1' : env.HOST || '0.0.0.0';
@@ -30,17 +33,21 @@ export function serverConfig(env = process.env, argv = []) {
               .filter(Boolean)
         : false;
     const warnings = [];
-    const mode = devHttp ? 'off' : (env.TLS || 'on').trim().toLowerCase();
+    const mode =
+        devHttp || directHttp ? 'off' : forceHttps ? 'on' : (env.TLS || 'on').trim().toLowerCase();
     if (!['on', 'off'].includes(mode)) fail('TLS must be "on" (default) or "off".');
+    const allowInsecureHttp = directHttp || env.ALLOW_INSECURE_HTTP === '1';
     let tls;
     if (mode === 'off') {
-        if (!loopbackHosts.has(host) && !trustProxy)
+        if (!loopbackHosts.has(host) && !trustProxy && !allowInsecureHttp)
             fail(
-                'TLS=off is only allowed when HOST is a loopback address or TRUST_PROXY names the HTTPS reverse proxy in front of Campfire.',
+                'TLS=off is only allowed on loopback, behind TRUST_PROXY, or with ALLOW_INSECURE_HTTP=1.',
             );
         if (!loopbackHosts.has(host))
             warnings.push(
-                'Plain HTTP backend: make sure only your HTTPS reverse proxy can reach this port.',
+                allowInsecureHttp
+                    ? 'Insecure HTTP enabled: credentials, messages and files are unencrypted in transit.'
+                    : 'Plain HTTP backend: make sure only your HTTPS reverse proxy can reach this port.',
             );
         tls = { mode: 'off' };
     } else if (env.TLS_CERT_FILE || env.TLS_KEY_FILE) {

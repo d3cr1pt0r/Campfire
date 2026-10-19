@@ -36,6 +36,39 @@ test('host certificate files must be configured together', () => {
     assert.throws(() => serverConfig({ TLS_KEY_FILE: 'key.pem' }), /both/);
 });
 
+test('direct remote HTTP requires both TLS=off and ALLOW_INSECURE_HTTP=1', () => {
+    const config = serverConfig({ TLS: 'off', ALLOW_INSECURE_HTTP: '1' });
+    assert.deepEqual(config.tls, { mode: 'off' });
+    assert.equal(config.host, '0.0.0.0');
+    assert.equal(config.trustProxy, false);
+    assert.match(config.warnings[0], /credentials.*unencrypted/);
+    assert.deepEqual(serverConfig({ ALLOW_INSECURE_HTTP: '1' }).tls, { mode: 'self' });
+    for (const value of ['', 'true', '0'])
+        assert.throws(() => serverConfig({ TLS: 'off', ALLOW_INSECURE_HTTP: value }), /TLS=off/);
+});
+
+test('terminal transport flags override environment settings and reject conflicts', () => {
+    const http = serverConfig({ TLS: 'on' }, ['--http']);
+    assert.deepEqual(http.tls, { mode: 'off' });
+    assert.equal(http.host, '0.0.0.0');
+    assert.equal(http.trustProxy, false);
+    assert.match(http.warnings[0], /Insecure HTTP enabled/);
+    assert.deepEqual(serverConfig({ TLS: 'off' }, ['--https']).tls, { mode: 'self' });
+    assert.deepEqual(
+        serverConfig({ TLS: 'off', TLS_CERT_FILE: 'cert.pem', TLS_KEY_FILE: 'key.pem' }, [
+            '--https',
+        ]).tls,
+        { mode: 'files', certFile: 'cert.pem', keyFile: 'key.pem' },
+    );
+    assert.equal(serverConfig({ HOST: '192.168.1.5' }, ['--http']).host, '192.168.1.5');
+    for (const args of [
+        ['--http', '--https'],
+        ['--dev-http', '--https'],
+        ['--http', '--dev-http'],
+    ])
+        assert.throws(() => serverConfig({}, args), /only one transport option/);
+});
+
 test('public addresses are plain hostnames or IPs and new identities need an explicit opt-in', () => {
     assert.equal(publicAddress(' Chat.Example.com '), 'chat.example.com');
     assert.equal(publicAddress('203.0.113.5'), '203.0.113.5');

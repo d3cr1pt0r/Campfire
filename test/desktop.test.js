@@ -31,6 +31,7 @@ test('desktop client state survives renderer-port changes and supports sign-out'
         assert.equal(third.get('connection'), null);
         assert.equal(JSON.parse(third.get('preferences')).quality, '720');
         assert.equal(third.set('../arbitrary-file', '{}'), false);
+        assert.equal(third.set('http-origins', JSON.stringify(['http://example.com'])), false);
         assert.equal(third.set('preferences', 'not-json'), false);
         assert.equal(third.set('preferences', 'x'.repeat(16385)), false);
     } finally {
@@ -117,12 +118,12 @@ test('desktop asset host serves UI with CSP and has no community API', async () 
         assert.equal(page.status, 200);
         assert.match(page.body.toString(), /Campfire/);
         assert.match(page.headers['Content-Security-Policy'], /script-src 'self'/);
-        // Remote servers are reachable only over TLS; plain HTTP stays on this computer.
+        // Desktop HTTP is gated by the main-process per-origin policy, rather than CSP.
         const connect = page.headers['Content-Security-Policy']
             .match(/connect-src ([^;]+)/)[1]
             .split(' ');
         assert.ok(connect.includes('https:') && connect.includes('wss:'));
-        assert.equal(connect.includes('http:') || connect.includes('ws:'), false);
+        assert.ok(connect.includes('http:') && connect.includes('ws:'));
         assert.equal((await request('/api/state')).status, 404);
         assert.equal((await request('/', 'attacker.example')).status, 403);
         assert.equal((await request('/', '127.0.0.1:40509', 'POST')).status, 405);

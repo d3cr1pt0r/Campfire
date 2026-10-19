@@ -3,6 +3,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('campfire', {
     readClipboardAttachments: () => ipcRenderer.invoke('clipboard:attachments'),
     getIdleState: () => ipcRenderer.invoke('presence:idle-state'),
+    insecureHttp: {
+        isAllowed: (origin) => ipcRenderer.sendSync('http:is-allowed', origin),
+        setAllowed: (origin, enabled) => ipcRenderer.invoke('http:set-allowed', origin, enabled),
+    },
     pins: {
         check: (origin) => ipcRenderer.invoke('pins:check', origin),
         get: (origin) => ipcRenderer.invoke('pins:get', origin),
