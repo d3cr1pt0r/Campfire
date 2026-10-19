@@ -50,6 +50,7 @@ export type State = {
     presence: Record<string, PresenceStatus>;
     calls: CallMember[];
     directCalls: { id: string; creator: string; invited: string[]; members: string[] }[];
+    directMessages?: { room: string; updated: number }[];
     emojis: { id: string; name: string; author: string }[];
     iceServers: RTCIceServer[];
 };

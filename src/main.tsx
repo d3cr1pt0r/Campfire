@@ -1,11 +1,5 @@
 import { hasRolePermission } from '../shared/permissions.js';
-import {
-    notificationKey,
-    shouldNotify,
-    createNotificationSound,
-    channelNotificationMode,
-} from './notifications';
-import { ChannelNotificationSelect } from './ChannelNotificationSelect';
+import { shouldNotify, createNotificationSound } from './notifications';
 import { version as appVersion } from '../package.json';
 import { ChatComposer } from './ChatComposer';
 import { ThreadPanel } from './ThreadPanel';
@@ -14,6 +8,7 @@ import type { ChatScrollPosition } from './chatScroll';
 import { CallPanel, type CallAreaMode } from './CallPanel';
 import { ConversationSection } from './ConversationSection';
 import { MemberList } from './MemberList';
+import { DirectMessages } from './DirectMessages';
 import { SettingsPanel } from './SettingsPanel';
 import { SimpleForm, RoleForm } from './forms';
 import { Avatar, initials } from './Avatar';
@@ -53,8 +48,6 @@ import {
     Globe,
     MonitorPlay,
     Video,
-    Bell,
-    BellOff,
     Maximize2,
 } from 'lucide-react';
 import type { State, Message, Preferences, User } from './types';
@@ -750,10 +743,6 @@ function App() {
         setSettingsTab(tab);
         setModal('settings');
     };
-    const unreadDirectMessages = Object.entries(unread).reduce(
-        (sum, [key, count]) => sum + (key.startsWith('dm:') ? count : 0),
-        0,
-    );
     const showError = error && (
         <div className="toast" role="alert">
             <span>{error}</span>
@@ -963,27 +952,11 @@ function App() {
                     aria-modal={compact && navigationOpen ? true : undefined}
                     aria-label="Server navigation"
                     onClick={(event) => {
-                        if (
-                            (event.target as HTMLElement).closest(
-                                '.nav-item, .brand-icon, .server-icon',
-                            )
-                        )
+                        if ((event.target as HTMLElement).closest('.nav-item, .server-icon'))
                             setNavigationOpen(false);
                     }}
                 >
                     <nav className="server-rail" aria-label="Servers">
-                        <button
-                            className="brand-icon"
-                            title="Campfire"
-                            onClick={() =>
-                                selectRoom(
-                                    state.channels.find((c) => c.kind === 'text')?.id || 'general',
-                                )
-                            }
-                        >
-                            <CampfireMark />
-                        </button>
-                        <div className="rail-divider" />
                         <button
                             className="server-icon active"
                             title={state.name}
@@ -1040,6 +1013,17 @@ function App() {
                             <ChevronDown size={18} />
                         </button>
                         <div className="sidebar-content">
+                            <DirectMessages
+                                key={`${url}:${state.me.id}`}
+                                storageKey={`direct-messages:${url}:${state.me.id}`}
+                                storage={storage}
+                                state={state}
+                                socket={socket}
+                                room={room}
+                                unread={unread}
+                                color={color}
+                                dm={dm}
+                            />
                             <div className="category">
                                 <span>TEXT CHANNELS</span>
                                 {['channels.edit', 'channels.reorder', 'channels.delete'].some(
@@ -1379,94 +1363,7 @@ function App() {
                                             }}
                                         >
                                             <Users size={21} />
-                                            {unreadDirectMessages > 0 && (
-                                                <span
-                                                    className="count"
-                                                    aria-live="polite"
-                                                    aria-label={`${unreadDirectMessages} unread direct messages`}
-                                                >
-                                                    {unreadDirectMessages > 99
-                                                        ? '99+'
-                                                        : unreadDirectMessages}
-                                                </span>
-                                            )}
                                         </button>
-                                        {dmUser ? (
-                                            <button
-                                                title={
-                                                    channelNotificationMode(
-                                                        prefs.channelNotifications?.[
-                                                            notificationKey(url, state.me.id, room)
-                                                        ],
-                                                    ) === 'muted'
-                                                        ? 'Unmute conversation'
-                                                        : 'Mute conversation'
-                                                }
-                                                aria-label="Mute conversation"
-                                                aria-pressed={
-                                                    channelNotificationMode(
-                                                        prefs.channelNotifications?.[
-                                                            notificationKey(url, state.me.id, room)
-                                                        ],
-                                                    ) === 'muted'
-                                                }
-                                                onClick={() =>
-                                                    setPrefs((previous) => {
-                                                        const key = notificationKey(
-                                                            url,
-                                                            state.me.id,
-                                                            room,
-                                                        );
-                                                        return {
-                                                            ...previous,
-                                                            channelNotifications: {
-                                                                ...previous.channelNotifications,
-                                                                [key]:
-                                                                    channelNotificationMode(
-                                                                        previous
-                                                                            .channelNotifications?.[
-                                                                            key
-                                                                        ],
-                                                                    ) === 'muted',
-                                                            },
-                                                        };
-                                                    })
-                                                }
-                                            >
-                                                {channelNotificationMode(
-                                                    prefs.channelNotifications?.[
-                                                        notificationKey(url, state.me.id, room)
-                                                    ],
-                                                ) === 'muted' ? (
-                                                    <BellOff size={19} />
-                                                ) : (
-                                                    <Bell size={19} />
-                                                )}
-                                            </button>
-                                        ) : (
-                                            <ChannelNotificationSelect
-                                                compact
-                                                label="Channel notifications"
-                                                mode={channelNotificationMode(
-                                                    prefs.channelNotifications?.[
-                                                        notificationKey(url, state.me.id, room)
-                                                    ],
-                                                )}
-                                                onChange={(mode) =>
-                                                    setPrefs((previous) => ({
-                                                        ...previous,
-                                                        channelNotifications: {
-                                                            ...previous.channelNotifications,
-                                                            [notificationKey(
-                                                                url,
-                                                                state.me.id,
-                                                                room,
-                                                            )]: mode,
-                                                        },
-                                                    }))
-                                                }
-                                            />
-                                        )}
                                         <label className="search">
                                             <span className="sr-only">
                                                 Search this conversation
@@ -1654,7 +1551,6 @@ function App() {
                             {members && !thread && (
                                 <MemberList
                                     state={state}
-                                    unread={unread}
                                     room={room}
                                     color={color}
                                     dm={dm}

@@ -1,6 +1,10 @@
 const { readFileSync, writeFileSync, renameSync, mkdirSync } = require('node:fs');
 const path = require('node:path');
 const allowedKeys = new Set(['connection', 'preferences', 'rendererPort']);
+const isAllowedKey = (key) =>
+    typeof key === 'string' &&
+    (allowedKeys.has(key) ||
+        (key.startsWith('direct-messages:') && key.length > 16 && key.length <= 2048));
 
 // Keep client state independent of the ephemeral renderer HTTP port.
 // On Windows Electron safeStorage encrypts this with the current user's DPAPI key.
@@ -22,11 +26,11 @@ function createClientState(directory, encryption) {
     }
     return {
         get(key) {
-            return allowedKeys.has(key) && typeof state[key] === 'string' ? state[key] : null;
+            return isAllowedKey(key) && typeof state[key] === 'string' ? state[key] : null;
         },
         set(key, value) {
             if (
-                !allowedKeys.has(key) ||
+                !isAllowedKey(key) ||
                 (value !== null && (typeof value !== 'string' || value.length > 16384))
             )
                 return false;

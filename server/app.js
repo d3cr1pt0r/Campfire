@@ -101,6 +101,7 @@ export function createApp({
         '/api/state',
         route((req, res) => {
             const channels = access.channelsFor(req.user);
+            const users = sessions.users();
             const visible = new Set(channels.map((channel) => channel.id));
             res.json({
                 me: sessions.publicUser(req.user),
@@ -113,7 +114,17 @@ export function createApp({
                     req.user.role === 'owner'
                         ? all('SELECT id,username,role FROM users WHERE banned=1')
                         : [],
-                users: sessions.users(),
+                users,
+                directMessages: users
+                    .filter((user) => user.id !== req.user.id)
+                    .flatMap((user) => {
+                        const room = canonicalRoom(`dm:${req.user.id}:${user.id}`);
+                        const latest = get(
+                            'SELECT created AS updated FROM messages WHERE room=? ORDER BY created DESC,id DESC LIMIT 1',
+                            room,
+                        );
+                        return latest ? [{ room, updated: latest.updated }] : [];
+                    }),
                 presence: presence.snapshot(),
                 roles: all('SELECT * FROM roles').map((role) => ({
                     ...role,

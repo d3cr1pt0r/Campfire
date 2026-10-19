@@ -53,6 +53,14 @@ test('upgrade removes relationships and endpoints while preserving member DMs, a
         assert.equal(state.status, 200);
         assert.equal('friends' in state.data, false);
         assert.equal(state.data.users.length, 3);
+        assert.deepEqual(state.data.directMessages, [{ room, updated: sent.data.created }]);
+        assert.deepEqual(
+            (await request(service.app, '/state', other.token)).data.directMessages,
+            [],
+        );
+        assert.deepEqual((await request(service.app, '/state', bob.token)).data.directMessages, [
+            { room, updated: sent.data.created },
+        ]);
         const history = await request(
             service.app,
             `/messages?room=${encodeURIComponent(room)}`,

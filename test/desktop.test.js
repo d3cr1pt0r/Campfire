@@ -61,6 +61,31 @@ test('client state uses supplied OS encryption and recovers from unreadable file
         rmSync(directory, { recursive: true, force: true });
     }
 });
+test('desktop saves DM navigation separately for each server and account', () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-dm-state-'));
+    try {
+        const first = createClientState(directory, plain);
+        const key = 'direct-messages:https://chat.example.com:alice';
+        const saved = JSON.stringify({
+            opened: { 'dm:alice:bob': 123 },
+            pinned: ['dm:alice:bob'],
+            collapsed: true,
+        });
+        assert.equal(first.set(key, saved), true);
+        const reopened = createClientState(directory, plain);
+        assert.equal(reopened.get(key), saved);
+        assert.equal(reopened.get('direct-messages:https://chat.example.com:bob'), null);
+        assert.equal(reopened.get('direct-messages:https://other.example.com:alice'), null);
+        assert.equal(reopened.set('direct-messages:', '{}'), false);
+        assert.equal(reopened.set('unrecognized-key', '{}'), false);
+        assert.equal(reopened.set(key, 'invalid-json'), false);
+        assert.equal(reopened.set(key, 'x'.repeat(16385)), false);
+        assert.equal(reopened.set(key, null), true);
+        assert.equal(createClientState(directory, plain).get(key), null);
+    } finally {
+        rmSync(directory, { recursive: true, force: true });
+    }
+});
 test('desktop asset host serves UI with CSP and has no community API', async () => {
     const directory = mkdtempSync(path.join(tmpdir(), 'campfire-assets-'));
     writeFileSync(path.join(directory, 'index.html'), '<h1>Campfire</h1>');

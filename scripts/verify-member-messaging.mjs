@@ -3,6 +3,7 @@ import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import electron from 'electron';
+import { randomUUID } from 'node:crypto';
 import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
 const root = path.resolve(import.meta.dirname, '..');
@@ -16,7 +17,7 @@ const service = createApp({
 try {
     await mkdir(output, { recursive: true });
     const members = [];
-    for (const username of ['Alice', 'Bob', 'Casey']) {
+    for (const username of ['Alice', 'Bob', 'Casey', 'Dana']) {
         const response = await request(service.app, '/auth/register', null, 'POST', {
             username,
             password: 'member-ui-password',
@@ -24,6 +25,15 @@ try {
         });
         if (response.status !== 200) throw Error('Unable to create verification account');
         members.push(response.data);
+    }
+    // Seed directory-only members without exercising the registration rate limit.
+    for (let i = 0; i < 46; i++) {
+        const id = randomUUID();
+        const username = `Member${i + 1}`;
+        service.db
+            .prepare('INSERT INTO users(id,username,password,role) VALUES(?,?,?,?)')
+            .run(id, username, 'fixture-unused-password', members[1].user.role);
+        service.db.prepare('INSERT INTO profiles(user,nickname) VALUES(?,?)').run(id, username);
     }
     await new Promise((resolve) => service.http.listen(0, '127.0.0.1', resolve));
     const env = {

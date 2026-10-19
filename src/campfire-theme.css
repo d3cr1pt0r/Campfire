@@ -175,9 +175,6 @@ body {
     background: #3f4636;
     color: #e4d6ae;
 }
-.server-rail .brand-icon {
-    background: #30271c;
-}
 .status-bar {
     color: var(--muted);
     background: var(--panel);

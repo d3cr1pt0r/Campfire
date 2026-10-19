@@ -98,7 +98,7 @@ app.whenReady()
         };
         await send('DM while the app is hidden immediately after startup');
         await wait(
-            '!!document.querySelector(".member-unread")',
+            '!!document.querySelector(".dm-unread")',
             'DM arrives while the window is hidden',
         );
         await wait(
@@ -132,12 +132,24 @@ app.whenReady()
             'window.__notificationAudio.tones === 6',
             'test sound button uses the live notification player',
         );
+        const openNotifications = async () => {
+            await js(
+                'document.dispatchEvent(new KeyboardEvent("keydown", { key: ",", ctrlKey: true, bubbles: true }))',
+            );
+            await wait('!!document.querySelector(".settings-nav")', 'notification settings open');
+            await js(
+                '[...document.querySelectorAll(".settings-nav button")].find(button => button.textContent.includes("Notifications")).click()',
+            );
+        };
         const setMode = async (mode, settings = false) => {
-            const label = settings ? '#general notifications' : 'Channel notifications';
+            if (!settings) await openNotifications();
+            const label = '#general notifications';
             await js(
                 `{ const select = [...document.querySelectorAll('select')].find(node => node.getAttribute('aria-label') === ${JSON.stringify(label)}); select.value = ${JSON.stringify(mode)}; select.dispatchEvent(new Event('change', { bubbles: true })); }`,
             );
             await pause(100);
+            if (!settings)
+                await js(`document.querySelector('button[aria-label="Close dialog"]').click()`);
         };
         await wait(
             `document.querySelector('select[aria-label="#general notifications"]')?.value === 'mentions'`,
@@ -150,8 +162,8 @@ app.whenReady()
         );
         await js(`document.querySelector('button[aria-label="Close dialog"]').click()`);
         await wait(
-            `document.querySelector('select[aria-label="Channel notifications"]')?.value === 'all'`,
-            'settings and channel header share All messages mode',
+            `!document.querySelector('.top-actions .channel-notification-select') && !document.querySelector('.top-actions button[aria-label="Mute conversation"]')`,
+            'channel notification controls are absent from the header',
         );
         win.hide();
         await pause(800);
@@ -188,10 +200,13 @@ app.whenReady()
         assert.equal(await js('window.__notificationAudio.tones'), 10);
         console.log('PASS Muted suppresses notification audio');
         await win.loadURL(origin);
+        await wait('!!document.querySelector(".server-heading")', 'renderer reloads');
+        await openNotifications();
         await wait(
-            `document.querySelector('select[aria-label="Channel notifications"]')?.value === 'muted'`,
+            `document.querySelector('select[aria-label="#general notifications"]')?.value === 'muted'`,
             'channel mode survives renderer reload',
         );
+        await js(`document.querySelector('button[aria-label="Close dialog"]').click()`);
         win.show();
         win.setSize(960, 640);
         await pause(300);
@@ -200,7 +215,7 @@ app.whenReady()
             path.join(process.env.MEMBER_OUTPUT, 'channel-notifications-header.png'),
             (await win.capturePage()).toPNG(),
         );
-        console.log('PASS channel mode selector fits the narrow desktop layout');
+        console.log('PASS header without notification controls fits narrow desktop layout');
         await setMode('all');
         win.focus();
         await wait(

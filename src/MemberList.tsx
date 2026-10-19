@@ -10,7 +10,6 @@ import type { State, User } from './types';
 
 export function MemberList({
     state,
-    unread,
     room,
     color,
     dm,
@@ -21,7 +20,6 @@ export function MemberList({
     onSettings,
 }: {
     state: State;
-    unread: Record<string, number>;
     room: string;
     color: (user?: User) => string | undefined;
     dm: (id: string) => void;
@@ -49,7 +47,6 @@ export function MemberList({
                         {group.map((user) => {
                             const self = user.id === state.me.id;
                             const destination = canonicalRoom(`dm:${state.me.id}:${user.id}`);
-                            const count = self ? 0 : unread[destination] || 0;
                             const name = displayName(user);
                             const unavailable = busy
                                 ? 'Please wait'
@@ -79,20 +76,13 @@ export function MemberList({
                                         ? 'This member cannot join calls'
                                         : '';
                             return (
-                                <div
-                                    className={`member-row ${count ? 'has-unread' : ''}`}
-                                    key={user.id}
-                                >
+                                <div className="member-row" key={user.id}>
                                     <button
                                         className="member"
                                         aria-current={
                                             !self && room === destination ? 'page' : undefined
                                         }
-                                        aria-label={
-                                            self
-                                                ? 'Open your settings'
-                                                : `Message ${name}${count ? `, ${count} unread messages` : ''}`
-                                        }
+                                        aria-label={self ? 'Open your settings' : `Message ${name}`}
                                         title={`@${user.username}`}
                                         onClick={() => (self ? onSettings() : dm(user.id))}
                                     >
@@ -113,14 +103,6 @@ export function MemberList({
                                                 }
                                             </small>
                                         </span>
-                                        {count > 0 && (
-                                            <span
-                                                className="count member-unread"
-                                                aria-label={`${count} unread messages`}
-                                            >
-                                                {count > 99 ? '99+' : count}
-                                            </span>
-                                        )}
                                         {user.role === 'owner' && (
                                             <Shield size={14} className="owner-shield" />
                                         )}

@@ -1,4 +1,5 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
+const { createClientState } = require('../electron/client-state.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -7,11 +8,20 @@ app.commandLine.appendSwitch('use-fake-device-for-media-stream');
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.on('window-all-closed', () => {});
-const [alice, bob, casey] = JSON.parse(process.env.MEMBER_FIXTURE);
+const [alice, bob, casey, dana] = JSON.parse(process.env.MEMBER_FIXTURE);
 const origin = process.env.MEMBER_ORIGIN;
 const output = process.env.MEMBER_OUTPUT;
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const failures = [];
+const clientStates = new Map();
+const windowStates = new Map();
+ipcMain.on('client-state:get', (event, key) => {
+    event.returnValue = windowStates.get(event.sender.id).get(key);
+});
+ipcMain.on('client-state:set', (event, key, value) => {
+    event.returnValue = windowStates.get(event.sender.id).set(key, value);
+});
+ipcMain.handle('presence:idle-state', () => ({ seconds: 0, locked: false }));
 const js = async (win, source) => {
     try {
         return await win.webContents.executeJavaScript(source, true);
@@ -34,12 +44,13 @@ const deadline = setTimeout(() => {
     app.exit(1);
 }, 90000);
 const selector = (name) => `.member[aria-label^="Message ${name}"]`;
+const dmSelector = (name) => `.direct-message[aria-label^="Message ${name}"]`;
 const clickMember = (win, name) =>
     js(win, `document.querySelector(${JSON.stringify(selector(name))}).click()`);
 const badge = (win, name, count) =>
     js(
         win,
-        `document.querySelector(${JSON.stringify(selector(name))})?.querySelector('.member-unread')?.textContent === ${JSON.stringify(String(count))}`,
+        `document.querySelector(${JSON.stringify(dmSelector(name))})?.querySelector('.dm-unread')?.textContent === ${JSON.stringify(String(count))}`,
     );
 const api = async (account, route, method = 'GET', body) => {
     const response = await fetch(origin + '/api' + route, {
@@ -56,6 +67,7 @@ async function client(account, partition) {
         height: 940,
         show: true,
         webPreferences: {
+            preload: path.resolve(__dirname, '../electron/preload.cjs'),
             partition,
             nodeIntegration: false,
             contextIsolation: true,
@@ -63,6 +75,14 @@ async function client(account, partition) {
             backgroundThrottling: false,
         },
     });
+    if (!clientStates.has(partition))
+        clientStates.set(
+            partition,
+            createClientState(path.join(process.env.MEMBER_PROFILE, partition), {
+                isEncryptionAvailable: () => false,
+            }),
+        );
+    windowStates.set(win.webContents.id, clientStates.get(partition));
     win.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) =>
         callback(true),
     );
@@ -72,7 +92,7 @@ async function client(account, partition) {
     await win.loadURL(origin);
     await js(
         win,
-        `localStorage.setItem('connection', JSON.stringify(${JSON.stringify({ url: origin, token: account.token })})); localStorage.setItem('preferences', JSON.stringify({theme:'dark',autoIdle:false,notifications:false,messageSounds:false,sounds:false,noise:false}));`,
+        `window.campfire.storage.setItem('connection', JSON.stringify(${JSON.stringify({ url: origin, token: account.token })})); window.campfire.storage.setItem('preferences', JSON.stringify({theme:'dark',autoIdle:false,notifications:false,messageSounds:false,sounds:false,noise:false}));`,
     );
     await win.loadURL(origin);
     await wait(
@@ -97,12 +117,47 @@ app.whenReady()
     .then(async () => {
         const a = await client(alice, 'member-alice');
         let b = await client(bob, 'member-bob');
+        for (const width of [1440, 960, 1800]) {
+            a.setSize(width, 940);
+            await pause(100);
+            const spacing = await js(
+                a,
+                `(() => {
+                const left = document.querySelector('.sidebar-content');
+                const right = document.querySelector('.member-list');
+                return {left: parseFloat(getComputedStyle(left).paddingTop), right: parseFloat(getComputedStyle(right).paddingTop)};
+            })()`,
+            );
+            assert.deepEqual(spacing, { left: 8, right: 8 });
+            const headings = await js(
+                a,
+                `(() => {
+                const left = document.querySelector('.direct-messages-heading');
+                const right = document.querySelector('.member-list-heading');
+                return {leftPadding: parseFloat(getComputedStyle(left).paddingTop), leftHeight: left.getBoundingClientRect().height, rightHeight: right.getBoundingClientRect().height};
+            })()`,
+            );
+            assert.equal(headings.leftPadding, 0);
+            assert.equal(headings.leftHeight, headings.rightHeight);
+        }
+        a.setSize(1440, 940);
+        console.log('PASS both sidebar top insets are 8px at 960, 1440 and 1800px');
+        assert.equal(await js(a, 'document.querySelectorAll(".member-row").length'), 50);
+        assert.equal(await js(a, 'document.querySelector(".composer-help") === null'), true);
+        console.log('PASS 50-member directory and no empty composer helper container');
         assert.equal(
             await js(
                 a,
-                'document.querySelector(".sidebar-content").textContent.includes("DIRECT MESSAGES")',
+                'document.querySelector(".top-actions .channel-notification-select, .top-actions button[aria-label=\\\"Mute conversation\\\"]") === null',
             ),
-            false,
+            true,
+        );
+        assert.equal(
+            await js(
+                a,
+                'document.querySelector(".sidebar-content").textContent.includes("MESSAGES")',
+            ),
+            true,
         );
         assert.equal(
             await js(
@@ -111,23 +166,30 @@ app.whenReady()
             ),
             false,
         );
-        console.log('PASS Friends and Direct Messages navigation removed');
+        console.log('PASS Messages navigation visible without friendship system');
         await clickMember(b, 'Alice');
         await wait(
             () => js(b, 'document.querySelector(".channel-title strong")?.textContent === "Alice"'),
             'member opens DM',
         );
+        assert.equal(
+            await js(
+                b,
+                'document.querySelector(".top-actions .channel-notification-select, .top-actions button[aria-label=\\\"Mute conversation\\\"]") === null',
+            ),
+            true,
+        );
         await send(b, 'Hello from Bob without a relationship');
-        await wait(() => badge(a, 'Bob', 1), 'incoming DM marks member unread');
-        assert.equal(await js(b, 'document.querySelectorAll(".member-unread").length'), 0);
+        await wait(() => badge(a, 'Bob', 1), 'incoming DM appears in left navigation');
+        assert.equal(await js(b, 'document.querySelectorAll(".dm-unread").length'), 0);
         console.log('PASS own messages do not produce unread badges');
-        await fs.writeFile(path.join(output, 'member-unread.png'), (await a.capturePage()).toPNG());
+        await fs.writeFile(path.join(output, 'dm-unread.png'), (await a.capturePage()).toPNG());
         await clickMember(a, 'Bob');
         await wait(
             () =>
                 js(
                     a,
-                    'document.querySelector(".chat-area").textContent.includes("Hello from Bob without a relationship") && !document.querySelector(".member-unread")',
+                    'document.querySelector(".chat-area").textContent.includes("Hello from Bob without a relationship") && !document.querySelector(".dm-unread")',
                 ),
             'opening member reads DM and clears badge',
         );
@@ -141,9 +203,9 @@ app.whenReady()
             () =>
                 js(
                     a,
-                    'document.querySelector("button[aria-label=\\\"Members\\\"] .count")?.textContent === "1"',
+                    'document.querySelector(".direct-messages-heading .count")?.textContent === "1"',
                 ),
-            'closed member list exposes total unread count',
+            'hidden member directory leaves Messages unread count accessible',
         );
         await js(a, 'document.querySelector("button[aria-label=\\\"Members\\\"]").click()');
         await wait(() => badge(a, 'Bob', 1), 'reopening member list preserves unread badge');
@@ -156,7 +218,50 @@ app.whenReady()
         console.log('PASS unread remains visible for offline members');
         const caseyRoom = 'dm:' + [alice.user.id, casey.user.id].sort().join(':');
         await api(casey, '/messages', 'POST', { room: caseyRoom, body: 'Offline sender message' });
-        await wait(() => badge(a, 'Casey', 1), 'offline member messages show in member list');
+        await wait(() => badge(a, 'Casey', 1), 'offline sender appears in Messages');
+        const danaRoom = 'dm:' + [alice.user.id, dana.user.id].sort().join(':');
+        await api(dana, '/messages', 'POST', { room: danaRoom, body: 'Third conversation' });
+        await wait(
+            () => badge(a, 'Dana', 1),
+            'three unread conversations are accessible among 50 members',
+        );
+        assert.equal(
+            await js(a, 'document.querySelector(".direct-message").textContent.includes("Dana")'),
+            true,
+        );
+        await fs.writeFile(
+            path.join(output, 'sidebar-50-members.png'),
+            (await a.capturePage()).toPNG(),
+        );
+        await js(a, 'document.querySelector(".direct-messages-heading").click()');
+        assert.equal(await js(a, 'document.querySelector("#direct-message-list").hidden'), true);
+        assert.equal(
+            await js(a, 'document.querySelector(".direct-messages-heading .count").textContent'),
+            '3',
+        );
+        await js(a, 'document.querySelector(".direct-messages-heading").click()');
+        await js(
+            a,
+            'document.querySelector("button[aria-label=\\\"Pin conversation with Bob\\\"]").click()',
+        );
+        assert.equal(
+            await js(a, 'document.querySelector(".direct-message").textContent.includes("Bob")'),
+            true,
+        );
+        await a.reload();
+        await wait(
+            () => js(a, '!!document.querySelector(".direct-message")'),
+            'conversation history restores after reload',
+        );
+        assert.equal(
+            await js(
+                a,
+                'document.querySelector("button[aria-label=\\\"Unpin conversation with Bob\\\"]")?.getAttribute("aria-pressed")',
+            ),
+            'true',
+        );
+        assert.equal(await js(a, 'document.querySelectorAll(".direct-message").length'), 3);
+        console.log('PASS collapse, pinning and conversation persistence');
         a.setSize(960, 640);
         await pause(100);
         assert.equal(await js(a, 'document.documentElement.scrollWidth <= innerWidth'), true);

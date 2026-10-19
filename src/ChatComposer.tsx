@@ -324,26 +324,19 @@ export function ChatComposer({
                     <Send size={18} />
                 </button>
             </form>
-            <div className="composer-help">
-                {Object.keys(typing).length ? (
-                    <span>
-                        {Object.keys(typing)
-                            .map((id) => displayName(user(id)))
-                            .join(', ')}{' '}
-                        is typing…
-                    </span>
-                ) : (
-                    <span>
-                        <strong>Enter</strong> to send · <strong>Shift + Enter</strong> for a new
-                        line
-                    </span>
-                )}
-                <span>
-                    {draft.length > 3500
-                        ? `${draft.length}/4000`
-                        : 'A little hello can go a long way.'}
-                </span>
-            </div>
+            {(Object.keys(typing).length > 0 || draft.length > 3500) && (
+                <div className="composer-help">
+                    {Object.keys(typing).length > 0 && (
+                        <span>
+                            {Object.keys(typing)
+                                .map((id) => displayName(user(id)))
+                                .join(', ')}{' '}
+                            is typing…
+                        </span>
+                    )}
+                    {draft.length > 3500 && <span>{draft.length}/4000</span>}
+                </div>
+            )}
         </div>
     );
 }
