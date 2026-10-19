@@ -48,9 +48,7 @@ export function ThreadPanel(props: Props) {
     const close = useRef(onClose);
     close.current = onClose;
     const canPost =
-        permission('messages.send') &&
-        permission('threads.reply') &&
-        (!!root.replyCount || permission('threads.create'));
+        permission('threads.reply') && (!!root.replyCount || permission('threads.create'));
     const conversation = useConversation(api, socket, parent.room, true, search, pins, parent.id);
 
     useEffect(() => {

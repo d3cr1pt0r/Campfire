@@ -1,4 +1,5 @@
-import { permissionGroups } from '../shared/permissions.js';
+import { RolesSettings } from './RolesSettings';
+import { highestPosition } from '../shared/permissions.js';
 import { RegistrationSettings } from './RegistrationSettings';
 import { notificationKey, channelNotificationMode } from './notifications';
 import { ChannelNotificationSelect } from './ChannelNotificationSelect';
@@ -8,7 +9,7 @@ import { formatFingerprint, serverLink } from './serverLink';
 import { pinsFor } from './serverTrust';
 import { AvatarCropper } from './AvatarCropper';
 import { ChannelSettings } from './ChannelSettings';
-import { ArrowRight, Bell, LogOut, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { ArrowRight, Bell, LogOut, Trash2, X } from 'lucide-react';
 import type { State, Preferences, User } from './types';
 import type { ApiClient } from './api';
 import type { useCall } from './useCall';
@@ -69,7 +70,6 @@ export function SettingsPanel({
     const [avatarFile, setAvatarFile] = useState<File | null>(null);
     const [removeUser, setRemoveUser] = useState<string | null>(null);
     const [deleteEmoji, setDeleteEmoji] = useState<string | null>(null);
-    const [deleteRole, setDeleteRole] = useState<string | null>(null);
     // The fingerprint this desktop app verified; links built from it protect new members.
     const [pin, setPin] = useState<string | null>(null);
     useEffect(() => {
@@ -261,7 +261,17 @@ export function SettingsPanel({
                             <Avatar user={state.me} color={color(state.me)} />
                             <div>
                                 <h3>{displayName(state.me)}</h3>
-                                <p>{state.roles.find((r) => r.id === state.me.role)?.name}</p>
+                                <p>
+                                    {state.me.owner
+                                        ? 'Owner'
+                                        : state.roles
+                                              .filter((role) => state.me.roles.includes(role.id))
+                                              .map((role) => role.name)
+                                              .join(' · ') ||
+                                          state.roles.find((role) => role.id === 'everyone')
+                                              ?.name ||
+                                          'Default'}
+                                </p>
                             </div>
                         </div>
                         <form
@@ -807,8 +817,8 @@ export function SettingsPanel({
                 {settingsTab === 'server' && (
                     <>
                         <p className="muted">
-                            Server management is controlled by your role. The owner can assign roles
-                            to members.
+                            Server management follows your combined role permissions. Role
+                            assignments and member moderation can be delegated independently.
                         </p>
                         <form
                             onSubmit={(e) => {
@@ -907,21 +917,36 @@ export function SettingsPanel({
                                 </p>
                             </>
                         )}
-                        {state.me.role === 'owner' && (
-                            <RegistrationSettings api={api} url={url} pin={pin} />
+                        {(state.me.owner ||
+                            permission('invitations.create') ||
+                            permission('invitations.manage')) && (
+                            <RegistrationSettings
+                                api={api}
+                                url={url}
+                                pin={pin}
+                                owner={state.me.owner}
+                                canCreate={permission('invitations.create')}
+                                canManage={permission('invitations.manage')}
+                            />
                         )}
-                        {state.me.role === 'owner' && (
+                        {(permission('members.ban') || permission('members.restore')) && (
                             <section className="server-members">
                                 <h3>Manage members</h3>
                                 {state.users
-                                    .filter((u) => u.role !== 'owner')
+                                    .filter(
+                                        (u) =>
+                                            !u.owner &&
+                                            u.id !== state.me.id &&
+                                            highestPosition(state.me, state.roles) >
+                                                highestPosition(u, state.roles),
+                                    )
                                     .map((u) => (
                                         <div key={u.id} className="server-member-row">
                                             <span>{displayName(u)}</span>
                                             {removeUser !== u.id ? (
                                                 <button
                                                     className="danger-text"
-                                                    disabled={busy}
+                                                    disabled={busy || !permission('members.ban')}
                                                     onClick={() => setRemoveUser(u.id)}
                                                 >
                                                     Remove member
@@ -960,24 +985,30 @@ export function SettingsPanel({
                                             )}
                                         </div>
                                     ))}
-                                {state.removedUsers?.map((u) => (
-                                    <div key={u.id} className="server-member-row">
-                                        <span>{displayName(u)} · Removed</span>
-                                        <button
-                                            disabled={busy}
-                                            onClick={() =>
-                                                void act(async () => {
-                                                    await api(`/users/${u.id}/access`, 'POST', {
-                                                        enabled: true,
-                                                    });
-                                                    await refresh();
-                                                })
-                                            }
-                                        >
-                                            Restore access
-                                        </button>
-                                    </div>
-                                ))}
+                                {state.removedUsers
+                                    ?.filter(
+                                        (u) =>
+                                            highestPosition(state.me, state.roles) >
+                                            highestPosition(u, state.roles),
+                                    )
+                                    .map((u) => (
+                                        <div key={u.id} className="server-member-row">
+                                            <span>{displayName(u)} · Removed</span>
+                                            <button
+                                                disabled={busy || !permission('members.restore')}
+                                                onClick={() =>
+                                                    void act(async () => {
+                                                        await api(`/users/${u.id}/access`, 'POST', {
+                                                            enabled: true,
+                                                        });
+                                                        await refresh();
+                                                    })
+                                                }
+                                            >
+                                                Restore access
+                                            </button>
+                                        </div>
+                                    ))}
                             </section>
                         )}
                         <label>
@@ -1023,6 +1054,7 @@ export function SettingsPanel({
                 {settingsTab === 'channels' &&
                     [
                         'channels.edit',
+                        'channels.access',
                         'channels.create',
                         'channels.delete',
                         'channels.reorder',
@@ -1037,120 +1069,16 @@ export function SettingsPanel({
                         />
                     )}
                 {settingsTab === 'roles' && (
-                    <>
-                        <p className="muted">
-                            Roles define general permissions and channel access. Only the owner
-                            manages roles and assignments. Roles with Change role access to channels
-                            can edit access for visible channels. Server owners always retain
-                            access. Owner and Member are permanent roles: they can be edited but
-                            cannot be deleted. Deleting a custom role moves its users to the default
-                            Member role, using that role’s current name and permissions.
-                        </p>
-                        {state.roles.map((r) => (
-                            <div className="role-row" key={r.id}>
-                                <i style={{ background: r.color }} />
-                                <strong>{r.name}</strong>
-                                <small>
-                                    {r.id === 'owner'
-                                        ? 'All permissions · All channels'
-                                        : permissionGroups
-                                              .map((group) => {
-                                                  const count = group.permissions.filter(([id]) =>
-                                                      r.permissions.includes(id),
-                                                  ).length;
-                                                  return count ? `${group.name}: ${count}` : '';
-                                              })
-                                              .filter(Boolean)
-                                              .join(' · ') || 'No permissions'}
-                                </small>
-                                <button
-                                    title={`Edit ${r.name} role`}
-                                    aria-label={`Edit ${r.name} role`}
-                                    disabled={
-                                        busy ||
-                                        (state.me.role !== 'owner' &&
-                                            (r.id === 'owner' || !permission('channels.access')))
-                                    }
-                                    onClick={() => setModal(`role:${r.id}`)}
-                                >
-                                    <Pencil size={15} />
-                                </button>
-                                {r.id !== 'owner' &&
-                                    r.id !== 'member' &&
-                                    state.me.role === 'owner' && (
-                                        <button
-                                            title={`Delete ${r.name} role`}
-                                            aria-label={`Delete ${r.name} role`}
-                                            disabled={busy}
-                                            onClick={() => setDeleteRole(r.id)}
-                                        >
-                                            <Trash2 size={15} />
-                                        </button>
-                                    )}
-                                {deleteRole === r.id && (
-                                    <div className="role-delete-confirm" role="alert">
-                                        <p>
-                                            Delete {r.name}? All users with this role will move to{' '}
-                                            {state.roles.find((role) => role.id === 'member')
-                                                ?.name || 'Member'}{' '}
-                                            with its current permissions. This role’s channel access
-                                            settings will be removed. This cannot be undone.
-                                        </p>
-                                        <button disabled={busy} onClick={() => setDeleteRole(null)}>
-                                            Cancel
-                                        </button>
-                                        <button
-                                            className="danger-bg"
-                                            disabled={busy}
-                                            onClick={() =>
-                                                void act(async () => {
-                                                    await api(`/roles/${r.id}`, 'DELETE');
-                                                    setDeleteRole(null);
-                                                    await refresh();
-                                                })
-                                            }
-                                        >
-                                            Confirm deletion
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                        {state.me.role === 'owner' && (
-                            <button className="secondary" onClick={() => setModal('role:new')}>
-                                <Plus size={16} /> Create role
-                            </button>
-                        )}
-                        <h3>Member roles</h3>
-                        {state.users.map((u) => (
-                            <div className="role-member" key={u.id}>
-                                <span>{displayName(u)}</span>
-                                <select
-                                    aria-label={`Role for ${displayName(u)}`}
-                                    value={u.role}
-                                    disabled={
-                                        busy || state.me.role !== 'owner' || u.role === 'owner'
-                                    }
-                                    onChange={(e) =>
-                                        void act(() =>
-                                            api(`/users/${u.id}/role`, 'PATCH', {
-                                                role: e.target.value,
-                                            }),
-                                        )
-                                    }
-                                >
-                                    {state.roles
-                                        .filter((r) => r.id !== 'owner' || u.role === 'owner')
-                                        .map((r) => (
-                                            <option key={r.id} value={r.id}>
-                                                {r.name}
-                                            </option>
-                                        ))}
-                                </select>
-                            </div>
-                        ))}
-                    </>
+                    <RolesSettings
+                        state={state}
+                        api={api}
+                        busy={busy}
+                        act={act}
+                        refresh={refresh}
+                        edit={(id) => setModal(`role:${id}`)}
+                    />
                 )}
+
                 <button
                     className="settings-mobile-signout secondary danger-text"
                     onClick={() => void logout()}

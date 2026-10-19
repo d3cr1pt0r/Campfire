@@ -2,19 +2,18 @@ export const permissionGroups = [
     {
         name: 'Messaging',
         permissions: [
-            ['messages.send', 'Send messages'],
+            ['channels.view', 'View channels'],
+            ['messages.send', 'Send channel messages'],
             ['files.attach', 'Attach files and images'],
             ['reactions.add', 'Add reactions'],
             ['threads.create', 'Create threads'],
             ['threads.reply', 'Reply in threads'],
-            ['messages.editOwn', 'Edit own messages'],
-            ['messages.deleteOwn', 'Delete own messages'],
         ],
     },
     {
         name: 'Message moderation',
         permissions: [
-            ['messages.pin', 'Pin and unpin messages'],
+            ['messages.pin', 'Pin and unpin channel messages'],
             ['messages.deleteOthers', 'Delete other members’ channel messages'],
         ],
     },
@@ -22,7 +21,7 @@ export const permissionGroups = [
         name: 'Calls',
         permissions: [
             ['calls.join', 'Join calls'],
-            ['calls.start', 'Start direct calls and invite members'],
+            ['calls.start', 'Start private calls and add participants'],
             ['calls.speak', 'Speak in calls'],
             ['calls.camera', 'Publish camera video'],
             ['calls.share', 'Share screen and audio'],
@@ -35,7 +34,23 @@ export const permissionGroups = [
             ['channels.create', 'Create channels'],
             ['channels.reorder', 'Reorder channels'],
             ['channels.delete', 'Delete channels'],
-            ['channels.access', 'Change role access to channels'],
+            ['channels.access', 'Manage channel permission overrides'],
+        ],
+    },
+    {
+        name: 'Roles and members',
+        permissions: [
+            ['roles.assign', 'Assign lower roles'],
+            ['roles.manage', 'Create, edit and order lower roles'],
+            ['members.ban', 'Ban lower members'],
+            ['members.restore', 'Restore lower members’ access'],
+        ],
+    },
+    {
+        name: 'Invitations',
+        permissions: [
+            ['invitations.create', 'Create invitations'],
+            ['invitations.manage', 'View and revoke invitations'],
         ],
     },
     {
@@ -51,13 +66,12 @@ export const permissionIds = permissionGroups.flatMap((group) =>
     group.permissions.map(([id]) => id),
 );
 export const memberPermissions = [
+    'channels.view',
     'messages.send',
     'files.attach',
     'reactions.add',
     'threads.create',
     'threads.reply',
-    'messages.editOwn',
-    'messages.deleteOwn',
     'calls.join',
     'calls.start',
     'calls.speak',
@@ -65,42 +79,103 @@ export const memberPermissions = [
     'calls.share',
     'emojis.upload',
 ];
-// Used only for upgrading persisted roles and legacy test fixtures, never API input.
+export const channelPermissionIds = (kind) =>
+    kind === 'voice'
+        ? ['channels.view', 'calls.join', 'calls.speak', 'calls.camera', 'calls.share']
+        : [
+              'channels.view',
+              'messages.send',
+              'files.attach',
+              'reactions.add',
+              'threads.create',
+              'threads.reply',
+              'messages.pin',
+              'messages.deleteOthers',
+          ];
+// Historical migrations and imported legacy roles only.
 export function migratePermissions(permissions) {
-    const expanded = permissions.flatMap((p) =>
-        p === 'send'
-            ? [
-                  'messages.send',
-                  'files.attach',
-                  'reactions.add',
-                  'threads.create',
-                  'threads.reply',
-                  'messages.editOwn',
-                  'emojis.upload',
-              ]
-            : p === 'voice'
-              ? ['calls.join', 'calls.start', 'calls.speak', 'calls.camera', 'calls.share']
-              : p === 'manage'
-                ? [
-                      'messages.pin',
-                      'messages.deleteOthers',
-                      'channels.edit',
-                      'channels.create',
-                      'channels.reorder',
-                      'channels.delete',
-                      'channels.access',
-                      'emojis.deleteOthers',
-                      'server.edit',
-                  ]
-                : [p],
-    );
-    // Own-message deletion was previously available without send permission.
     return [
-        ...new Set([...expanded.filter((p) => permissionIds.includes(p)), 'messages.deleteOwn']),
+        ...new Set(
+            permissions
+                .flatMap((p) =>
+                    p === 'send'
+                        ? [
+                              'messages.send',
+                              'files.attach',
+                              'reactions.add',
+                              'threads.create',
+                              'threads.reply',
+                              'emojis.upload',
+                          ]
+                        : p === 'voice'
+                          ? [
+                                'calls.join',
+                                'calls.start',
+                                'calls.speak',
+                                'calls.camera',
+                                'calls.share',
+                            ]
+                          : p === 'manage'
+                            ? [
+                                  'messages.pin',
+                                  'messages.deleteOthers',
+                                  'channels.edit',
+                                  'channels.create',
+                                  'channels.reorder',
+                                  'channels.delete',
+                                  'channels.access',
+                                  'emojis.deleteOthers',
+                                  'server.edit',
+                              ]
+                            : [p],
+                )
+                .filter((p) => permissionIds.includes(p)),
+        ),
     ];
 }
-export function hasRolePermission(role, permissions, permission) {
+export function effectiveRoleIds(assigned = []) {
+    return assigned.length ? assigned : ['everyone'];
+}
+export function rolePermissions(user, roles) {
+    if (!user) return [];
+    if (user.owner) return permissionIds;
+    return [
+        ...new Set(
+            roles
+                .filter((role) => effectiveRoleIds(user.roles).includes(role.id))
+                .flatMap((role) => role.permissions),
+        ),
+    ];
+}
+export function hasPermission(user, roles, permission, channel) {
+    if (!user || !permissionIds.includes(permission)) return false;
     return (
-        permissionIds.includes(permission) && (role === 'owner' || permissions.includes(permission))
+        user.owner ||
+        (channel ? channel.permissions : rolePermissions(user, roles)).includes(permission)
+    );
+}
+export function highestPosition(user, roles) {
+    return user?.owner
+        ? Infinity
+        : Math.max(
+              0,
+              ...roles
+                  .filter((role) => user?.roles?.includes(role.id))
+                  .map((role) => role.position),
+          );
+}
+export function canManageRole(user, roles, role) {
+    return (
+        !!user &&
+        !!role &&
+        (user.owner || (role.id !== 'everyone' && highestPosition(user, roles) > role.position))
+    );
+}
+export function roleColor(user, roles) {
+    if (!user) return undefined;
+    return (
+        roles
+            .filter((role) => effectiveRoleIds(user?.roles).includes(role.id) && role.color)
+            .sort((a, b) => b.position - a.position)[0]?.color || undefined
     );
 }

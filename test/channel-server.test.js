@@ -48,21 +48,39 @@ test(
         const role = await api(owner, '/roles', 'POST', {
             name: 'Bob role',
             color: '#abcdef',
-            permissions: migratePermissions(['send', 'voice']),
+            permissions: ['channels.view', ...migratePermissions(['send', 'voice'])],
         });
-        await api(owner, `/users/${bob.user.id}/role`, 'PATCH', { role: role.id });
+        await api(owner, `/users/${bob.user.id}/roles`, 'PATCH', { roles: [role.id] });
         const text = await api(owner, '/channels', 'POST', { name: 'Secret chat', kind: 'text' });
         const voice = await api(owner, '/channels', 'POST', {
             name: 'Secret voice',
             kind: 'voice',
         });
-        const access = (channel, mode) =>
-            api(owner, `/channels/${channel}/access`, 'PUT', {
-                permissions: [
-                    { role: 'member', mode: 'hidden' },
-                    { role: role.id, mode },
+        const restricted = new Set();
+        const access = async (channel, effect) => {
+            if (!restricted.has(channel)) {
+                await api(owner, `/roles/everyone/access`, 'PUT', {
+                    overrides: [{ channel, permission: 'channels.view', effect: 'deny' }],
+                });
+                restricted.add(channel);
+            }
+            await api(owner, `/roles/${role.id}/access`, 'PUT', {
+                overrides: [
+                    {
+                        channel,
+                        permission: 'channels.view',
+                        effect: effect === 'hidden' ? 'deny' : 'allow',
+                    },
+                    ...['messages.send', 'reactions.add']
+                        .filter(() => channel === text.id)
+                        .map((permission) => ({
+                            channel,
+                            permission,
+                            effect: effect === 'read-only' ? 'deny' : 'inherit',
+                        })),
                 ],
             });
+        };
         await access(text.id, 'full');
         await access(voice.id, 'full');
         const connect = async (account) => {
@@ -114,8 +132,10 @@ test(
         let channels = once(bs, 'channels');
         await access(text.id, 'read-only');
         assert.equal(
-            (await channels)[0].find((channel) => channel.id === text.id).access,
-            'read-only',
+            (await channels)[0]
+                .find((channel) => channel.id === text.id)
+                .permissions.includes('messages.send'),
+            false,
         );
         incoming = once(bs, 'message');
         await api(owner, '/messages', 'POST', { room: text.id, body: 'Readable while read-only' });

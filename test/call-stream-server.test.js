@@ -102,8 +102,8 @@ test(
             name: 'Hidden voice',
             kind: 'voice',
         });
-        await api(owner, `/channels/${secret.id}/access`, 'PUT', {
-            permissions: [{ role: 'member', mode: 'hidden' }],
+        await api(owner, '/roles/everyone/access', 'PUT', {
+            overrides: [{ channel: secret.id, permission: 'channels.view', effect: 'deny' }],
         });
         await join(sender, secret.id);
         sender.emit('call:media', 'secret-share');

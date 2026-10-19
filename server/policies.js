@@ -16,8 +16,7 @@ export function validateRole({ name, color, permissions }) {
         typeof name === 'string' &&
             name.trim().length > 0 &&
             name.length <= 32 &&
-            typeof color === 'string' &&
-            /^#[0-9a-f]{6}$/i.test(color) &&
+            (color === null || (typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color))) &&
             Array.isArray(permissions) &&
             permissions.every((p) => permissionIds.includes(p)),
         'Invalid role',

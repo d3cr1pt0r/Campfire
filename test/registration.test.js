@@ -60,7 +60,7 @@ test('fresh servers require a setup code and default to invite only', async (t) 
         ['Owner', 'Other'].map((username) => f.signup(username, { setupCode: 'owner-secret' })),
     );
     assert.deepEqual(results.map((r) => r.status).sort(), [200, 403]);
-    assert.equal(results.find((r) => r.status === 200).data.user.role, 'owner');
+    assert.equal(results.find((r) => r.status === 200).data.user.owner, true);
     assert.equal((await f.signup('Later', { setupCode: 'owner-secret' })).status, 403);
     assert.equal((await f.api(null, '/info')).data.setupRequired, false);
 });
@@ -70,10 +70,12 @@ test('only the owner controls registration and invitations, including managers',
     const invitation = await f.invite(owner);
     const member = (await f.signup('Member', { inviteCode: invitation.code })).data;
     f.service.db
-        .prepare('INSERT INTO roles VALUES(?,?,?,?)')
+        .prepare('INSERT INTO roles(id,name,color,permissions) VALUES(?,?,?,?)')
         .run('manager', 'Manager', '#ffffff', JSON.stringify(migratePermissions(['manage'])));
-    for (const role of ['member', 'manager']) {
-        f.service.db.prepare('UPDATE users SET role=? WHERE id=?').run(role, member.user.id);
+    for (const role of [null, 'manager']) {
+        f.service.db.prepare('DELETE FROM user_roles WHERE user=?').run(member.user.id);
+        if (role)
+            f.service.db.prepare('INSERT INTO user_roles VALUES(?,?)').run(member.user.id, role);
         for (const [endpoint, method, body] of [
             ['/registration', 'GET'],
             ['/registration', 'PATCH', { mode: 'open' }],
@@ -97,7 +99,7 @@ test('invitations are hashed, single use, revocable, expiring, and survive resta
     assert.equal((await f.signup('Owner', { inviteCode: a.code })).status, 409);
     await f.restart();
     assert.equal(f.service.setupCode, null);
-    assert.equal((await f.signup('NewMember', { inviteCode: a.code })).data.user.role, 'member');
+    assert.deepEqual((await f.signup('NewMember', { inviteCode: a.code })).data.user.roles, []);
     assert.equal((await f.signup('Reuse', { inviteCode: a.code })).status, 403);
     const b = await f.invite(owner);
     await f.api(owner, `/invitations/${b.id}`, 'DELETE');

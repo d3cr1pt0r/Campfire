@@ -1,189 +1,289 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { createApp } from '../test-support/open-server.js';
-import { request } from '../test-support/http.js';
+import { readFileSync } from 'node:fs';
 import { migrate } from '../server/database.js';
-import { permissionIds } from '../shared/permissions.js';
-async function fixture(t) {
-    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-permissions-'));
-    let service = createApp({ dataDir: directory });
-    t.after(async () => {
-        await service.close();
-        rmSync(directory, { recursive: true, force: true });
-    });
-    const api = async (account, endpoint, method = 'GET', body, expected = 200) => {
-        const response = await request(service.app, endpoint, account?.token, method, body);
-        assert.equal(
-            response.status,
-            expected,
-            `${method} ${endpoint}: ${JSON.stringify(response.data)}`,
-        );
-        return response.data;
-    };
-    const signup = (username) =>
-        api(null, '/auth/register', 'POST', {
-            username,
-            password: 'test-password-123',
-            setupCode: 'test-owner-setup',
-        });
-    const owner = await signup('Owner'),
-        member = await signup('Member');
-    const flags = (permissions) =>
-        api(owner, '/roles/member', 'PATCH', { name: 'Member', color: '#abcdef', permissions });
-    return {
-        api,
-        owner,
-        member,
-        flags,
-        get service() {
-            return service;
-        },
-        restart: async () => {
-            await service.close();
-            service = createApp({ dataDir: directory });
-        },
-    };
-}
-test('legacy roles expand once, preserve channel overrides, and new API rejects legacy/unknown permissions', async (t) => {
+import { roleFixture } from '../test-support/role-fixture.js';
+import { memberPermissions, permissionIds, migratePermissions } from '../shared/permissions.js';
+
+test('legacy roles and channel restrictions migrate once without widening private access', () => {
     const db = new DatabaseSync(':memory:');
     try {
         db.exec(readFileSync(new URL('../server/schema.sql', import.meta.url), 'utf8'));
-        db.prepare('INSERT INTO roles VALUES(?,?,?,?)').run(
-            'member',
-            'Member',
-            '#ffffff',
-            JSON.stringify(['send', 'voice', 'manage']),
+        db.exec(`INSERT INTO roles VALUES('owner','Owner','#ffffff','[]'),('reader','Reader','#abcdef','["send","voice"]'),('staff','Staff','#123456','["send","manage"]');
+            INSERT INTO users(id,username,password,role) VALUES('o','Owner','hash','owner'),('m','Reader','hash','reader'),('s','Staff','hash','staff');`);
+        migrate(db, 12);
+        db.exec(
+            "INSERT INTO channels(id,name,kind) VALUES('introductions','introductions','text'); INSERT INTO channel_access VALUES('general','reader','hidden'),('introductions','staff','read-only')",
         );
         migrate(db);
+        migrate(db);
+        assert.equal(db.prepare('SELECT owner FROM users WHERE id=?').get('o').owner, 1);
         assert.deepEqual(
-            JSON.parse(
-                db.prepare("SELECT permissions FROM roles WHERE id='member'").get().permissions,
-            ).sort(),
-            [...permissionIds].sort(),
+            db
+                .prepare("SELECT role FROM user_roles WHERE user='s'")
+                .all()
+                .map((r) => r.role),
+            ['staff'],
         );
-        db.prepare("UPDATE roles SET permissions='[]' WHERE id='member'").run();
-        migrate(db);
         assert.equal(
-            db.prepare("SELECT permissions FROM roles WHERE id='member'").get().permissions,
-            '[]',
+            db.prepare("SELECT private FROM channels WHERE id='general'").get().private,
+            1,
         );
+        assert.equal(
+            db
+                .prepare(
+                    "SELECT effect FROM channel_overrides WHERE channel='general' AND role='staff' AND permission='channels.view'",
+                )
+                .get().effect,
+            'allow',
+        );
+        assert.equal(
+            db
+                .prepare(
+                    "SELECT effect FROM channel_overrides WHERE channel='general' AND role='reader' AND permission='channels.view'",
+                )
+                .get().effect,
+            'deny',
+        );
+        assert.equal(
+            db
+                .prepare(
+                    "SELECT effect FROM channel_overrides WHERE channel='introductions' AND role='staff' AND permission='messages.send'",
+                )
+                .get().effect,
+            'deny',
+        );
+        assert.equal(
+            db
+                .prepare(
+                    "SELECT * FROM channel_overrides WHERE role='staff' AND permission='messages.pin'",
+                )
+                .get(),
+            undefined,
+        );
+        assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
     } finally {
         db.close();
     }
-    const f = await fixture(t);
-    for (const permissions of [
-        ['send'],
-        ['voice'],
-        ['manage'],
-        ['administrator'],
-        ['calls.join', 'typo'],
-    ])
-        await f.api(
-            f.owner,
-            '/roles',
-            'POST',
-            { name: 'Invalid', color: '#abcdef', permissions },
-            400,
-        );
-    await f.api(f.owner, '/roles/member/access', 'PUT', {
-        channelAccess: [{ channel: 'general', mode: 'read-only' }],
-    });
-    await f.flags(['reactions.add']);
-    await f.restart();
-    const state = await f.api(f.owner, '/state');
-    assert.deepEqual(state.roles.find((r) => r.id === 'member').permissions, ['reactions.add']);
-    assert.equal(
-        state.channelPermissions.find((p) => p.role === 'member' && p.channel === 'general').mode,
-        'read-only',
-    );
 });
-test('messages, attachments, reactions, own edits and deletion have independent checks', async (t) => {
-    const f = await fixture(t),
-        { api, owner, member, flags } = f;
-    await flags(['messages.send']);
-    const message = await api(member, '/messages', 'POST', { room: 'general', body: 'Hello' });
-    await api(
-        member,
+test('assigned grants combine without Default, and role allows win over role denies regardless of order', async (t) => {
+    const f = await roleFixture(t),
+        deny = await f.role('Deny'),
+        allow = await f.role('Allow');
+    await f.assign(f.member, [deny.id, allow.id]);
+    await f.override('everyone', [
+        { channel: 'general', permission: 'messages.send', effect: 'deny' },
+    ]);
+    await f.override(deny.id, [
+        { channel: 'general', permission: 'messages.send', effect: 'deny' },
+    ]);
+    await f.override(allow.id, [
+        { channel: 'general', permission: 'messages.send', effect: 'allow' },
+    ]);
+    await f.api(f.member, '/messages', 'POST', { room: 'general', body: 'Allowed' });
+    await f.api(f.owner, `/roles/${deny.id}/move`, 'POST', { direction: 'up' });
+    await f.api(f.member, '/messages', 'POST', { room: 'general', body: 'Still allowed' });
+    await f.assign(f.member, [deny.id]);
+    await f.api(f.member, '/messages', 'POST', { room: 'general', body: 'Denied' }, 403);
+    await f.override(deny.id, [
+        { channel: 'general', permission: 'messages.send', effect: 'inherit' },
+    ]);
+    await f.api(
+        f.member,
         '/messages',
         'POST',
-        { room: 'general', body: 'File', attachment: { name: 'a.txt', data: 'aGk=' } },
+        { room: 'general', body: 'Baseline deny still applies' },
         403,
     );
-    await api(member, `/messages/${message.id}/reaction`, 'POST', { emoji: '👍' }, 403);
-    await api(member, `/messages/${message.id}`, 'PATCH', { body: 'Edit' }, 403);
-    await api(member, `/messages/${message.id}`, 'DELETE', undefined, 403);
-    await flags(['reactions.add']);
-    await api(member, `/messages/${message.id}/reaction`, 'POST', { emoji: '👍' });
-    await api(member, '/messages', 'POST', { room: 'general', body: 'No sending' }, 403);
-    await flags(['messages.editOwn']);
-    await api(member, `/messages/${message.id}`, 'PATCH', { body: 'Edit without sending' });
-    const other = await api(owner, '/messages', 'POST', { room: 'general', body: 'Owner message' });
-    await api(member, `/messages/${other.id}`, 'PATCH', { body: 'Not mine' }, 403);
-    await flags(['messages.send', 'files.attach']);
-    await api(member, '/messages', 'POST', {
+});
+test('announcement channels allow reactions, threads and moderation independently of posting', async (t) => {
+    const f = await roleFixture(t),
+        moderator = await f.role('Mod', [
+            'messages.pin',
+            'messages.deleteOthers',
+            'threads.create',
+            'threads.reply',
+            'reactions.add',
+            'files.attach',
+        ]);
+    await f.assign(f.member, [moderator.id]);
+    const message = await f.api(f.owner, '/messages', 'POST', {
         room: 'general',
-        attachment: { name: 'a.txt', data: 'aGk=' },
+        body: 'Announcement',
     });
-    await flags(['files.attach']);
-    await api(
-        member,
+    await f.override('everyone', [
+        { channel: 'general', permission: 'messages.send', effect: 'deny' },
+    ]);
+    await f.api(f.member, '/messages', 'POST', { room: 'general', body: 'Cannot post' }, 403);
+    await f.api(f.member, `/messages/${message.id}/reaction`, 'POST', { emoji: '👍' });
+    await f.api(f.member, `/messages/${message.id}`, 'PATCH', { pinned: true });
+    const reply = await f.api(f.member, '/messages', 'POST', {
+        room: 'general',
+        thread: message.id,
+        body: 'Reply',
+        attachments: [{ name: 'note.txt', data: 'aGk=' }],
+    });
+    await f.api(f.member, `/messages/${reply.id}`, 'PATCH', { body: 'Edit my reply' });
+    await f.api(f.member, `/messages/${message.id}`, 'DELETE');
+});
+test('own edits/deletes and DMs remain available when channel sending is denied', async (t) => {
+    const f = await roleFixture(t);
+    const own = await f.api(f.member, '/messages', 'POST', { room: 'general', body: 'Mine' });
+    await f.api(f.owner, `/roles/${f.participantRole}`, 'PATCH', {
+        name: 'Member',
+        color: null,
+        permissions: ['channels.view'],
+    });
+    await f.api(
+        f.member,
         '/messages',
         'POST',
-        { room: 'general', attachment: { name: 'a.txt', data: 'aGk=' } },
+        { room: 'general', body: 'No channel posting' },
         403,
     );
-    await flags(['messages.deleteOwn']);
-    await api(owner, '/roles/member/access', 'PUT', {
-        channelAccess: [{ channel: 'general', mode: 'read-only' }],
-    });
-    await api(member, `/messages/${message.id}`, 'DELETE');
-    await api(member, `/messages/${other.id}`, 'DELETE', undefined, 403);
+    await f.api(f.member, `/messages/${own.id}`, 'PATCH', { body: 'Still mine' });
+    const room = 'dm:' + [f.member.user.id, f.owner.user.id].sort().join(':');
+    const dm = await f.api(f.member, '/messages', 'POST', { room, body: 'Direct message' });
+    await f.api(f.member, `/messages/${dm.id}`, 'PATCH', { pinned: true });
+    await f.api(f.owner, `/messages/${dm.id}`, 'DELETE', undefined, 403);
+    await f.api(f.member, `/messages/${own.id}`, 'DELETE');
+    await f.api(f.member, `/messages/${dm.id}`, 'DELETE');
 });
-test('thread creation and existing-thread replies require their own permissions', async (t) => {
-    const f = await fixture(t),
-        { api, owner, member, flags } = f;
-    const root = await api(owner, '/messages', 'POST', { room: 'general', body: 'Start here' });
-    const body = { room: 'general', body: 'Reply', thread: root.id };
-    await flags(['messages.send', 'threads.reply']);
-    await api(member, '/messages', 'POST', body, 403);
-    await flags(['messages.send', 'threads.create']);
-    await api(member, '/messages', 'POST', body, 403);
-    await flags(['messages.send', 'threads.create', 'threads.reply']);
-    await api(member, '/messages', 'POST', body);
-    await flags(['messages.send', 'threads.reply']);
-    await api(member, '/messages', 'POST', body);
-    await flags(['messages.send', 'threads.create']);
-    await api(member, '/messages', 'POST', body, 403);
+test('private channels require explicit visibility and new roles do not gain access', async (t) => {
+    const f = await roleFixture(t);
+    const channel = await f.api(f.owner, '/channels', 'POST', {
+        name: 'staff-room',
+        kind: 'text',
+        private: true,
+    });
+    const msg = await f.api(f.owner, '/messages', 'POST', {
+        room: channel.id,
+        body: 'Secret',
+        attachments: [{ name: 'private.txt', data: 'aGk=' }],
+    });
+    const role = await f.role('New role', memberPermissions);
+    await f.assign(f.member, [role.id]);
+    assert.equal(
+        (await f.api(f.member, '/state')).channels.some((c) => c.id === channel.id),
+        false,
+    );
+    await f.api(f.member, `/messages?room=${channel.id}`, 'GET', undefined, 403);
+    await f.api(f.member, `/attachments/${msg.attachments[0].id}`, 'GET', undefined, 404);
+    await f.override(role.id, [
+        { channel: channel.id, permission: 'channels.view', effect: 'allow' },
+    ]);
+    assert.equal(
+        (await f.api(f.member, '/state')).channels.some((c) => c.id === channel.id),
+        true,
+    );
+    await f.restart();
+    assert.equal(
+        (await f.api(f.member, '/state')).channels.some((c) => c.id === channel.id),
+        true,
+    );
+    await f.api(f.owner, `/channels/${channel.id}/privacy`, 'PATCH', { private: false });
+    assert.equal(
+        (await f.api(f.other, '/state')).channels.some((c) => c.id === channel.id),
+        true,
+    );
 });
-test('pinning and moderation do not grant posting, editing, private-message deletion or hidden-channel access', async (t) => {
-    const f = await fixture(t),
-        { api, owner, member, flags } = f;
-    const message = await api(owner, '/messages', 'POST', { room: 'general', body: 'Moderate me' });
-    await flags(['messages.pin']);
-    await api(member, `/messages/${message.id}`, 'PATCH', { pinned: true });
-    await api(member, `/messages/${message.id}`, 'DELETE', undefined, 403);
-    await api(member, `/messages/${message.id}`, 'PATCH', { pinned: false, body: 'Bypass' }, 403);
-    assert.equal((await api(owner, `/messages/${message.id}`)).pinned, 1);
-    await flags(['messages.deleteOthers']);
-    await api(member, `/messages/${message.id}`, 'PATCH', { pinned: false }, 403);
-    const dm = await api(owner, '/messages', 'POST', {
-        room: `dm:${owner.user.id}:${member.user.id}`,
-        body: 'Private',
-    });
-    await api(member, `/messages/${dm.id}`, 'DELETE', undefined, 403);
-    await api(member, `/messages/${message.id}`, 'DELETE');
-    const secret = await api(owner, '/messages', 'POST', { room: 'general', body: 'Hidden' });
-    await api(owner, '/roles/member/access', 'PUT', {
-        channelAccess: [{ channel: 'general', mode: 'hidden' }],
-    });
-    await api(member, `/messages/${secret.id}`, 'DELETE', undefined, 404);
+test('override edits validate atomically and cannot grant hidden or unavailable permissions', async (t) => {
+    const f = await roleFixture(t),
+        lower = await f.role('Lower'),
+        manager = await f.role('Access manager', ['channels.access']);
+    await f.assign(f.member, [manager.id]);
+    await f.override(
+        lower.id,
+        [{ channel: 'general', permission: 'reactions.add', effect: 'allow' }],
+        f.member,
+        403,
+    );
+    await f.override(
+        lower.id,
+        [
+            { channel: 'general', permission: 'channels.view', effect: 'allow' },
+            { channel: 'missing', permission: 'channels.view', effect: 'allow' },
+        ],
+        f.owner,
+        404,
+    );
+    assert.equal(
+        f.db.prepare('SELECT COUNT(*) n FROM channel_overrides WHERE role=?').get(lower.id).n,
+        0,
+    );
+    await f.override(
+        lower.id,
+        [{ channel: 'general', permission: 'calls.speak', effect: 'allow' }],
+        f.owner,
+        400,
+    );
+    await f.override(
+        lower.id,
+        [
+            { channel: 'general', permission: 'messages.send', effect: 'allow' },
+            { channel: 'general', permission: 'messages.send', effect: 'deny' },
+        ],
+        f.owner,
+        400,
+    );
+    await f.override(manager.id, [
+        { channel: 'general', permission: 'channels.view', effect: 'deny' },
+    ]);
+    await f.override(
+        lower.id,
+        [{ channel: 'general', permission: 'channels.view', effect: 'allow' }],
+        f.member,
+        404,
+    );
+    await f.override('everyone', [], f.member, 403);
+});
+test('removing a restrictive role cannot indirectly grant access the assigning actor lacks', async (t) => {
+    const f = await roleFixture(t),
+        blocked = await f.role('Blocked'),
+        manager = await f.role('Manager', ['roles.assign', 'channels.view']);
+    await f.assign(f.member, [f.participantRole, blocked.id]);
+    await f.assign(f.other, [manager.id]);
+    await f.override(blocked.id, [
+        { channel: 'general', permission: 'channels.view', effect: 'deny' },
+    ]);
+    await f.override(manager.id, [
+        { channel: 'general', permission: 'channels.view', effect: 'deny' },
+    ]);
+    await f.assign(f.member, [f.participantRole], f.other, 403);
+    assert.equal((await f.api(f.member, '/state')).me.roles.includes(blocked.id), true);
+});
+test('invitation creation and management are separate from owner-only registration', async (t) => {
+    const f = await roleFixture(t),
+        creator = await f.role('Invite creator', ['invitations.create']),
+        manager = await f.role('Invite manager', ['invitations.manage']);
+    await f.api(f.owner, '/registration', 'PATCH', { mode: 'invite' });
+    await f.assign(f.member, [creator.id]);
+    await f.assign(f.other, [manager.id]);
+    const invitation = await f.api(f.member, '/invitations', 'POST', {});
+    assert.deepEqual((await f.api(f.member, '/registration')).invitations, []);
+    assert.equal((await f.api(f.other, '/registration')).invitations[0].id, invitation.id);
+    await f.api(f.other, '/invitations', 'POST', {}, 403);
+    await f.api(f.member, `/invitations/${invitation.id}`, 'DELETE', undefined, 403);
+    await f.api(f.other, `/invitations/${invitation.id}`, 'DELETE');
+    await f.api(f.member, '/registration', 'PATCH', { mode: 'open' }, 403);
+    await f.api(f.other, '/registration', 'PATCH', { mode: 'open' }, 403);
+});
+test('role APIs reject obsolete and unknown permissions and invalid colors', async (t) => {
+    const f = await roleFixture(t);
+    for (const permissions of [
+        ['messages.editOwn'],
+        ['messages.deleteOwn'],
+        ['send'],
+        ['administrator'],
+        ['typo'],
+    ])
+        await f.api(f.owner, '/roles', 'POST', { name: 'Invalid', color: null, permissions }, 400);
+    await f.api(f.owner, '/roles', 'POST', { name: 'Invalid', color: 'bad', permissions: [] }, 400);
+    assert.equal(permissionIds.includes('roles.manage'), true);
 });
 test('channel creation, editing, deletion, ordering and general server editing are separate', async (t) => {
-    const f = await fixture(t),
+    const f = await roleFixture(t),
         { api, owner, member, flags } = f;
     await flags(['channels.edit']);
     await api(member, '/channels/general', 'PATCH', { description: 'Editor only' });
@@ -210,87 +310,13 @@ test('channel creation, editing, deletion, ordering and general server editing a
     );
     await api(
         member,
-        '/roles/member',
+        `/roles/${f.participantRole}`,
         'PATCH',
         { name: 'Nope', color: '#abcdef', permissions: permissionIds },
         403,
     );
-    await api(member, `/users/${member.user.id}/role`, 'PATCH', { role: 'owner' }, 403);
+    await api(member, `/users/${member.user.id}/roles`, 'PATCH', { roles: ['owner'] }, 403);
 });
-test('role-first access validates atomically and cannot expose channels hidden from the editor', async (t) => {
-    const f = await fixture(t),
-        { api, owner, member, flags } = f;
-    await flags(['channels.access']);
-    const role = await api(owner, '/roles', 'POST', {
-        name: 'Guest',
-        color: '#abcdef',
-        permissions: [],
-        channelAccess: [
-            { channel: 'general', mode: 'read-only' },
-            { channel: 'lounge', mode: 'hidden' },
-        ],
-    });
-    await api(member, `/roles/${role.id}/access`, 'PUT', {
-        channelAccess: [{ channel: 'introductions', mode: 'hidden' }],
-    });
-    await api(owner, '/roles/member/access', 'PUT', {
-        channelAccess: [{ channel: 'general', mode: 'hidden' }],
-    });
-    await api(
-        member,
-        `/roles/${role.id}/access`,
-        'PUT',
-        {
-            channelAccess: [
-                { channel: 'introductions', mode: 'full' },
-                { channel: 'general', mode: 'full' },
-            ],
-        },
-        404,
-    );
-    assert.equal(
-        (await api(owner, '/state')).channelPermissions.find(
-            (p) => p.role === role.id && p.channel === 'introductions',
-        ).mode,
-        'hidden',
-    );
-    await api(member, '/roles/owner/access', 'PUT', { channelAccess: [] }, 400);
-    await api(
-        owner,
-        `/roles/${role.id}/access`,
-        'PUT',
-        { channelAccess: [{ channel: 'lounge', mode: 'read-only' }] },
-        400,
-    );
-    await api(
-        owner,
-        `/roles/${role.id}/access`,
-        'PUT',
-        {
-            channelAccess: [
-                { channel: 'lounge', mode: 'full' },
-                { channel: 'lounge', mode: 'hidden' },
-            ],
-        },
-        400,
-    );
-    await api(
-        owner,
-        `/roles/${role.id}`,
-        'PATCH',
-        {
-            name: 'Should rollback',
-            color: '#abcdef',
-            permissions: ['messages.send'],
-            channelAccess: [{ channel: 'missing', mode: 'full' }],
-        },
-        404,
-    );
-    assert.equal((await api(owner, '/state')).roles.find((r) => r.id === role.id).name, 'Guest');
-    await flags([]);
-    await api(member, `/roles/${role.id}/access`, 'PUT', { channelAccess: [] }, 403);
-});
-
 test('custom emoji upload and removal of other authors have separate permissions', async (t) => {
     const { default: sharp } = await import('sharp');
     const data = (
@@ -298,7 +324,7 @@ test('custom emoji upload and removal of other authors have separate permissions
             .png()
             .toBuffer()
     ).toString('base64');
-    const f = await fixture(t),
+    const f = await roleFixture(t),
         { api, owner, member, flags } = f;
     const emoji = await api(owner, '/emojis', 'POST', { name: 'owner_emoji', data });
     await flags(['messages.send']);
@@ -311,4 +337,34 @@ test('custom emoji upload and removal of other authors have separate permissions
     await flags(['emojis.deleteOthers']);
     await api(member, `/emojis/${emoji.id}`, 'DELETE');
     await api(member, '/emojis', 'POST', { name: 'denied_emoji', data }, 403);
+});
+
+test('effective-permission inspection reports sources without exposing inaccessible channels', async (t) => {
+    const f = await roleFixture(t),
+        staff = await f.role('Staff', ['channels.access']);
+    await f.assign(f.other, [staff.id]);
+    await f.override(f.participantRole, [
+        { channel: 'general', permission: 'messages.send', effect: 'deny' },
+    ]);
+    const result = await f.api(f.other, `/users/${f.member.user.id}/permissions?channel=general`);
+    const decision = result.details.find((entry) => entry.permission === 'messages.send');
+    assert.equal(decision.allowed, false);
+    assert.match(decision.reason, /Participant/);
+    await f.api(
+        f.member,
+        `/users/${f.other.user.id}/permissions?channel=general`,
+        'GET',
+        undefined,
+        403,
+    );
+    await f.override(staff.id, [
+        { channel: 'general', permission: 'channels.view', effect: 'deny' },
+    ]);
+    await f.api(
+        f.other,
+        `/users/${f.member.user.id}/permissions?channel=general`,
+        'GET',
+        undefined,
+        404,
+    );
 });

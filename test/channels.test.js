@@ -33,8 +33,10 @@ async function fixture(t) {
         assert.equal(response.status, status, JSON.stringify(response.data));
         return response.data;
     };
-    const access = (channel, mode, role = 'member') =>
-        api(owner, `/channels/${channel}/access`, 'PUT', { permissions: [{ role, mode }] });
+    const access = (channel, effect, role = 'member') =>
+        api(owner, `/roles/${role}/access`, 'PUT', {
+            overrides: [{ channel, permission: 'channels.view', effect }],
+        });
     return {
         owner,
         member,
@@ -101,123 +103,6 @@ test('protected channels can be renamed; additional channel deletion cascades an
     await api(member, `/attachments/${msg.attachments[0].id}`, 'GET', undefined, 404);
 });
 
-test('read-only channels block posting, editing and moderation; hidden denies history and files', async (t) => {
-    const f = await fixture(t);
-    const { owner, member, api, access } = f;
-    const managerRole = await api(owner, '/roles', 'POST', {
-        name: 'Managers',
-        color: '#abcdef',
-        permissions: migratePermissions(['send', 'voice', 'manage']),
-    });
-    await api(owner, `/users/${member.user.id}/role`, 'PATCH', { role: managerRole.id });
-    const msg = await api(member, '/messages', 'POST', {
-        room: 'general',
-        body: 'Original',
-        attachment: { name: 'file', data: 'aGVsbG8=' },
-    });
-    await access('general', 'read-only', managerRole.id);
-    assert.equal(
-        (await api(member, '/state')).channels.find((c) => c.id === 'general').access,
-        'read-only',
-    );
-    assert.equal((await api(member, '/messages?room=general'))[0].id, msg.id);
-    assert.equal((await api(member, `/attachments/${msg.attachments[0].id}`)).toString(), 'hello');
-    for (const [endpoint, method, body] of [
-        ['/messages', 'POST', { room: 'general', body: 'blocked' }],
-        [`/messages/${msg.id}/reaction`, 'POST', { emoji: '👍' }],
-        [`/messages/${msg.id}`, 'PATCH', { body: 'blocked' }],
-        [`/messages/${msg.id}`, 'PATCH', { pinned: true }],
-    ])
-        await api(member, endpoint, method, body, 403);
-    await api(owner, `/messages/${msg.id}`, 'PATCH', { pinned: true });
-    await access('general', 'hidden', managerRole.id);
-    const hidden = await api(member, '/state');
-    assert.equal(
-        hidden.channels.some((c) => c.id === 'general'),
-        false,
-    );
-    assert.equal(
-        hidden.channelPermissions.some((c) => c.channel === 'general'),
-        false,
-    );
-    await api(member, '/messages?room=general', 'GET', undefined, 403);
-    await api(member, `/attachments/${msg.attachments[0].id}`, 'GET', undefined, 404);
-    await api(member, '/channels/general', 'PATCH', { name: 'discovered' }, 404);
-    const dm = `dm:${[owner.user.id, member.user.id].sort().join(':')}`;
-    await api(member, '/messages', 'POST', { room: dm, body: 'DM unaffected' });
-    await access('general', 'full', managerRole.id);
-    await api(member, `/messages/${msg.id}`, 'PATCH', { body: 'Restored' });
-    await access('general', 'read-only', managerRole.id);
-    await f.restart();
-    assert.equal(
-        (await api(member, '/state')).channels.find((channel) => channel.id === 'general').access,
-        'read-only',
-    );
-    await api(member, `/messages/${msg.id}`, 'PATCH', { body: 'Still denied after restart' }, 403);
-    // Deleting your own content is independent of posting permission and read-only mode.
-    await api(member, `/messages/${msg.id}`, 'DELETE');
-});
-
-test('channel permissions validate roles/modes atomically and do not override global permissions', async (t) => {
-    const { owner, member, api, access } = await fixture(t);
-    await access('lounge', 'hidden');
-    assert.equal(
-        (await api(member, '/state')).channels.some((c) => c.id === 'lounge'),
-        false,
-    );
-    await api(
-        owner,
-        '/channels/lounge/access',
-        'PUT',
-        { permissions: [{ role: 'member', mode: 'read-only' }] },
-        400,
-    );
-    await api(
-        owner,
-        '/channels/lounge/access',
-        'PUT',
-        { permissions: [{ role: 'owner', mode: 'hidden' }] },
-        400,
-    );
-    await api(
-        owner,
-        '/channels/lounge/access',
-        'PUT',
-        { permissions: [{ role: 'missing', mode: 'full' }] },
-        400,
-    );
-    await api(
-        owner,
-        '/channels/lounge/access',
-        'PUT',
-        {
-            permissions: [
-                { role: 'member', mode: 'full' },
-                { role: 'member', mode: 'hidden' },
-            ],
-        },
-        400,
-    );
-    assert.equal(
-        (await api(member, '/state')).channels.some((c) => c.id === 'lounge'),
-        false,
-    );
-    await api(member, '/channels/general/access', 'PUT', { permissions: [] }, 403);
-    const role = await api(owner, '/roles', 'POST', {
-        name: 'No writing',
-        color: '#abcdef',
-        permissions: [],
-    });
-    await api(owner, `/users/${member.user.id}/role`, 'PATCH', { role: role.id });
-    const state = await api(member, '/state');
-    assert.equal(
-        state.channels.some((c) => c.kind === 'voice'),
-        true,
-    );
-    assert.equal(state.channels.find((c) => c.id === 'general').access, 'full');
-    await api(member, '/messages', 'POST', { room: 'general', body: 'denied' }, 403);
-});
-
 test('legacy custom channel names are retained and one channel of each type becomes permanent', () => {
     const db = new DatabaseSync(':memory:');
     try {
@@ -280,11 +165,11 @@ test('channel ordering is type-specific, manager-only, persistent and preserves 
     const role = await api(owner, '/roles', 'POST', {
         name: 'Manager',
         color: '#123456',
-        permissions: migratePermissions(['manage', 'send', 'voice']),
+        permissions: ['channels.view', ...migratePermissions(['manage', 'send', 'voice'])],
     });
-    await api(owner, `/users/${member.user.id}/role`, 'PATCH', { role: role.id });
-    await api(owner, `/channels/general/access`, 'PUT', {
-        permissions: [{ role: role.id, mode: 'hidden' }],
+    await api(owner, `/users/${member.user.id}/roles`, 'PATCH', { roles: [role.id] });
+    await api(owner, `/roles/${role.id}/access`, 'PUT', {
+        overrides: [{ channel: 'general', permission: 'channels.view', effect: 'deny' }],
     });
     await api(member, '/channels/general/move', 'POST', { direction: 'up' }, 404);
     const before = (await api(owner, '/state')).channels.find((c) => c.id === 'general').position;
@@ -317,9 +202,9 @@ test('channel descriptions are owner/manager editable, persisted, and independen
     const moderator = await api(owner, '/roles', 'POST', {
         name: 'Moderator',
         color: '#abcdef',
-        permissions: migratePermissions(['manage', 'send', 'voice']),
+        permissions: ['channels.view', ...migratePermissions(['manage', 'send', 'voice'])],
     });
-    await api(owner, `/users/${member.user.id}/role`, 'PATCH', { role: moderator.id });
+    await api(owner, `/users/${member.user.id}/roles`, 'PATCH', { roles: [moderator.id] });
     await api(member, '/channels/general', 'PATCH', { description: 'Moderator update' });
     await f.restart();
     assert.equal(await description(), 'Moderator update');
@@ -388,10 +273,10 @@ test('drop reordering preserves channel types, denies hidden targets and persist
     const role = await api(owner, '/roles', 'POST', {
         name: 'Sorter',
         color: '#aabbcc',
-        permissions: ['channels.reorder'],
+        permissions: ['channels.view', 'channels.reorder'],
     });
-    await api(owner, `/users/${member.user.id}/role`, 'PATCH', { role: role.id });
-    await f.access('general', 'hidden', role.id);
+    await api(owner, `/users/${member.user.id}/roles`, 'PATCH', { roles: [role.id] });
+    await f.access('general', 'deny', role.id);
     await api(member, `/channels/${last.id}/drop`, 'POST', { target: 'general' }, 400);
     await api(member, '/channels/general/drop', 'POST', { target: last.id }, 404);
 });
@@ -443,7 +328,7 @@ test('owner can remove and restore members while retaining history and revoking 
         });
     const other = (await login()).data;
     await api(member, `/users/${owner.user.id}/access`, 'POST', { enabled: false }, 403);
-    await api(owner, `/users/${owner.user.id}/access`, 'POST', { enabled: false }, 409);
+    await api(owner, `/users/${owner.user.id}/access`, 'POST', { enabled: false }, 403);
     await api(owner, `/users/${member.user.id}/access`, 'POST', { enabled: false });
     await api(member, '/state', 'GET', undefined, 401);
     await api(other, '/state', 'GET', undefined, 401);

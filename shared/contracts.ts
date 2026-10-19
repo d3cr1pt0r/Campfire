@@ -4,13 +4,15 @@ export type User = {
     username: string;
     nickname: string;
     avatar?: string | null;
-    role: string;
+    roles: string[];
+    owner: boolean;
     status?: PresenceStatus;
 };
 export type Role = {
     id: string;
     name: string;
-    color: string;
+    color: string | null;
+    position: number;
     permissions: string[];
 };
 export type Channel = {
@@ -20,12 +22,14 @@ export type Channel = {
     description: string;
     protected: boolean;
     reactionAuthors?: number | boolean;
-    access: 'full' | 'read-only';
+    private: boolean;
+    permissions: string[];
 };
 export type ChannelAccess = {
     channel: string;
     role: string;
-    mode: 'full' | 'read-only' | 'hidden';
+    permission: string;
+    effect: 'allow' | 'deny';
 };
 export type CallMember = {
     socket: string;

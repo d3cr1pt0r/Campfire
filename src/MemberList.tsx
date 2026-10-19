@@ -1,6 +1,6 @@
 import { Fragment } from 'react';
 import { Phone, Shield, X } from 'lucide-react';
-import { hasRolePermission } from '../shared/permissions.js';
+import { hasPermission } from '../shared/permissions.js';
 import { canonicalRoom } from '../shared/rooms.js';
 import { Avatar } from './Avatar';
 import { PresenceDot } from './PresenceDot';
@@ -54,25 +54,10 @@ export function MemberList({
                                   ? 'Leave your current call first'
                                   : status === 'offline'
                                     ? 'This member is offline'
-                                    : !hasRolePermission(
-                                            state.me.role,
-                                            state.roles.find((role) => role.id === state.me.role)
-                                                ?.permissions || [],
-                                            'calls.join',
-                                        ) ||
-                                        !hasRolePermission(
-                                            state.me.role,
-                                            state.roles.find((role) => role.id === state.me.role)
-                                                ?.permissions || [],
-                                            'calls.start',
-                                        )
+                                    : !hasPermission(state.me, state.roles, 'calls.join') ||
+                                        !hasPermission(state.me, state.roles, 'calls.start')
                                       ? 'You do not have permission to start calls'
-                                      : !hasRolePermission(
-                                              user.role,
-                                              state.roles.find((role) => role.id === user.role)
-                                                  ?.permissions || [],
-                                              'calls.join',
-                                          )
+                                      : !hasPermission(user, state.roles, 'calls.join')
                                         ? 'This member cannot join calls'
                                         : '';
                             return (
@@ -96,14 +81,21 @@ export function MemberList({
                                                 {self && <small>you</small>}
                                             </strong>
                                             <small>
-                                                {
-                                                    state.roles.find(
-                                                        (role) => role.id === user.role,
-                                                    )?.name
-                                                }
+                                                {user.owner
+                                                    ? 'Owner'
+                                                    : state.roles
+                                                          .filter((role) =>
+                                                              user.roles.includes(role.id),
+                                                          )
+                                                          .map((role) => role.name)
+                                                          .join(' · ') ||
+                                                      state.roles.find(
+                                                          (role) => role.id === 'everyone',
+                                                      )?.name ||
+                                                      'Default'}
                                             </small>
                                         </span>
-                                        {user.role === 'owner' && (
+                                        {user.owner && (
                                             <Shield size={14} className="owner-shield" />
                                         )}
                                     </button>

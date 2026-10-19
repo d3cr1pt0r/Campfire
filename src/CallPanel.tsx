@@ -1,3 +1,4 @@
+import { hasPermission } from '../shared/permissions.js';
 import type { State, User, Preferences } from './types';
 import { useId, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 
@@ -94,12 +95,7 @@ export function CallPanel({
               : minimum;
     const compactLayout = height < minimum + 64;
     const privateCall = call.channel?.startsWith('private:');
-    const canInvite =
-        privateCall &&
-        (state.me.role === 'owner' ||
-            state.roles
-                .find((role) => role.id === state.me.role)
-                ?.permissions.includes('calls.start'));
+    const canInvite = privateCall && hasPermission(state.me, state.roles, 'calls.start');
     const participants = new Set(
         state.calls
             .filter((participant) => participant.channel === call.channel)

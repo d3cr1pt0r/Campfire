@@ -3,7 +3,17 @@ import { tokenHash } from './security.js';
 import { check, route, createRateLimit } from './policies.js';
 import { transaction } from './database.js';
 
-export function createRegistration({ app, get, all, run, db, io, setupCode }) {
+export function createRegistration({
+    app,
+    get,
+    all,
+    run,
+    db,
+    io,
+    setupCode,
+    can,
+    requirePermission,
+}) {
     const initialSetupCode =
         get('SELECT COUNT(*) n FROM users').n === 0
             ? (setupCode ?? randomBytes(32).toString('hex'))
@@ -44,19 +54,27 @@ export function createRegistration({ app, get, all, run, db, io, setupCode }) {
         if (consume) run('UPDATE invitations SET usedBy=? WHERE id=?', userId, invitation.id);
         return 'member';
     };
-    const owner = (req) =>
-        check(req.user.role === 'owner', 'Only the owner can manage registration.', 403);
+    const owner = (req) => check(req.user.owner, 'Only the owner can manage registration.', 403);
     // Mounted after authentication by createApp.
     const mount = () => {
         app.get(
             '/api/registration',
             route((req, res) => {
-                owner(req);
+                check(
+                    req.user.owner ||
+                        can(req.user, 'invitations.create') ||
+                        can(req.user, 'invitations.manage'),
+                    'Permission denied',
+                    403,
+                );
                 res.set('Cache-Control', 'no-store').json({
                     mode: mode(),
-                    invitations: all(
-                        'SELECT id,label,created,expires,usedBy,revoked FROM invitations WHERE revoked=0 ORDER BY created DESC,rowid DESC LIMIT 200',
-                    ),
+                    invitations:
+                        req.user.owner || can(req.user, 'invitations.manage')
+                            ? all(
+                                  'SELECT id,label,created,expires,usedBy,revoked FROM invitations WHERE revoked=0 ORDER BY created DESC,rowid DESC LIMIT 200',
+                              )
+                            : [],
                 });
             }),
         );
@@ -78,7 +96,7 @@ export function createRegistration({ app, get, all, run, db, io, setupCode }) {
         app.post(
             '/api/invitations',
             route((req, res) => {
-                owner(req);
+                requirePermission(req.user, 'invitations.create');
                 limit(req.user.id);
                 check(
                     mode() === 'invite',
@@ -117,7 +135,7 @@ export function createRegistration({ app, get, all, run, db, io, setupCode }) {
         app.delete(
             '/api/invitations/:id',
             route((req, res) => {
-                owner(req);
+                requirePermission(req.user, 'invitations.manage');
                 check(
                     get('SELECT id FROM invitations WHERE id=?', req.params.id),
                     'Invitation not found',

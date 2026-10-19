@@ -1,151 +1,152 @@
-import { migratePermissions } from '../shared/permissions.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { createApp } from '../test-support/open-server.js';
-import { request } from '../test-support/http.js';
+import { roleFixture } from '../test-support/role-fixture.js';
+import { roleColor, rolePermissions, highestPosition } from '../shared/permissions.js';
 
-async function fixture(t) {
-    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-roles-'));
-    let service = createApp({ dataDir: directory });
-    t.after(async () => {
-        await service.close();
-        rmSync(directory, { recursive: true, force: true });
-    });
-    const api = async (account, endpoint, method = 'GET', body, status = 200) => {
-        const response = await request(service.app, endpoint, account?.token, method, body);
-        assert.equal(response.status, status, JSON.stringify(response.data));
-        return response.data;
-    };
-    const signup = (username) =>
-        api(null, '/auth/register', 'POST', {
-            username,
-            password: 'test-password-123',
-            setupCode: 'test-owner-setup',
-        });
-    return {
-        owner: await signup('Owner'),
-        member: await signup('Member'),
-        manager: await signup('Manager'),
-        api,
-        get db() {
-            return service.db;
-        },
-        async restart() {
-            await service.close();
-            service = createApp({ dataDir: directory });
-        },
-    };
-}
-
-test('default roles remain editable and permanent even after renaming and restart', async (t) => {
-    const f = await fixture(t);
-    for (const id of ['owner', 'member']) {
-        await f.api(f.owner, `/roles/${id}`, 'PATCH', {
-            name: `Renamed ${id}`,
-            color: '#123456',
-            permissions: [],
-        });
-        await f.api(f.owner, `/roles/${id}`, 'DELETE', undefined, 409);
-        assert.throws(
-            () => f.db.prepare('DELETE FROM roles WHERE id=?').run(id),
-            /cannot be deleted/,
-        );
-        assert.throws(
-            () => f.db.prepare('UPDATE roles SET id=? WHERE id=?').run(`other-${id}`, id),
-            /cannot change/,
-        );
-    }
-    await f.restart();
+test('ownership is separate, protected and never assignable as a role', async (t) => {
+    const f = await roleFixture(t);
     const state = await f.api(f.owner, '/state');
-    assert.equal(state.roles.length, 2);
-    assert.equal(state.roles.find((r) => r.id === 'owner').name, 'Renamed owner');
-    assert.equal(state.roles.find((r) => r.id === 'member').name, 'Renamed member');
-    assert.equal(state.me.role, 'owner');
-    // The owner's implicit authority survives editing all displayed permission flags.
-    await f.api(f.owner, '/roles', 'POST', { name: 'New', color: '#abcdef', permissions: [] });
-});
-
-test('custom role deletion moves users to Member, cascades access, and survives restart', async (t) => {
-    const f = await fixture(t);
-    const role = await f.api(f.owner, '/roles', 'POST', {
-        name: 'Custom',
-        color: '#abcdef',
-        permissions: migratePermissions(['send', 'voice']),
-    });
-    for (const account of [f.member, f.manager])
-        await f.api(f.owner, `/users/${account.user.id}/role`, 'PATCH', { role: role.id });
-    await f.api(f.owner, '/channels/general/access', 'PUT', {
-        permissions: [
-            { role: role.id, mode: 'hidden' },
-            { role: 'member', mode: 'read-only' },
-        ],
-    });
-    await f.api(f.owner, `/roles/${role.id}`, 'DELETE');
+    assert.equal(state.me.owner, true);
     assert.equal(
-        f.db.prepare('SELECT COUNT(*) n FROM channel_access WHERE role=?').get(role.id).n,
-        0,
+        state.roles.some((r) => r.id === 'owner'),
+        false,
     );
-    assert.equal(f.db.prepare('PRAGMA foreign_key_check').all().length, 0);
-    await f.api(f.owner, `/roles/${role.id}`, 'DELETE', undefined, 404);
-    await f.restart();
-    for (const account of [f.member, f.manager]) {
-        const state = await f.api(account, '/state');
-        assert.equal(state.me.role, 'member');
-        assert.equal(
-            state.roles.some((r) => r.id === role.id),
-            false,
-        );
-        assert.equal(state.channels.find((c) => c.id === 'general').access, 'read-only');
-        await f.api(account, '/messages', 'POST', { room: 'general', body: 'Denied' }, 403);
-    }
-});
-
-test('deletion enforces management and assignment authority without partial changes', async (t) => {
-    const f = await fixture(t);
-    const management = await f.api(f.owner, '/roles', 'POST', {
-        name: 'Manager',
-        color: '#abcdef',
-        permissions: migratePermissions(['manage']),
-    });
-    const custom = await f.api(f.owner, '/roles', 'POST', {
-        name: 'Custom',
-        color: '#abcdef',
-        permissions: [],
-    });
-    await f.api(null, `/roles/${custom.id}`, 'DELETE', undefined, 401);
-    await f.api(f.member, `/roles/${custom.id}`, 'DELETE', undefined, 403);
-    await f.api(f.owner, `/users/${f.manager.user.id}/role`, 'PATCH', { role: management.id });
-    await f.api(f.manager, `/roles/${management.id}`, 'DELETE', undefined, 403);
+    assert.equal('role' in state.me, false);
+    await f.assign(f.member, ['owner'], f.owner, 400);
     await f.api(
-        f.manager,
+        f.owner,
         '/roles/owner',
         'PATCH',
-        {
-            name: 'Changed',
-            color: '#abcdef',
-            permissions: [],
-        },
+        { name: 'Owner', color: null, permissions: [] },
+        404,
+    );
+    await f.api(f.member, `/users/${f.owner.user.id}/access`, 'POST', { enabled: false }, 403);
+    await f.api(f.owner, `/users/${f.owner.user.id}/access`, 'POST', { enabled: false }, 403);
+    assert.throws(
+        () => f.db.prepare('UPDATE users SET owner=0 WHERE id=?').run(f.owner.user.id),
+        /protected/,
+    );
+    assert.throws(
+        () => f.db.prepare('DELETE FROM users WHERE id=?').run(f.owner.user.id),
+        /protected/,
+    );
+    const custom = await f.role('Host', [], '#aabbcc');
+    await f.assign(f.owner, [custom.id]);
+    await f.restart();
+    const after = await f.api(f.owner, '/state');
+    assert.equal(after.me.owner, true);
+    assert.deepEqual(after.me.roles, [custom.id]);
+    await f.role('Still authorized');
+});
+test('Default is the protected fallback; removing a role preserves other memberships', async (t) => {
+    const f = await roleFixture(t),
+        a = await f.role('One'),
+        b = await f.role('Two');
+    await f.assign(f.member, [a.id, b.id]);
+    await f.override(a.id, [{ channel: 'general', permission: 'reactions.add', effect: 'deny' }]);
+    await f.api(f.owner, `/roles/${a.id}`, 'DELETE');
+    assert.deepEqual((await f.api(f.member, '/state')).me.roles, [b.id]);
+    assert.equal(
+        f.db.prepare('SELECT COUNT(*) n FROM channel_overrides WHERE role=?').get(a.id).n,
+        0,
+    );
+    await f.assign(f.member, []);
+    assert.equal(
+        (await f.api(f.member, '/state')).channels.some((c) => c.id === 'general'),
+        true,
+    );
+    await f.api(f.owner, '/roles/everyone', 'DELETE', undefined, 409);
+    await f.assign(f.member, ['everyone'], f.owner, 400);
+    await f.api(f.owner, '/roles/everyone', 'PATCH', {
+        name: 'All members',
+        color: null,
+        permissions: ['channels.view', 'reactions.add'],
+    });
+    await f.restart();
+    assert.equal(
+        (await f.api(f.member, '/state')).roles.find((r) => r.id === 'everyone').name,
+        'All members',
+    );
+    assert.equal(f.db.prepare('PRAGMA foreign_key_check').all().length, 0);
+});
+test('role order persists and highest colored role wins without controlling permission priority', async (t) => {
+    const f = await roleFixture(t),
+        low = await f.role('Green', ['messages.send'], '#00ff00'),
+        high = await f.role('Blue', ['reactions.add'], '#0000ff'),
+        plain = await f.role('No color');
+    await f.assign(f.member, [low.id, high.id, plain.id]);
+    let state = await f.api(f.member, '/state');
+    assert.equal(roleColor(state.me, state.roles), '#0000ff');
+    assert.equal(rolePermissions(state.me, state.roles).includes('messages.send'), true);
+    await f.api(f.owner, `/roles/${low.id}/move`, 'POST', { direction: 'up' });
+    await f.restart();
+    state = await f.api(f.member, '/state');
+    assert.equal(roleColor(state.me, state.roles), '#00ff00');
+    assert.equal(highestPosition(state.me, state.roles) > 0, true);
+    await f.api(f.owner, '/roles/everyone/move', 'POST', { direction: 'up' }, 400);
+    await f.api(f.owner, `/roles/${low.id}/move`, 'POST', { direction: 'sideways' }, 400);
+});
+test('delegated role management and assignments cannot reach peers, self or higher grants', async (t) => {
+    const f = await roleFixture(t);
+    const low = await f.role('Low', ['messages.send']);
+    const privileged = await f.role('Power', ['server.edit']);
+    const manager = await f.role('Manager', ['roles.manage', 'roles.assign', 'messages.send']);
+    await f.assign(f.other, [manager.id]);
+    await f.assign(f.member, [low.id], f.other);
+    await f.assign(f.member, [privileged.id], f.other, 403);
+    await f.assign(f.other, [low.id], f.other, 403);
+    await f.assign(f.owner, [low.id], f.other, 403);
+    await f.api(
+        f.other,
+        `/roles/${manager.id}`,
+        'PATCH',
+        { name: 'Self', color: null, permissions: [] },
         403,
     );
-    await f.api(f.owner, `/users/${f.member.user.id}/role`, 'PATCH', { role: custom.id });
-    await f.api(f.manager, `/roles/${custom.id}`, 'DELETE', undefined, 403);
-    assert.equal((await f.api(f.member, '/state')).me.role, custom.id);
-    await f.api(f.owner, `/users/${f.member.user.id}/role`, 'PATCH', { role: 'member' });
-    await f.api(f.manager, `/roles/${custom.id}`, 'DELETE', undefined, 403);
-    await f.api(f.owner, `/roles/${custom.id}`, 'DELETE');
-    await f.api(f.owner, `/roles/${management.id}`, 'DELETE');
     await f.api(
-        f.manager,
+        f.other,
+        '/roles/everyone',
+        'PATCH',
+        { name: 'All', color: null, permissions: [] },
+        403,
+    );
+    const delegated = await f.api(f.other, '/roles', 'POST', {
+        name: 'Helper',
+        color: null,
+        permissions: ['messages.send'],
+    });
+    const state = await f.api(f.owner, '/state');
+    assert.ok(
+        state.roles.find((r) => r.id === delegated.id).position <
+            state.roles.find((r) => r.id === manager.id).position,
+    );
+    await f.api(
+        f.other,
         '/roles',
         'POST',
-        {
-            name: 'Denied',
-            color: '#abcdef',
-            permissions: [],
-        },
+        { name: 'Escalate', color: null, permissions: ['members.ban'] },
         403,
     );
+    await f.api(f.other, `/roles/${delegated.id}/move`, 'POST', { direction: 'up' }, 403);
+    await f.api(f.other, '/roles', 'POST', {
+        name: 'Another helper',
+        color: null,
+        permissions: [],
+    });
+    const ordered = (await f.api(f.owner, '/state')).roles;
+    assert.equal(new Set(ordered.map((role) => role.position)).size, ordered.length);
+    await f.api(f.other, `/roles/${low.id}`, 'DELETE', undefined, 403);
+    await f.api(f.owner, `/roles/${low.id}`, 'DELETE');
+    assert.deepEqual((await f.api(f.member, '/state')).me.roles, []);
+});
+test('banning and restoring are delegated separately and respect hierarchy', async (t) => {
+    const f = await roleFixture(t),
+        moderator = await f.role('Mod', ['members.ban']);
+    await f.assign(f.other, [moderator.id]);
+    await f.api(f.other, `/users/${f.member.user.id}/access`, 'POST', { enabled: false });
+    await f.api(f.member, '/state', 'GET', undefined, 401);
+    await f.api(f.other, `/users/${f.member.user.id}/access`, 'POST', { enabled: true }, 403);
+    await f.api(f.owner, `/users/${f.member.user.id}/access`, 'POST', { enabled: true });
+    await f.api(f.other, `/users/${f.other.user.id}/access`, 'POST', { enabled: false }, 403);
+    await f.api(f.other, `/users/${f.owner.user.id}/access`, 'POST', { enabled: false }, 403);
 });

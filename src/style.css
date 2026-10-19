@@ -3929,3 +3929,154 @@ body.stream-popout-body {
     padding: 6px;
     font-size: 12px;
 }
+
+.roles-intro {
+    margin-bottom: 20px;
+}
+.roles-intro h3 {
+    margin-top: 0;
+}
+.owner-notice {
+    padding: 12px 14px;
+    border-left: 3px solid var(--accent);
+    background: var(--soft-accent);
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+.role-card {
+    border: 1px solid var(--line);
+    padding: 14px;
+    border-radius: 12px;
+    margin: 10px 0;
+    background: var(--raised);
+}
+.role-card-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.role-card-heading > div {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.role-card-heading small {
+    display: block;
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 12px;
+}
+.role-card-heading button {
+    width: 30px;
+    height: 32px;
+    padding: 0;
+    flex-shrink: 0;
+}
+.role-color-dot {
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--muted);
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.role-card p {
+    margin-bottom: 0;
+}
+.role-channel-overrides,
+.member-roles-card {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+    margin: 10px 0;
+}
+.role-channel-overrides summary,
+.member-roles-card summary {
+    cursor: pointer;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+}
+.member-roles-card summary > span {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 5px;
+    font-weight: 400;
+}
+.override-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 8px;
+}
+.override-row select {
+    width: 112px;
+    flex-shrink: 0;
+}
+.member-role-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+    padding: 16px 0;
+}
+.role-badge {
+    color: var(--muted);
+    font-size: 12px;
+}
+.permission-inspector {
+    margin-top: 16px;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+}
+.permission-inspector p {
+    line-height: 1.7;
+}
+.role-color-control {
+    border: 1px solid var(--line);
+    padding: 12px;
+    border-radius: 10px;
+}
+.channel-privacy {
+    margin: 16px 0;
+}
+.effective-permission-list > div {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+}
+.effective-permission-list small {
+    display: block;
+    color: var(--muted);
+    margin-top: 3px;
+    line-height: 1.5;
+}
+.modal:has(.role-editor) {
+    width: min(760px, calc(100vw - 40px));
+}
+.role-editor-tabs {
+    display: flex;
+    gap: 8px;
+    border-bottom: 1px solid var(--line);
+    margin: 20px 0 12px;
+    padding-bottom: 8px;
+}
+.role-editor-tabs button {
+    flex: 1;
+    min-height: 38px;
+    padding: 8px;
+    color: var(--muted);
+}
+.role-editor-tabs button[aria-selected='true'] {
+    color: var(--ink);
+    background: var(--soft-accent);
+}
+.member-role-options > .role-badge {
+    grid-column: 1 / -1;
+}
+.member-role-options > .checkbox-label {
+    margin: 0;
+    min-height: 32px;
+    align-items: center;
+}

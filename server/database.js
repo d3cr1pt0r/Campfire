@@ -16,7 +16,7 @@ export function transaction(db, action) {
     }
 }
 
-export function migrate(db) {
+export function migrate(db, through = Infinity) {
     db.exec(
         'CREATE TABLE IF NOT EXISTS migrations(version INTEGER PRIMARY KEY, applied INTEGER NOT NULL)',
     );
@@ -120,9 +120,108 @@ export function migrate(db) {
             db.exec(`DELETE FROM sessions;
                 UPDATE invitations SET revoked=1 WHERE usedBy IS NULL AND revoked=0;`);
         },
+        () => {
+            db.exec(`ALTER TABLE users ADD COLUMN owner INTEGER NOT NULL DEFAULT 0 CHECK(owner IN (0,1));
+                UPDATE users SET owner=1 WHERE role='owner';
+                CREATE UNIQUE INDEX one_server_owner ON users(owner) WHERE owner=1;
+                CREATE TRIGGER preserve_server_owner BEFORE UPDATE OF owner,id,banned ON users
+                WHEN OLD.owner=1 AND (NEW.owner<>1 OR NEW.id<>OLD.id OR NEW.banned<>0)
+                BEGIN SELECT RAISE(ABORT,'Server ownership is protected'); END;
+                CREATE TRIGGER preserve_server_owner_delete BEFORE DELETE ON users WHEN OLD.owner=1
+                BEGIN SELECT RAISE(ABORT,'Server ownership is protected'); END;
+                ALTER TABLE roles ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+                UPDATE roles SET position=rowid WHERE id<>'owner';
+                CREATE TABLE user_roles(user TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    role TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,PRIMARY KEY(user,role));
+                INSERT INTO user_roles SELECT id,role FROM users WHERE role<>'owner';
+                ALTER TABLE channels ADD COLUMN private INTEGER NOT NULL DEFAULT 0 CHECK(private IN (0,1));
+                CREATE TABLE channel_overrides(channel TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+                    role TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,permission TEXT NOT NULL,
+                    effect TEXT NOT NULL CHECK(effect IN ('allow','deny')),PRIMARY KEY(channel,role,permission));`);
+            const roles = db.prepare("SELECT * FROM roles WHERE id<>'owner'").all();
+            const grants = roles.map((role) => JSON.parse(role.permissions));
+            const baseline = [
+                'channels.view',
+                ...permissionIds.filter(
+                    (p) => grants.length && grants.every((list) => list.includes(p)),
+                ),
+            ];
+            db.prepare(
+                'INSERT INTO roles(id,name,color,permissions,position) VALUES(?,?,?,?,0)',
+            ).run('everyone', 'Everyone', null, JSON.stringify([...new Set(baseline)]));
+            for (const role of roles)
+                db.prepare('UPDATE roles SET permissions=? WHERE id=?').run(
+                    JSON.stringify([
+                        ...new Set([
+                            'channels.view',
+                            ...JSON.parse(role.permissions).filter((p) =>
+                                permissionIds.includes(p),
+                            ),
+                        ]),
+                    ]),
+                    role.id,
+                );
+            const save = db.prepare('INSERT OR REPLACE INTO channel_overrides VALUES(?,?,?,?)');
+            for (const channel of db.prepare('SELECT * FROM channels').all()) {
+                const entries = db
+                    .prepare('SELECT * FROM channel_access WHERE channel=?')
+                    .all(channel.id);
+                if (entries.some((entry) => entry.mode === 'hidden')) {
+                    db.prepare('UPDATE channels SET private=1 WHERE id=?').run(channel.id);
+                    for (const role of roles) {
+                        if (entries.find((entry) => entry.role === role.id)?.mode !== 'hidden')
+                            save.run(channel.id, role.id, 'channels.view', 'allow');
+                    }
+                }
+                for (const entry of entries) {
+                    if (entry.role === 'owner') continue;
+                    if (entry.mode === 'hidden')
+                        save.run(channel.id, entry.role, 'channels.view', 'deny');
+                    if (entry.mode === 'read-only')
+                        for (const permission of [
+                            'messages.send',
+                            'files.attach',
+                            'reactions.add',
+                            'threads.create',
+                            'threads.reply',
+                        ])
+                            save.run(channel.id, entry.role, permission, 'deny');
+                }
+            }
+            db.exec(`DROP TABLE channel_access;
+                DROP TRIGGER preserve_default_roles; DROP TRIGGER preserve_default_role_ids;
+                CREATE TRIGGER preserve_default_roles BEFORE DELETE ON roles WHEN OLD.id IN ('owner','member','everyone')
+                BEGIN SELECT RAISE(ABORT,'Default roles cannot be deleted'); END;
+                CREATE TRIGGER preserve_default_role_ids BEFORE UPDATE OF id ON roles WHEN NEW.id<>OLD.id
+                BEGIN SELECT RAISE(ABORT,'Role IDs cannot change'); END;`);
+        },
+        () => {
+            // Keep the ID and existing configuration; the role now applies only as a fallback.
+            db.prepare(
+                "UPDATE roles SET name='Default' WHERE id='everyone' AND name='Everyone'",
+            ).run();
+            // A brand-new community starts with normal member abilities in the fallback role.
+            if (
+                !db.prepare('SELECT 1 FROM users LIMIT 1').get() &&
+                !db.prepare("SELECT 1 FROM roles WHERE id='member'").get()
+            )
+                db.prepare("UPDATE roles SET permissions=? WHERE id='everyone'").run(
+                    JSON.stringify(memberPermissions),
+                );
+        },
+        () => {
+            // Retire the redundant built-in role. Remaining assignments stay explicit;
+            // members with no assignments automatically use Default.
+            db.exec(`UPDATE users SET role='everyone' WHERE role='member';
+                DROP TRIGGER preserve_default_roles;
+                CREATE TRIGGER preserve_default_roles BEFORE DELETE ON roles WHEN OLD.id IN ('owner','everyone')
+                BEGIN SELECT RAISE(ABORT,'Default roles cannot be deleted'); END;
+                DELETE FROM roles WHERE id='member';`);
+        },
     ];
     migrations.forEach((apply, index) => {
         const version = index + 1;
+        if (version > through) return;
         if (db.prepare('SELECT 1 FROM migrations WHERE version=?').get(version)) return;
         transaction(db, () => {
             apply();
@@ -187,18 +286,11 @@ export function openDatabase(dataDir, name) {
         const get = (sql, ...params) => db.prepare(sql).get(...params);
         const all = (sql, ...params) => db.prepare(sql).all(...params);
         run(
-            'INSERT OR IGNORE INTO roles VALUES(?,?,?,?)',
+            'INSERT OR IGNORE INTO roles(id,name,color,permissions) VALUES(?,?,?,?)',
             'owner',
             'Owner',
             '#f3be57',
             JSON.stringify(permissionIds),
-        );
-        run(
-            'INSERT OR IGNORE INTO roles VALUES(?,?,?,?)',
-            'member',
-            'Member',
-            '#a5a8b5',
-            JSON.stringify(memberPermissions),
         );
         run('INSERT OR IGNORE INTO settings VALUES(?,?)', 'name', name);
         return { db, run, get, all };

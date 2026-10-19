@@ -1,5 +1,10 @@
 import { useState } from 'react';
-import { permissionGroups, permissionIds, memberPermissions } from '../shared/permissions.js';
+import {
+    permissionGroups,
+    channelPermissionIds,
+    hasPermission,
+    canManageRole,
+} from '../shared/permissions.js';
 import type { State } from './types';
 export function Toggle({
     title,
@@ -76,47 +81,73 @@ export function SimpleForm({
 export function RoleForm({
     role,
     busy,
-    owner,
+    canEditRole,
     state,
     canEditAccess,
     onSave,
 }: {
     role?: State['roles'][number];
     busy: boolean;
-    owner: boolean;
+    canEditRole: boolean;
     state: State;
     canEditAccess: boolean;
-    onSave: (v: unknown) => unknown;
+    onSave: (value: unknown) => unknown;
 }) {
-    const [permissions, setPermissions] = useState<string[]>(
-        role?.id === 'owner' ? permissionIds : role?.permissions || memberPermissions,
+    const initialRole = role ?? state.roles.find((entry) => entry.id === 'everyone');
+    const [permissions, setPermissions] = useState<string[]>([...(initialRole?.permissions || [])]);
+    const [tab, setTab] = useState<'server' | 'channels'>(canEditRole ? 'server' : 'channels');
+    const [colored, setColored] = useState(!!initialRole?.color);
+    const [overrides, setOverrides] = useState<Record<string, string>>(() =>
+        role
+            ? {}
+            : Object.fromEntries(
+                  state.channelPermissions
+                      .filter(
+                          (entry) =>
+                              entry.role === 'everyone' &&
+                              state.channels.some((channel) => channel.id === entry.channel),
+                      )
+                      .map((entry) => [`${entry.channel}:${entry.permission}`, entry.effect]),
+              ),
     );
-    const [access, setAccess] = useState<Record<string, string>>(() =>
-        Object.fromEntries(
-            state.channelPermissions
-                .filter((entry) => entry.role === role?.id)
-                .map((entry) => [entry.channel, entry.mode]),
-        ),
-    );
+    const mayAccess = canEditAccess && (!role || canManageRole(state.me, state.roles, role));
+    const effect = (channel: string, permission: string) =>
+        overrides[`${channel}:${permission}`] ??
+        state.channelPermissions.find(
+            (entry) =>
+                entry.role === role?.id &&
+                entry.channel === channel &&
+                entry.permission === permission,
+        )?.effect ??
+        'inherit';
     return (
         <>
             <h2 id="action-dialog-title">{role ? `Edit role: ${role.name}` : 'Create a role'}</h2>
             <form
                 className="role-editor"
-                onSubmit={(e) => {
-                    e.preventDefault();
-                    const form = new FormData(e.currentTarget);
+                onSubmit={(event) => {
+                    event.preventDefault();
+                    const data = new FormData(event.currentTarget);
                     void onSave({
-                        name: owner ? form.get('name') : role?.name,
-                        color: owner ? form.get('color') : role?.color,
+                        name: canEditRole ? String(data.get('name')) : role?.name,
+                        color: canEditRole
+                            ? colored
+                                ? String(data.get('color'))
+                                : null
+                            : role?.color,
                         permissions,
-                        channelAccess:
-                            role?.id === 'owner'
-                                ? []
-                                : state.channels.map((channel) => ({
-                                      channel: channel.id,
-                                      mode: access[channel.id] || 'full',
-                                  })),
+                        ...(mayAccess && Object.keys(overrides).length
+                            ? {
+                                  overrides: Object.entries(overrides).map(([key, effect]) => {
+                                      const index = key.lastIndexOf(':');
+                                      return {
+                                          channel: key.slice(0, index),
+                                          permission: key.slice(index + 1),
+                                          effect,
+                                      };
+                                  }),
+                              }
+                            : {}),
                     });
                 }}
             >
@@ -125,116 +156,161 @@ export function RoleForm({
                     <input
                         name="name"
                         defaultValue={role?.name}
-                        maxLength={32}
                         required
-                        disabled={!owner || busy}
+                        maxLength={32}
+                        disabled={busy || !canEditRole}
                     />
                 </label>
-                <label>
-                    Name color
-                    <input
-                        name="color"
-                        type="color"
-                        defaultValue={role?.color || '#d9a466'}
-                        disabled={!owner || busy}
-                    />
-                </label>
-                <h3>General permissions</h3>
-                {!owner && (
+                <div className="role-color-control">
+                    <label className="checkbox-label">
+                        <input
+                            type="checkbox"
+                            checked={colored}
+                            disabled={busy || !canEditRole}
+                            onChange={(event) => setColored(event.target.checked)}
+                        />
+                        Use a name color
+                    </label>
+                    {colored && (
+                        <label>
+                            Color
+                            <input
+                                type="color"
+                                name="color"
+                                defaultValue={initialRole?.color || '#d9a466'}
+                                disabled={busy || !canEditRole}
+                            />
+                        </label>
+                    )}
                     <p className="muted">
-                        Only the owner can change general permissions. You can change access to
-                        channels you can see.
+                        The highest colored role determines a member’s name color.
                     </p>
-                )}
-                {role?.id === 'owner' && (
-                    <p className="muted">
-                        The owner always retains every permission and full access to every channel.
-                    </p>
-                )}
-                <p className="field-help">
-                    Files and thread replies also require Send messages. Creating a thread also
-                    requires Reply in threads. Camera, speaking, sharing, and direct calls require
-                    Join calls.
-                </p>
-                {permissionGroups.map((group) => (
-                    <fieldset
-                        className="role-permission-group"
-                        key={group.name}
-                        disabled={busy || !owner || role?.id === 'owner'}
+                </div>
+                <div className="role-editor-tabs" role="tablist" aria-label="Role settings">
+                    <button
+                        type="button"
+                        role="tab"
+                        id="role-server-tab"
+                        aria-selected={tab === 'server'}
+                        aria-controls="role-server-panel"
+                        onClick={() => setTab('server')}
                     >
-                        <legend>{group.name}</legend>
-                        {group.permissions.map(([id, label]) => (
-                            <label className="checkbox-label" key={id}>
-                                <input
-                                    type="checkbox"
-                                    checked={permissions.includes(id)}
-                                    onChange={(e) =>
-                                        setPermissions((previous) =>
-                                            e.target.checked
-                                                ? [...previous, id]
-                                                : previous.filter((p) => p !== id),
-                                        )
-                                    }
-                                />
-                                {label}
-                            </label>
-                        ))}
-                    </fieldset>
-                ))}
-                <h3>Channel access</h3>
-                <p className="muted">
-                    Full access allows only the actions enabled above. Read only blocks posting,
-                    uploads, reactions, and thread replies. Hidden channels cannot be read or
-                    moderated.
-                </p>
-                {role?.id === 'owner' ? (
-                    <p>Owner: full access to every channel.</p>
-                ) : (
-                    <div className="role-channel-access">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Channel</th>
-                                    <th>Access</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {state.channels.map((channel) => (
-                                    <tr key={channel.id}>
-                                        <th scope="row">
-                                            {channel.kind === 'text' ? '#' : '🔊'} {channel.name}
-                                        </th>
-                                        <td>
-                                            <select
-                                                aria-label={`${role?.name || 'New role'} access to ${channel.name}`}
-                                                disabled={busy || !canEditAccess}
-                                                value={access[channel.id] || 'full'}
-                                                onChange={(e) =>
-                                                    setAccess({
-                                                        ...access,
-                                                        [channel.id]: e.target.value,
-                                                    })
-                                                }
-                                            >
-                                                <option value="full">
-                                                    {channel.kind === 'text'
-                                                        ? 'Full access'
-                                                        : 'Visible'}
-                                                </option>
-                                                {channel.kind === 'text' && (
-                                                    <option value="read-only">Read only</option>
-                                                )}
-                                                <option value="hidden">Hidden</option>
-                                            </select>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-                <button className="primary" disabled={busy || (!owner && !canEditAccess)}>
-                    {busy ? 'Saving…' : owner ? 'Save role' : 'Save channel access'}
+                        Server permissions
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        id="role-channels-tab"
+                        aria-selected={tab === 'channels'}
+                        aria-controls="role-channels-panel"
+                        onClick={() => setTab('channels')}
+                    >
+                        Channel overrides
+                    </button>
+                </div>
+                <div
+                    role="tabpanel"
+                    id="role-server-panel"
+                    aria-labelledby="role-server-tab"
+                    hidden={tab !== 'server'}
+                >
+                    <h3>Server permissions</h3>
+                    <p className="muted">
+                        Default applies only when no roles are assigned. Assigning this role
+                        replaces Default. Multiple selected roles combine their grants; an unchecked
+                        box does not remove a grant from another selected role. Ownership always
+                        retains access.
+                    </p>
+                    {!canEditRole && (
+                        <p className="muted">
+                            You can edit permission overrides for lower roles in channels you can
+                            access.
+                        </p>
+                    )}
+                    {permissionGroups.map((group) => (
+                        <fieldset
+                            className="role-permission-group"
+                            key={group.name}
+                            disabled={busy || !canEditRole}
+                        >
+                            <legend>{group.name}</legend>
+                            {group.permissions.map(([id, label]) => (
+                                <label key={id} className="checkbox-label">
+                                    <input
+                                        type="checkbox"
+                                        checked={permissions.includes(id)}
+                                        disabled={
+                                            !state.me.owner &&
+                                            !hasPermission(state.me, state.roles, id)
+                                        }
+                                        onChange={(event) =>
+                                            setPermissions((previous) =>
+                                                event.target.checked
+                                                    ? [...previous, id]
+                                                    : previous.filter((p) => p !== id),
+                                            )
+                                        }
+                                    />
+                                    {label}
+                                </label>
+                            ))}
+                        </fieldset>
+                    ))}
+                </div>
+                <div
+                    role="tabpanel"
+                    id="role-channels-panel"
+                    aria-labelledby="role-channels-tab"
+                    hidden={tab !== 'channels'}
+                >
+                    <h3>Channel overrides</h3>
+                    <p className="muted">
+                        Inherit uses the selected roles’ server permissions. Default applies only
+                        when no roles are selected. Role allows win over other role denies. Private
+                        channels require an explicit View channel grant. Channel restrictions do not
+                        apply to direct messages.
+                    </p>
+                    {state.channels.map((channel) => (
+                        <details className="role-channel-overrides" key={channel.id}>
+                            <summary>
+                                {channel.kind === 'text' ? '#' : '◖'} {channel.name}
+                                {channel.private ? ' · Private' : ''}
+                            </summary>
+                            {channelPermissionIds(channel.kind).map((id) => (
+                                <label className="override-row" key={id}>
+                                    <span>
+                                        {
+                                            permissionGroups
+                                                .flatMap((group) => group.permissions)
+                                                .find(([key]) => key === id)?.[1]
+                                        }
+                                    </span>
+                                    <select
+                                        aria-label={`${role?.name || 'New role'} ${id} in ${channel.name}`}
+                                        value={effect(channel.id, id)}
+                                        disabled={
+                                            busy ||
+                                            !mayAccess ||
+                                            (!state.me.owner && !channel.permissions.includes(id))
+                                        }
+                                        onChange={(event) =>
+                                            setOverrides({
+                                                ...overrides,
+                                                [`${channel.id}:${id}`]: event.target.value,
+                                            })
+                                        }
+                                    >
+                                        <option value="inherit">Inherit</option>
+                                        <option value="allow">Allow</option>
+                                        <option value="deny">Deny</option>
+                                    </select>
+                                </label>
+                            ))}
+                        </details>
+                    ))}
+                </div>
+                <button className="primary" disabled={busy || (!canEditRole && !mayAccess)}>
+                    {busy ? 'Saving…' : 'Save role'}
                 </button>
             </form>
         </>

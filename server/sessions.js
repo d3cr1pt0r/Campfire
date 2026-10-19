@@ -1,4 +1,5 @@
-import { tokenHash, hasPermission } from './security.js';
+import { tokenHash } from './security.js';
+import { permissionIds, effectiveRoleIds } from '../shared/permissions.js';
 import { check } from './policies.js';
 
 export function createSessions({ get, all, run, io }) {
@@ -15,23 +16,44 @@ export function createSessions({ get, all, run, io }) {
         id: u.id,
         username: u.username,
         nickname: get('SELECT nickname FROM profiles WHERE user=?', u.id)?.nickname || u.username,
-        role: u.role,
+        owner: !!u.owner,
+        roles: all('SELECT role FROM user_roles WHERE user=?', u.id).map((entry) => entry.role),
         status:
             get('SELECT status FROM presence_preferences WHERE user=?', u.id)?.status || 'online',
         avatar: get('SELECT id FROM avatars WHERE user=?', u.id)?.id || null,
     });
-    const users = () =>
-        all(`SELECT u.id,u.username,u.role,COALESCE(p.nickname,u.username) nickname,a.id avatar
-        FROM users u LEFT JOIN profiles p ON p.user=u.id LEFT JOIN avatars a ON a.user=u.id WHERE u.banned=0`);
-    const can = (u, permission) =>
-        !!u &&
-        hasPermission(
-            u,
-            JSON.parse(
-                get('SELECT permissions FROM roles WHERE id=?', u.role)?.permissions || '[]',
-            ),
-            permission,
+    const users = () => all('SELECT * FROM users WHERE banned=0').map(publicUser);
+    const roleIds = (u) =>
+        effectiveRoleIds(
+            all('SELECT role FROM user_roles WHERE user=?', u.id).map((entry) => entry.role),
         );
+    const permissionsFor = (u, assigned) =>
+        !u
+            ? []
+            : u.owner
+              ? permissionIds
+              : [
+                    ...new Set(
+                        (assigned === undefined ? roleIds(u) : effectiveRoleIds(assigned)).flatMap(
+                            (id) =>
+                                JSON.parse(
+                                    get('SELECT permissions FROM roles WHERE id=?', id)
+                                        ?.permissions || '[]',
+                                ),
+                        ),
+                    ),
+                ];
+    const can = (u, permission) =>
+        !!u && permissionIds.includes(permission) && permissionsFor(u).includes(permission);
+    const highest = (u) =>
+        u?.owner
+            ? Infinity
+            : Math.max(
+                  0,
+                  ...roleIds(u).map(
+                      (id) => get('SELECT position FROM roles WHERE id=?', id)?.position || 0,
+                  ),
+              );
     const requirePermission = (u, permission) =>
         check(can(u, permission), 'Permission denied', 403);
     const auth = (req, res, next) => {
@@ -78,6 +100,9 @@ export function createSessions({ get, all, run, io }) {
         publicUser,
         users,
         can,
+        permissionsFor,
+        roleIds,
+        highest,
         requirePermission,
         auth,
         attach,

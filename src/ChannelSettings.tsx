@@ -257,6 +257,26 @@ function ChannelEditor({
                     Save channel
                 </button>
             </form>
+            {permission('channels.access') && (
+                <div className="channel-privacy">
+                    <Toggle
+                        title="Private channel"
+                        value={channel.private}
+                        set={(value) =>
+                            void act(async () => {
+                                await api(`/channels/${channel.id}/privacy`, 'PATCH', {
+                                    private: value,
+                                });
+                                await refresh();
+                            })
+                        }
+                    />
+                    <p className="muted">
+                        Private channels are hidden by default, including from newly created roles.
+                        Grant View channels explicitly in Roles & permissions.
+                    </p>
+                </div>
+            )}
             {channel.kind === 'text' && permission('channels.edit') && (
                 <Toggle
                     title="Show who reacted in this channel"

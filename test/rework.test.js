@@ -49,7 +49,7 @@ test('legacy migration merges DM histories and accounts for attachment bytes onc
         db.exec("INSERT INTO attachments VALUES('unpadded','first','hi','text/plain','aGk')");
         migrate(db);
         migrate(db);
-        assert.equal(db.prepare('SELECT COUNT(*) n FROM migrations').get().n, 12);
+        assert.equal(db.prepare('SELECT COUNT(*) n FROM migrations').get().n, 15);
         assert.equal(db.prepare("SELECT COUNT(*) n FROM messages WHERE room='dm:a:b'").get().n, 2);
         assert.equal(db.prepare('SELECT bytes FROM storage_usage').get().bytes, 7);
         assert.equal(db.prepare('SELECT COUNT(*) n FROM reactions').get().n, 1);
@@ -75,7 +75,7 @@ test('failed migrations roll back schema changes and can resume after the cause 
         assert.equal(db.prepare('SELECT MAX(version) version FROM migrations').get().version, 1);
         db.exec('DROP TABLE storage_usage');
         migrate(db);
-        assert.equal(db.prepare('SELECT MAX(version) version FROM migrations').get().version, 12);
+        assert.equal(db.prepare('SELECT MAX(version) version FROM migrations').get().version, 15);
     } finally {
         db.close();
     }
@@ -234,10 +234,10 @@ test('canonical conversations, stable pagination, full search, permissions and s
     const role = await api('/roles', 'POST', {
         name: 'Read only',
         color: '#112233',
-        permissions: [],
+        permissions: ['channels.view'],
     });
-    await api(`/users/${bob.user.id}/role`, 'PATCH', { role: role.id });
-    await api('/messages/page0000', 'PATCH', { body: 'forbidden' }, bob.token, 403);
+    await api(`/users/${bob.user.id}/roles`, 'PATCH', { roles: [role.id] });
+    await api('/messages/page0000', 'PATCH', { body: 'Author can still edit' }, bob.token);
     const file = { name: 'hello', data: Buffer.from('hello').toString('base64') };
     const uploaded = await api('/messages', 'POST', { room: 'general', attachment: file });
     await api('/messages', 'POST', { room: 'general', attachment: file }, alice.token, 413);
@@ -264,7 +264,7 @@ test('concurrent first registrations produce one owner and duplicate registratio
         accounts.map((account) => account.status),
         [200, 200],
     );
-    assert.equal(accounts.filter((account) => account.data.user.role === 'owner').length, 1);
+    assert.equal(accounts.filter((account) => account.data.user.owner).length, 1);
     const duplicate = await Promise.all([signup('SameName'), signup('SameName')]);
     assert.deepEqual(duplicate.map((account) => account.status).sort(), [200, 409]);
 });

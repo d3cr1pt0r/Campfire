@@ -102,12 +102,12 @@ test('thread events broadcast reply counts and typing only to authorized room pa
     const role = await api(alice, '/roles', 'POST', {
         name: 'No camera',
         color: '#aabbcc',
-        permissions: ['calls.join', 'calls.speak'],
+        permissions: ['channels.view', 'calls.join', 'calls.speak'],
     });
-    await api(alice, `/users/${bob.user.id}/role`, 'PATCH', { role: role.id });
+    await api(alice, `/users/${bob.user.id}/roles`, 'PATCH', { roles: [role.id] });
     assert.equal((await api(alice, '/state')).calls[0].camera, false);
     // Real Socket.IO middleware refreshes the user on every incoming packet.
-    b.data.user.role = role.id;
+    b.data.user.roles = [role.id];
     b.emit('call:status', { muted: true, deafened: false, camera: true });
     assert.equal((await api(alice, '/state')).calls[0].camera, false);
 });

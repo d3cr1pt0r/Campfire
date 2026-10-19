@@ -6,7 +6,7 @@ This document describes the initial source implementation and is intended to be 
 
 - English-only UI.
 - Independent self-hosted servers, identified by HTTP(S) origins. Each server owns accounts, roles, messages, and files.
-- The first account owns a new server. All later accounts use the Member role.
+- The first account owns a new server. All later accounts use Default until explicitly assigned other roles.
 - Up to eight peers per voice channel. Mesh WebRTC, not an SFU.
 - Text channels, DMs, attachments, all six requested messaging extras, and all six requested calling extras.
 - Community extras were not selected; the response instead requested this implementation document. Channels remain public text/voice channels. DMs are private to their participants; the subsequent direct-call implementation adds invite-only temporary voice/video rooms.
@@ -69,17 +69,21 @@ Attachments are capped at ten files and 5 MB combined per message. Before larger
 
 Clients send `Authorization: Bearer <token>` over HTTP and `auth.token` in the Socket.IO handshake. Session tokens are hashed in the database; the browser client token lives in localStorage; the desktop client uses the narrow preload storage bridge to persist it across temporary UI-port changes. On Windows, safeStorage encrypts client-state.dat with the current OS user key. Without encryption support, the client falls back to user-filesystem-protected plaintext (matching the browser localStorage trust model). Log out revokes the token and disconnects sockets with that token. Socket middleware revalidates the session and role on every incoming event. An idle socket may remain connected after token expiration until its next event; add scheduled session expiry enforcement before broader deployments.
 
-Owner always has all permissions. Other roles have independent `send`, `voice`, and `manage` permissions:
+Server ownership is an independent protected `users.owner` flag. Members with no explicit roles use Default. Assigning any roles replaces Default entirely; multiple explicit roles combine. New accounts have no automatic Member assignment. `user_roles` is authoritative; the legacy `users.role` column exists only for database compatibility and is not used for authorization. Role position controls management hierarchy and the highest non-null role color. Ownership cannot be granted or removed through roles.
 
-| Permission | Capabilities |
-| --- | --- |
-| `send` | New messages, attachments, reactions and custom emoji uploads |
-| `voice` | Join voice channels/private calls, invite server members, signal peers and publish activity |
-| `manage` | Server naming, channel creation, non-management role editing/creation, pin/unpin and deletion of other users' messages |
+`shared/permissions.js` defines granular permissions. Channel overrides use Inherit, Allow, or Deny for each channel capability. Private channels deny visibility by default. Only the active roles contribute overrides: Default for an unassigned member, or the assigned roles otherwise; among assigned roles, explicit allows win over denies. Role order does not affect permission resolution. No Full/Read-only/Hidden presets remain. The role editor includes an effective-permissions inspector with grant/denial reasons.
 
-Only Owner assigns user roles or grants/edits roles containing `manage`. Owner cannot be demoted by the current API. Message authors can edit/delete their existing messages and reactions require conversation access and the send permission. Pinning requires management permission and conversation access. Clients losing voice permission receive `call:revoked`, and all other participants receive an updated call roster so their connections close.
+Role editing and assignment, invitation creation and management, and account banning/restoration can be delegated independently. Delegates can affect only lower roles/members, cannot change their own roles, and cannot grant capabilities they lack. Assignment checks also reject indirect channel escalation through removing a restrictive role. Only the owner changes registration mode or protected ownership.
 
-All channels are readable by all authenticated users. Do not implement private-channel UI alone: apply visibility checks consistently to state/rosters, message history, live event routing, attachments, typing, call joins, and signals. Public messages currently broadcast to all authenticated sockets; this must change when channel membership becomes private.
+Authors may edit/delete their own visible messages without role switches. Channel sending, attachments, reactions, thread creation/replies, pinning, and moderation are independent checks. Thread replies do not require permission to post in the main channel. Channel restrictions do not apply to DMs, and channel moderators cannot delete another participant's DM. Account bans revoke all sessions.
+
+Channel visibility is enforced for state, history, attachments, live events, typing, call joins, and signaling. Call media permissions use the active voice channel's overrides, including grants absent at server level; revocation updates the roster and client capture. The P2P transport still cannot enforce media restrictions against modified peers without a media server.
+
+Migration 14 renames Everyone to Default without resetting its settings or existing explicit assignments, and switches to fallback-only resolution. Fresh communities give Default normal member permissions.
+
+Migration 15 removes the built-in Member role and its assignments and overrides. Members retaining other roles keep them; otherwise they fall back to Default. Legacy database references are redirected to Default, and Member is no longer seeded at startup.
+
+Migration 13 adds independent ownership, role positions, multiple memberships, the baseline role, channel privacy, and targeted overrides. It preserves old memberships and visibility, converts old read-only restrictions, and explicitly grants previously visible roles access to migrated private channels. New roles receive no implicit access to private channels. Upgrade server and clients together.
 
 The prototype uses synchronous scrypt and database queries. Auth attempts have a per-IP, in-memory 20/minute limit; behind a reverse proxy, clients share that proxy's IP unless a safe trusted-proxy strategy is added. Registration is open. Before public distribution, add registration controls, comprehensive route/socket throttles, asynchronous password hashing, quotas, audit logging, session management, backups, and recovery. Open registration plus first-user ownership means initial bootstrap must happen before exposure.
 
@@ -111,8 +115,12 @@ All `/api` routes except `/info` and `/auth/:action` require a session. Errors r
 | POST | `/api/calls/:id/decline` | Reject invitation or remove own inactive membership |
 | POST | `/api/channels` | `{name,kind}`; manager only |
 | POST | `/api/roles` | `{name,color,permissions}` |
-| PATCH | `/api/roles/:id` | Edit name/color/permissions, preserving Owner role |
-| PATCH | `/api/users/:id/role` | `{role}`; owner only |
+| PATCH | `/api/roles/:id` | Edit name/optional color/permissions and targeted overrides; lower roles only |
+| PATCH | `/api/users/:id/roles` | `{roles: string[]}`; protected ownership and hierarchy checks |
+| POST | `/api/roles/:id/move` | `{direction: "up" or "down"}`; lower-role hierarchy checks |
+| PUT | `/api/roles/:id/access` | `{overrides: [{channel,permission,effect}]}`; Inherit/Allow/Deny |
+| PATCH | `/api/channels/:id/privacy` | `{private: boolean}`; channel access manager |
+| GET | `/api/users/:id/permissions?channel=ID` | Effective channel permissions and decision reasons |
 | PATCH | `/api/settings` | `{name}`; manager only |
 
 ## Socket contract

@@ -36,7 +36,11 @@ test(
         const owner = await signup('Owner'),
             member = await signup('Member');
         const flags = (permissions) =>
-            api(owner, '/roles/member', 'PATCH', { name: 'Member', color: '#abcdef', permissions });
+            api(owner, '/roles/everyone', 'PATCH', {
+                name: 'Default',
+                color: '#abcdef',
+                permissions: ['channels.view', ...permissions],
+            });
         const connect = async (account) => {
             const s = client(base, {
                 auth: { token: account.token },
@@ -109,5 +113,32 @@ test(
         await flags(['calls.join', 'calls.start']);
         const direct = await api(member, '/calls', 'POST', { user: owner.user.id });
         assert.ok(direct.id.startsWith('private:'));
+        // A channel grant works even when the same server-level permission is absent.
+        await flags([]);
+        await api(owner, '/roles/everyone/access', 'PUT', {
+            overrides: [
+                { channel: 'lounge', permission: 'calls.join', effect: 'allow' },
+                { channel: 'lounge', permission: 'calls.speak', effect: 'allow' },
+            ],
+        });
+        assert.ok((await join(b)).peers);
+        b.emit('call:speaking', true);
+        await delay(30);
+        assert.equal(speaking, 2);
+        await api(owner, '/roles/everyone/access', 'PUT', {
+            overrides: [{ channel: 'lounge', permission: 'calls.speak', effect: 'deny' }],
+        });
+        b.emit('call:speaking', true);
+        await delay(30);
+        assert.equal(speaking, 2);
+        assert.equal(
+            (await api(owner, '/state')).calls.find((entry) => entry.user === member.user.id).muted,
+            true,
+        );
+        const channelRevoked = once(b, 'call:revoked');
+        await api(owner, '/roles/everyone/access', 'PUT', {
+            overrides: [{ channel: 'lounge', permission: 'calls.join', effect: 'deny' }],
+        });
+        await channelRevoked;
     },
 );

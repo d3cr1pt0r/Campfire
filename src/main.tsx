@@ -1,4 +1,9 @@
-import { hasRolePermission } from '../shared/permissions.js';
+import {
+    hasPermission,
+    roleColor,
+    channelPermissionIds,
+    canManageRole,
+} from '../shared/permissions.js';
 import { shouldNotify, createNotificationSound, migrateNotificationKeys } from './notifications';
 import {
     formatFingerprint,
@@ -345,6 +350,7 @@ function App() {
     );
     const refresh = stateRefresh.refresh;
     useEffect(() => () => stateRefresh.cancel(), [stateRefresh]);
+    const activeCallChannel = useRef<string | null>(null);
     const call = useCall(
         socket,
         prefs,
@@ -354,14 +360,26 @@ function App() {
             notify(
                 'Saved microphone unavailable; using System default for this call. Your selection is kept for next time.',
             ),
-        (p) =>
-            !!state &&
-            hasRolePermission(
-                state.me.role,
-                state.roles.find((r) => r.id === state.me.role)?.permissions || [],
-                p,
-            ),
+        (p, targetChannel) => {
+            if (!state) return false;
+            const id = targetChannel ?? activeCallChannel.current;
+            const channel = state.channels.find((entry) => entry.id === id);
+            if (id && !id.startsWith('private:') && !channel) return false;
+            return hasPermission(state.me, state.roles, p, channel);
+        },
     );
+    activeCallChannel.current = call.channel;
+    const callCan = (p: string) =>
+        !!state &&
+        (!call.channel ||
+            call.channel.startsWith('private:') ||
+            state.channels.some((entry) => entry.id === call.channel)) &&
+        hasPermission(
+            state.me,
+            state.roles,
+            p,
+            state.channels.find((entry) => entry.id === call.channel),
+        );
     const speaking = useSpeaking(socket, call.microphone, state?.me.id || '', call.channel);
     const [callAreaMode, setCallAreaMode] = useState<CallAreaMode>('split');
     useEffect(() => setCallAreaMode('split'), [call.channel, url, token]);
@@ -590,22 +608,19 @@ function App() {
             setBusy(false);
         }
     };
-    const permission = (p: string) =>
-        !!state &&
-        hasRolePermission(
-            state.me.role,
-            state.roles.find((r) => r.id === state.me.role)?.permissions || [],
-            p,
+    const permission = (p: string) => !!state && hasPermission(state.me, state.roles, p);
+    const conversationPermission = (name: string) => {
+        if (!state || !roomVisible) return false;
+        if (room.startsWith('dm:') && channelPermissionIds('text').includes(name))
+            return name !== 'messages.deleteOthers';
+        return hasPermission(
+            state.me,
+            state.roles,
+            name,
+            state.channels.find((channel) => channel.id === room),
         );
-    const canPost =
-        permission('messages.send') &&
-        (room.startsWith('dm:') ||
-            state?.channels.find((channel) => channel.id === room)?.access === 'full');
-    const conversationPermission = (name: string) =>
-        permission(name) &&
-        (name === 'messages.deleteOwn' ||
-            ((!currentChannel || currentChannel.access === 'full') &&
-                !(dmUser && name === 'messages.deleteOthers')));
+    };
+    const canPost = conversationPermission('messages.send');
     useEffect(() => {
         if (!roomVisible)
             setModal((previous) =>
@@ -618,7 +633,7 @@ function App() {
         if (!roomVisible) setEdit(null);
     }, [roomVisible]);
     const user = (id: string) => state?.users.find((u) => u.id === id);
-    const color = (u?: User) => state?.roles.find((r) => r.id === u?.role)?.color;
+    const color = (u?: User) => (state ? roleColor(u, state.roles) : undefined);
     const dm = (id: string) => {
         if (!state) return;
         setComposerFocus((request) => request + 1);
@@ -697,7 +712,7 @@ function App() {
     const uploadBusy = useRef(busy);
     uploadBusy.current = busy;
     const addFiles = (files: File[]) => {
-        if (!canPost || !permission('files.attach')) {
+        if (!canPost || !conversationPermission('files.attach')) {
             notify('You do not have permission to attach files in this conversation.');
             return;
         }
@@ -1253,9 +1268,12 @@ function App() {
                             />
                             <div className="category">
                                 <span>TEXT CHANNELS</span>
-                                {['channels.edit', 'channels.reorder', 'channels.delete'].some(
-                                    permission,
-                                ) && (
+                                {[
+                                    'channels.edit',
+                                    'channels.reorder',
+                                    'channels.delete',
+                                    'channels.access',
+                                ].some(permission) && (
                                     <button
                                         title="Manage channels"
                                         onClick={() => openSettings('channels')}
@@ -1290,9 +1308,12 @@ function App() {
                                 ))}
                             <div className="category">
                                 <span>VOICE CHANNELS</span>
-                                {['channels.edit', 'channels.reorder', 'channels.delete'].some(
-                                    permission,
-                                ) && (
+                                {[
+                                    'channels.edit',
+                                    'channels.reorder',
+                                    'channels.delete',
+                                    'channels.access',
+                                ].some(permission) && (
                                     <button
                                         title="Manage voice channels"
                                         onClick={() => openSettings('channels')}
@@ -1315,7 +1336,14 @@ function App() {
                                     <React.Fragment key={c.id}>
                                         <button
                                             className={`nav-item channel ${call.channel === c.id ? 'in-call' : ''}`}
-                                            disabled={!permission('calls.join')}
+                                            disabled={
+                                                !hasPermission(
+                                                    state.me,
+                                                    state.roles,
+                                                    'calls.join',
+                                                    c,
+                                                )
+                                            }
                                             onClick={() => {
                                                 if (call.channel !== c.id) void call.join(c.id);
                                                 else toggleCallPanel();
@@ -1379,7 +1407,14 @@ function App() {
                                                                     ? 'Open your screen share'
                                                                     : `Watch ${displayName(user(p.user))}’s stream`
                                                             }
-                                                            disabled={!permission('calls.join')}
+                                                            disabled={
+                                                                !hasPermission(
+                                                                    state.me,
+                                                                    state.roles,
+                                                                    'calls.join',
+                                                                    c,
+                                                                )
+                                                            }
                                                             onClick={() => {
                                                                 if (callAreaMode === 'conversation')
                                                                     setCallAreaMode('split');
@@ -1476,7 +1511,7 @@ function App() {
                             <button
                                 title={call.muted ? 'Unmute' : 'Mute microphone'}
                                 aria-pressed={call.muted}
-                                disabled={!permission('calls.speak')}
+                                disabled={!callCan('calls.speak')}
                                 onClick={() => call.setMuted(!call.muted)}
                             >
                                 {call.muted ? <MicOff size={18} /> : <Mic size={18} />}
@@ -1555,11 +1590,9 @@ function App() {
                                                     !permission('calls.join') ||
                                                     !permission('calls.start') ||
                                                     !state.online.includes(dmUser.id) ||
-                                                    !hasRolePermission(
-                                                        dmUser.role,
-                                                        state.roles.find(
-                                                            (role) => role.id === dmUser.role,
-                                                        )?.permissions || [],
+                                                    !hasPermission(
+                                                        dmUser,
+                                                        state.roles,
                                                         'calls.join',
                                                     )
                                                 }
@@ -1733,7 +1766,7 @@ function App() {
                                 />
                                 <ChatComposer
                                     focusRequest={composerFocus}
-                                    canAttach={canPost && permission('files.attach')}
+                                    canAttach={canPost && conversationPermission('files.attach')}
                                     users={state.users}
                                     emojis={state.emojis}
                                     attachments={attachments}
@@ -1868,11 +1901,9 @@ function App() {
                                                     disabled={
                                                         busy ||
                                                         !state.online.includes(id) ||
-                                                        !hasRolePermission(
-                                                            member.role,
-                                                            state.roles.find(
-                                                                (role) => role.id === member.role,
-                                                            )?.permissions || [],
+                                                        !hasPermission(
+                                                            member,
+                                                            state.roles,
                                                             'calls.join',
                                                         ) ||
                                                         room?.members.includes(id) ||
@@ -1977,17 +2008,27 @@ function App() {
                                     busy={busy}
                                     state={state}
                                     canEditAccess={permission('channels.access')}
-                                    owner={state.me.role === 'owner'}
+                                    canEditRole={
+                                        permission('roles.manage') &&
+                                        (!state.roles.find((r) => r.id === modal.split(':')[1]) ||
+                                            canManageRole(
+                                                state.me,
+                                                state.roles,
+                                                state.roles.find(
+                                                    (r) => r.id === modal.split(':')[1],
+                                                )!,
+                                            ))
+                                    }
                                     onSave={(data) =>
                                         act(async () => {
                                             const id = modal.split(':')[1];
                                             await api(
                                                 id === 'new'
                                                     ? '/roles'
-                                                    : `/roles/${id}${state.me.role === 'owner' ? '' : '/access'}`,
+                                                    : `/roles/${id}${permission('roles.manage') ? '' : '/access'}`,
                                                 id === 'new'
                                                     ? 'POST'
-                                                    : state.me.role === 'owner'
+                                                    : permission('roles.manage')
                                                       ? 'PATCH'
                                                       : 'PUT',
                                                 data,

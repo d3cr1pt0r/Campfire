@@ -14,10 +14,16 @@ export function RegistrationSettings({
     api,
     url,
     pin,
+    owner,
+    canCreate,
+    canManage,
 }: {
     api: ApiClient;
     url: string;
     pin: string | null;
+    owner: boolean;
+    canCreate: boolean;
+    canManage: boolean;
 }) {
     const [data, setData] = useState<Registration | null>(null);
     const [error, setError] = useState('');
@@ -63,8 +69,8 @@ export function RegistrationSettings({
         <section className="registration-settings" aria-label="Who can join">
             <h3>Who can join</h3>
             <p className="muted">
-                Only the owner can change registration or manage invitations. Existing members can
-                always sign in.
+                Only the owner changes registration mode. Invitations can be delegated separately.
+                Existing members can always sign in.
             </p>
             {error && <p role="alert">{error}</p>}
             {!data ? (
@@ -75,7 +81,7 @@ export function RegistrationSettings({
                         Registration
                         <select
                             value={data.mode}
-                            disabled={busy}
+                            disabled={busy || !owner}
                             onChange={(e) => {
                                 if (e.target.value === 'open') setConfirmOpen(true);
                                 else changeMode('invite');
@@ -111,7 +117,7 @@ export function RegistrationSettings({
                             </button>
                         </div>
                     )}
-                    {data.mode === 'invite' && (
+                    {data.mode === 'invite' && canCreate && (
                         <>
                             <p className="muted">
                                 Each invitation allows one new account and expires after 7 days.
@@ -208,7 +214,7 @@ export function RegistrationSettings({
                                     Created {new Date(invite.created).toLocaleString()} · Expires{' '}
                                     {new Date(invite.expires).toLocaleString()}
                                 </p>
-                                {status === 'Available' && (
+                                {status === 'Available' && canManage && (
                                     <button
                                         type="button"
                                         disabled={busy}

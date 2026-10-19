@@ -93,8 +93,8 @@ test(
         await t.test(
             'first user is owner, passwords are hashed, sessions require authentication',
             async () => {
-                assert.equal(alice.user.role, 'owner');
-                assert.equal(bob.user.role, 'member');
+                assert.equal(alice.user.owner, true);
+                assert.deepEqual(bob.user.roles, []);
                 assert.notEqual(
                     service.db.prepare('SELECT password FROM users WHERE id=?').get(alice.user.id)
                         .password,
@@ -228,14 +228,14 @@ test(
                 color: '#aa88ff',
                 permissions: [],
             });
-            await api(alice, `/users/${bob.user.id}/role`, 'PATCH', { role: readonly.id });
+            await api(alice, `/users/${bob.user.id}/roles`, 'PATCH', { roles: [readonly.id] });
             await api(bob, '/messages', 'POST', { room: 'general', body: 'No permission' }, 403);
-            await api(bob, `/users/${alice.user.id}/role`, 'PATCH', { role: 'member' }, 403);
-            await api(alice, `/users/${alice.user.id}/role`, 'PATCH', { role: 'member' }, 400);
+            await api(bob, `/users/${alice.user.id}/roles`, 'PATCH', { roles: [] }, 403);
+            await api(alice, `/users/${alice.user.id}/roles`, 'PATCH', { roles: [] });
             await api(alice, `/roles/${readonly.id}`, 'PATCH', {
                 name: 'Listener',
                 color: '#112233',
-                permissions: migratePermissions(['voice']),
+                permissions: ['channels.view', ...migratePermissions(['voice'])],
             });
             assert.equal(
                 (await api(bob, '/state')).roles.find((r) => r.id === readonly.id).color,
@@ -251,7 +251,7 @@ test(
                 permissions: [],
             });
             assert.ok((await join(bs, 'lounge')).error);
-            await api(alice, `/users/${bob.user.id}/role`, 'PATCH', { role: 'member' });
+            await api(alice, `/users/${bob.user.id}/roles`, 'PATCH', { roles: [] });
             assert.equal((await join(as, 'lounge')).peers.length, 0);
             assert.equal((await join(bs, 'lounge')).peers.length, 1);
             const signal = once(bs, 'signal');

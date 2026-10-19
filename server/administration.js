@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { boundedPng, channelName } from './images.js';
 import { check, route, validateRole } from './policies.js';
 import { transaction } from './database.js';
+import { channelPermissionIds } from '../shared/permissions.js';
 export function registerAdministration({
     app,
     io,
@@ -11,7 +12,12 @@ export function registerAdministration({
     run,
     requirePermission,
     enforceCalls,
-    mode,
+    canInChannel,
+    can,
+    highest,
+    channelPermissions,
+    permissionsFor,
+    permissionDetails,
     publishChannels,
 }) {
     app.post(
@@ -25,8 +31,12 @@ export function registerAdministration({
                 check(false, e.message);
             }
             const id = randomUUID();
+            check(
+                req.body.private === undefined || typeof req.body.private === 'boolean',
+                'Invalid private channel setting',
+            );
             run(
-                'INSERT INTO channels(id,name,kind,position,description) VALUES(?,?,?,?,?)',
+                'INSERT INTO channels(id,name,kind,position,description,private) VALUES(?,?,?,?,?,?)',
                 id,
                 name,
                 req.body.kind,
@@ -35,6 +45,7 @@ export function registerAdministration({
                     req.body.kind,
                 ).position,
                 req.body.kind === 'text' ? 'A place for everyday conversations.' : '',
+                Number(req.body.private === true),
             );
             publishChannels();
             res.json({ id });
@@ -43,7 +54,11 @@ export function registerAdministration({
     const managedChannel = (req, permission) => {
         requirePermission(req.user, permission);
         const channel = get('SELECT * FROM channels WHERE id=?', req.params.id);
-        check(channel && mode(req.user, channel) !== 'hidden', 'Channel not found', 404);
+        check(
+            channel && canInChannel(req.user, channel, 'channels.view'),
+            'Channel not found',
+            404,
+        );
         return channel;
     };
     app.post(
@@ -55,7 +70,7 @@ export function registerAdministration({
                 const channels = all(
                     'SELECT * FROM channels WHERE kind=? ORDER BY position,rowid',
                     channel.kind,
-                ).filter((entry) => mode(req.user, entry) !== 'hidden');
+                ).filter((entry) => canInChannel(req.user, entry, 'channels.view'));
                 const index = channels.findIndex((entry) => entry.id === channel.id);
                 const other = channels[index + (req.body.direction === 'up' ? -1 : 1)];
                 if (other) {
@@ -89,7 +104,9 @@ export function registerAdministration({
             const channel = managedChannel(req, 'channels.reorder');
             const target = get('SELECT * FROM channels WHERE id=?', req.body.target);
             check(
-                target && target.kind === channel.kind && mode(req.user, target) !== 'hidden',
+                target &&
+                    target.kind === channel.kind &&
+                    canInChannel(req.user, target, 'channels.view'),
                 'Invalid drop target',
             );
             const placement = req.body.placement ?? 'before';
@@ -164,6 +181,17 @@ export function registerAdministration({
             res.json({ ok: true });
         }),
     );
+    app.patch(
+        '/api/channels/:id/privacy',
+        route((req, res) => {
+            const channel = managedChannel(req, 'channels.access');
+            check(typeof req.body.private === 'boolean', 'Invalid private channel setting');
+            run('UPDATE channels SET private=? WHERE id=?', Number(req.body.private), channel.id);
+            enforceCalls();
+            publishChannels();
+            res.json({ ok: true });
+        }),
+    );
     app.delete(
         '/api/channels/:id',
         route((req, res) => {
@@ -183,100 +211,129 @@ export function registerAdministration({
             res.json({ ok: true });
         }),
     );
-    app.put(
-        '/api/channels/:id/access',
-        route((req, res) => {
-            const channel = managedChannel(req, 'channels.access');
-            const entries = req.body.permissions;
-            check(
-                Array.isArray(entries) && entries.length <= all('SELECT id FROM roles').length,
-                'Invalid channel permissions',
-            );
-            const seen = new Set();
-            for (const entry of entries) {
-                check(
-                    entry &&
-                        typeof entry.role === 'string' &&
-                        entry.role !== 'owner' &&
-                        !seen.has(entry.role) &&
-                        get('SELECT id FROM roles WHERE id=?', entry.role),
-                    'Invalid or duplicate role',
-                );
-                check(
-                    (channel.kind === 'text'
-                        ? ['full', 'read-only', 'hidden']
-                        : ['full', 'hidden']
-                    ).includes(entry.mode),
-                    'Invalid channel access mode',
-                );
-                seen.add(entry.role);
-            }
-            transaction(db, () => {
-                run('DELETE FROM channel_access WHERE channel=?', channel.id);
-                for (const entry of entries)
-                    run(
-                        'INSERT INTO channel_access(channel,role,mode) VALUES(?,?,?)',
-                        channel.id,
-                        entry.role,
-                        entry.mode,
-                    );
-            });
-            enforceCalls();
-            publishChannels();
-            res.json({ ok: true });
-        }),
-    );
-    const validateAccess = (req, entries) => {
-        check(
-            Array.isArray(entries) && entries.length <= all('SELECT id FROM channels').length,
-            'Invalid channel access',
-        );
+    const roleFor = (id) => get("SELECT * FROM roles WHERE id=? AND id<>'owner'", id);
+    const mayManageRole = (actor, role) =>
+        !!role && (actor.owner || (role.id !== 'everyone' && highest(actor) > role.position));
+    const mayManageMember = (actor, target) =>
+        !!target &&
+        !target.owner &&
+        target.id !== actor.id &&
+        (actor.owner || highest(actor) > highest(target));
+    const roleAccess = (req, role) => {
+        requirePermission(req.user, 'channels.access');
+        check(mayManageRole(req.user, role), 'You can only manage lower roles', 403);
+    };
+    const validateOverrides = (req, role, entries) => {
+        roleAccess(req, role);
+        check(Array.isArray(entries) && entries.length <= 10000, 'Invalid overrides');
         const seen = new Set();
         for (const entry of entries) {
+            const channel = entry && get('SELECT * FROM channels WHERE id=?', entry.channel);
             check(
-                entry && typeof entry.channel === 'string' && !seen.has(entry.channel),
-                'Invalid or duplicate channel',
+                channel && canInChannel(req.user, channel, 'channels.view'),
+                'Channel not found',
+                404,
             );
-            const channel = get('SELECT * FROM channels WHERE id=?', entry.channel);
-            check(channel && mode(req.user, channel) !== 'hidden', 'Channel not found', 404);
             check(
-                (channel.kind === 'text'
-                    ? ['full', 'read-only', 'hidden']
-                    : ['full', 'hidden']
-                ).includes(entry.mode),
-                'Invalid channel access mode',
+                channelPermissionIds(channel.kind).includes(entry.permission) &&
+                    ['allow', 'deny', 'inherit'].includes(entry.effect),
+                'Invalid channel permission',
             );
-            seen.add(entry.channel);
+            const key = `${channel.id}:${entry.permission}`;
+            check(!seen.has(key), 'Duplicate override');
+            seen.add(key);
+            if (!req.user.owner)
+                check(
+                    canInChannel(req.user, channel, entry.permission),
+                    'You cannot change a permission you do not have',
+                    403,
+                );
         }
     };
-    const saveAccess = (role, entries) => {
-        for (const entry of entries)
+    const saveOverrides = (role, entries) => {
+        for (const entry of entries) {
             run(
-                `INSERT INTO channel_access(channel,role,mode) VALUES(?,?,?)
-            ON CONFLICT(channel,role) DO UPDATE SET mode=excluded.mode`,
+                'DELETE FROM channel_overrides WHERE channel=? AND role=? AND permission=?',
                 entry.channel,
                 role,
-                entry.mode,
+                entry.permission,
+            );
+            if (entry.effect !== 'inherit')
+                run(
+                    'INSERT INTO channel_overrides VALUES(?,?,?,?)',
+                    entry.channel,
+                    role,
+                    entry.permission,
+                    entry.effect,
+                );
+        }
+    };
+    const validateGrants = (req, permissions) => {
+        if (!req.user.owner)
+            check(
+                permissions.every((p) => can(req.user, p)),
+                'You cannot grant permissions you do not have',
+                403,
             );
     };
-    const requireOwner = (req) =>
-        check(req.user.role === 'owner', 'Only the owner can manage roles', 403);
+    const validateMembershipChange = (req, target, ids) => {
+        if (req.user.owner) return;
+        const before = permissionsFor(target);
+        check(
+            permissionsFor(target, ids).every(
+                (permission) => before.includes(permission) || can(req.user, permission),
+            ),
+            'This change would activate Default permissions you do not have',
+            403,
+        );
+        for (const channel of all('SELECT * FROM channels')) {
+            const previous = channelPermissions(target, channel);
+            const next = channelPermissions(target, channel, ids);
+            const actor = channelPermissions(req.user, channel);
+            check(
+                next.every(
+                    (permission) => previous.includes(permission) || actor.includes(permission),
+                ),
+                'This change would grant channel permissions you do not have',
+                403,
+            );
+        }
+    };
     app.post(
         '/api/roles',
         route((req, res) => {
-            requireOwner(req);
+            requirePermission(req.user, 'roles.manage');
             const { name, color, permissions } = validateRole(req.body);
-            if (req.body.channelAccess !== undefined) validateAccess(req, req.body.channelAccess);
+            validateGrants(req, permissions);
+            check(req.body.channelAccess === undefined, 'Use targeted channel overrides');
+            check(
+                req.user.owner || highest(req.user) > 0,
+                'A ranked role is required to create lower roles',
+                403,
+            );
             const id = randomUUID();
             transaction(db, () => {
+                const position = req.user.owner
+                    ? get('SELECT COALESCE(MAX(position),0)+1 n FROM roles').n
+                    : highest(req.user) - 0.5;
                 run(
-                    'INSERT INTO roles VALUES(?,?,?,?)',
+                    'INSERT INTO roles(id,name,color,permissions,position) VALUES(?,?,?,?,?)',
                     id,
                     name,
                     color,
                     JSON.stringify(permissions),
+                    position,
                 );
-                if (req.body.channelAccess) saveAccess(id, req.body.channelAccess);
+                // Keep a strict, integral order after inserting below a delegate's highest role.
+                all(
+                    "SELECT id FROM roles WHERE id NOT IN ('owner','everyone') ORDER BY position,id",
+                ).forEach((entry, index) =>
+                    run('UPDATE roles SET position=? WHERE id=?', index + 1, entry.id),
+                );
+                if (req.body.overrides) {
+                    validateOverrides(req, roleFor(id), req.body.overrides);
+                    saveOverrides(id, req.body.overrides);
+                }
             });
             publishChannels();
             res.json({ id });
@@ -285,17 +342,14 @@ export function registerAdministration({
     app.patch(
         '/api/roles/:id',
         route((req, res) => {
-            requireOwner(req);
-            const role = get('SELECT * FROM roles WHERE id=?', req.params.id);
+            requirePermission(req.user, 'roles.manage');
+            const role = roleFor(req.params.id);
             check(role, 'Role not found', 404);
+            check(mayManageRole(req.user, role), 'You can only edit lower roles', 403);
             const { name, color, permissions } = validateRole(req.body);
-            if (req.body.channelAccess !== undefined) {
-                check(
-                    role.id !== 'owner' || req.body.channelAccess.length === 0,
-                    'Owner always has full channel access',
-                );
-                validateAccess(req, req.body.channelAccess);
-            }
+            validateGrants(req, permissions);
+            check(req.body.channelAccess === undefined, 'Use targeted channel overrides');
+            if (req.body.overrides) validateOverrides(req, role, req.body.overrides);
             transaction(db, () => {
                 run(
                     'UPDATE roles SET name=?,color=?,permissions=? WHERE id=?',
@@ -304,7 +358,7 @@ export function registerAdministration({
                     JSON.stringify(permissions),
                     role.id,
                 );
-                if (req.body.channelAccess) saveAccess(role.id, req.body.channelAccess);
+                if (req.body.overrides) saveOverrides(role.id, req.body.overrides);
             });
             enforceCalls();
             publishChannels();
@@ -314,11 +368,40 @@ export function registerAdministration({
     app.put(
         '/api/roles/:id/access',
         route((req, res) => {
-            requirePermission(req.user, 'channels.access');
-            const role = get('SELECT * FROM roles WHERE id=?', req.params.id);
-            check(role && role.id !== 'owner', 'Invalid role', 400);
-            validateAccess(req, req.body.channelAccess);
-            transaction(db, () => saveAccess(role.id, req.body.channelAccess));
+            const role = roleFor(req.params.id);
+            check(role, 'Role not found', 404);
+            validateOverrides(req, role, req.body.overrides);
+            transaction(db, () => saveOverrides(role.id, req.body.overrides));
+            enforceCalls();
+            publishChannels();
+            res.json({ ok: true });
+        }),
+    );
+    app.post(
+        '/api/roles/:id/move',
+        route((req, res) => {
+            requirePermission(req.user, 'roles.manage');
+            const role = roleFor(req.params.id);
+            check(role && role.id !== 'everyone', 'The baseline role cannot move', 400);
+            check(mayManageRole(req.user, role), 'You can only move lower roles', 403);
+            check(['up', 'down'].includes(req.body.direction), 'Invalid direction');
+            const ordered = all(
+                "SELECT * FROM roles WHERE id NOT IN ('owner','everyone') ORDER BY position DESC,id",
+            );
+            const index = ordered.findIndex((entry) => entry.id === role.id);
+            const other = ordered[index + (req.body.direction === 'up' ? -1 : 1)];
+            if (other) {
+                check(mayManageRole(req.user, other), 'You cannot move a role above your own', 403);
+                [ordered[index], ordered[index + (req.body.direction === 'up' ? -1 : 1)]] = [
+                    other,
+                    role,
+                ];
+                transaction(db, () =>
+                    ordered.forEach((entry, i) =>
+                        run('UPDATE roles SET position=? WHERE id=?', ordered.length - i, entry.id),
+                    ),
+                );
+            }
             enforceCalls();
             publishChannels();
             res.json({ ok: true });
@@ -327,16 +410,27 @@ export function registerAdministration({
     app.delete(
         '/api/roles/:id',
         route((req, res) => {
-            requireOwner(req);
-            const role = get('SELECT * FROM roles WHERE id=?', req.params.id);
+            requirePermission(req.user, 'roles.manage');
+            const role = roleFor(req.params.id);
             check(role, 'Role not found', 404);
-            check(
-                role.id !== 'owner' && role.id !== 'member',
-                'The default owner and member roles cannot be deleted',
-                409,
-            );
+            check(role.id !== 'everyone', 'The Default role cannot be deleted', 409);
+            check(mayManageRole(req.user, role), 'You can only delete lower roles', 403);
+            for (const target of all(
+                'SELECT u.* FROM users u JOIN user_roles r ON r.user=u.id WHERE r.role=?',
+                role.id,
+            ))
+                validateMembershipChange(
+                    req,
+                    target,
+                    all(
+                        'SELECT role FROM user_roles WHERE user=? AND role<>?',
+                        target.id,
+                        role.id,
+                    ).map((entry) => entry.role),
+                );
             transaction(db, () => {
-                run('UPDATE users SET role=? WHERE role=?', 'member', role.id);
+                // The legacy column is retained for old database imports, never used for authorization.
+                run("UPDATE users SET role='everyone' WHERE role=?", role.id);
                 run('DELETE FROM roles WHERE id=?', role.id);
             });
             enforceCalls();
@@ -345,34 +439,92 @@ export function registerAdministration({
         }),
     );
     app.patch(
-        '/api/users/:id/role',
+        '/api/users/:id/roles',
         route((req, res) => {
-            check(req.user.role === 'owner', 'Only the owner can assign roles', 403);
+            requirePermission(req.user, 'roles.assign');
             const target = get('SELECT * FROM users WHERE id=?', req.params.id);
             check(
-                target &&
-                    target.role !== 'owner' &&
-                    req.body.role !== 'owner' &&
-                    get('SELECT id FROM roles WHERE id=?', req.body.role),
+                (req.user.owner && target?.owner && target.id === req.user.id) ||
+                    mayManageMember(req.user, target),
+                'You can only assign roles to lower members',
+                403,
+            );
+            const ids = req.body.roles;
+            check(
+                Array.isArray(ids) &&
+                    ids.length <= 100 &&
+                    new Set(ids).size === ids.length &&
+                    ids.every((id) => typeof id === 'string' && id !== 'everyone' && !!roleFor(id)),
                 'Invalid role assignment',
             );
-            run('UPDATE users SET role=? WHERE id=?', req.body.role, target.id);
+            const current = all('SELECT role FROM user_roles WHERE user=?', target.id).map(
+                (entry) => entry.role,
+            );
+            const changed = [...new Set([...current, ...ids])].filter(
+                (id) => current.includes(id) !== ids.includes(id),
+            );
+            for (const id of changed) {
+                const role = roleFor(id);
+                check(
+                    mayManageRole(req.user, role),
+                    'You can only assign or remove lower roles',
+                    403,
+                );
+                if (ids.includes(id)) validateGrants(req, JSON.parse(role.permissions));
+                // Channel overrides must not let an assignment grant channel abilities the actor lacks.
+                if (!req.user.owner && ids.includes(id))
+                    for (const entry of all(
+                        "SELECT * FROM channel_overrides WHERE role=? AND effect='allow'",
+                        id,
+                    ))
+                        check(
+                            canInChannel(
+                                req.user,
+                                get('SELECT * FROM channels WHERE id=?', entry.channel),
+                                entry.permission,
+                            ),
+                            'This role grants channel access you do not have',
+                            403,
+                        );
+            }
+            validateMembershipChange(req, target, ids);
+            transaction(db, () => {
+                run('DELETE FROM user_roles WHERE user=?', target.id);
+                for (const id of ids) run('INSERT INTO user_roles VALUES(?,?)', target.id, id);
+            });
             enforceCalls();
             publishChannels();
             res.json({ ok: true });
         }),
     );
+    app.get(
+        '/api/users/:id/permissions',
+        route((req, res) => {
+            check(
+                can(req.user, 'roles.manage') ||
+                    can(req.user, 'roles.assign') ||
+                    can(req.user, 'channels.access'),
+                'Permission denied',
+                403,
+            );
+            const channel = get('SELECT * FROM channels WHERE id=?', req.query.channel);
+            check(
+                channel && canInChannel(req.user, channel, 'channels.view'),
+                'Channel not found',
+                404,
+            );
+            const user = get('SELECT * FROM users WHERE id=? AND banned=0', req.params.id);
+            check(user, 'Member not found', 404);
+            res.json(permissionDetails(user, channel));
+        }),
+    );
     app.post(
         '/api/users/:id/access',
         route((req, res) => {
-            requireOwner(req);
-            const target = get('SELECT * FROM users WHERE id=?', req.params.id);
-            check(
-                target && target.role !== 'owner' && target.id !== req.user.id,
-                'The owner cannot be removed',
-                409,
-            );
             check(typeof req.body.enabled === 'boolean', 'Invalid access setting');
+            requirePermission(req.user, req.body.enabled ? 'members.restore' : 'members.ban');
+            const target = get('SELECT * FROM users WHERE id=?', req.params.id);
+            check(mayManageMember(req.user, target), 'You can only moderate lower members', 403);
             transaction(db, () => {
                 run('UPDATE users SET banned=? WHERE id=?', Number(!req.body.enabled), target.id);
                 run('DELETE FROM sessions WHERE user=?', target.id);

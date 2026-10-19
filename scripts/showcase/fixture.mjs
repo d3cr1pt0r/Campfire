@@ -22,7 +22,8 @@ export const users = people.map(([id, nickname, role, status]) => ({
     id,
     username: id,
     nickname,
-    role,
+    roles: role === 'owner' ? ['host'] : [],
+    owner: role === 'owner',
     status,
     avatar: `demo-${id}`,
 }));
@@ -32,8 +33,14 @@ export const state = {
     name: 'The Fireside',
     users,
     roles: [
-        { id: 'owner', name: 'Owner', color: '#e7b979', permissions: permissionIds },
-        { id: 'member', name: 'Member', color: '#9fb6a0', permissions: permissionIds },
+        { id: 'host', name: 'Host', color: '#e7b979', permissions: permissionIds, position: 2 },
+        {
+            id: 'everyone',
+            name: 'Default',
+            color: null,
+            permissions: permissionIds,
+            position: 0,
+        },
     ],
     channels: [
         ['general', 'general', 'text', 'A little conversation. A little company.'],
@@ -48,7 +55,8 @@ export const state = {
         kind,
         description,
         protected: id === 'general' || id === 'fireside',
-        access: 'full',
+        private: false,
+        permissions: permissionIds,
     })),
     channelPermissions: [],
     online: users.map((user) => user.id),

@@ -18,8 +18,8 @@ test('upgrading signs everyone out and revokes unused invitations exactly once',
             "INSERT INTO roles VALUES('member','Member','#112233','[]'); INSERT INTO users(id,username,password,role) VALUES('a','Alice','hash','member')",
         );
         // Simulate a 0.1.x database that already has every earlier migration.
-        migrate(db);
-        db.exec('DELETE FROM migrations WHERE version=12');
+        migrate(db, 12);
+        db.exec('DELETE FROM migrations WHERE version>=12');
         db.exec(
             "INSERT INTO sessions VALUES('old-session','a',9999999999999); INSERT INTO invitations(id,tokenHash,label,created,expires) VALUES('unused','u','',1,9999999999999),('used','v','',1,9999999999999); UPDATE invitations SET usedBy='a' WHERE id='used'",
         );
@@ -47,10 +47,10 @@ test('upgrading an encryption-branch version 11 database also removes friends', 
     const db = new DatabaseSync(':memory:');
     try {
         db.exec(readFileSync(new URL('../server/schema.sql', import.meta.url), 'utf8'));
-        migrate(db);
+        migrate(db, 12);
         // Encryption version 11 rotated credentials but still retained the friends table.
         db.exec(
-            'DELETE FROM migrations WHERE version=12; CREATE TABLE friends(sender TEXT,recipient TEXT);',
+            'DELETE FROM migrations WHERE version>=12; CREATE TABLE friends(sender TEXT,recipient TEXT);',
         );
         migrate(db);
         assert.equal(
@@ -59,7 +59,7 @@ test('upgrading an encryption-branch version 11 database also removes friends', 
         );
         assert.equal(
             db.prepare('SELECT MAX(version) AS version FROM migrations').get().version,
-            12,
+            15,
         );
         migrate(db);
         assert.equal(db.prepare('PRAGMA quick_check').get().quick_check, 'ok');

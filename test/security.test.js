@@ -1,12 +1,7 @@
+import { hasPermission } from '../shared/permissions.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import {
-    createPassword,
-    verifyPassword,
-    tokenHash,
-    hasPermission,
-    canReadRoom,
-} from '../server/security.js';
+import { createPassword, verifyPassword, tokenHash, canReadRoom } from '../server/security.js';
 test('password hashes are salted and never accept a missing account', async () => {
     const a = await createPassword('a strong test password'),
         b = await createPassword('a strong test password');
@@ -37,13 +32,14 @@ test('password work has a bounded queue and reports overload without losing acce
         true,
     );
 });
-test('server owners retain control while other roles get only their permissions', () => {
-    assert.equal(hasPermission({ role: 'owner' }, [], 'server.edit'), true);
-    assert.equal(
-        hasPermission({ role: 'member' }, ['messages.send', 'calls.join'], 'server.edit'),
-        false,
-    );
-    assert.equal(hasPermission({ role: 'member' }, ['calls.join'], 'calls.join'), true);
+test('server owners retain control while other roles combine their granted permissions', () => {
+    const roles = [
+        { id: 'everyone', permissions: ['channels.view'] },
+        { id: 'member', permissions: ['calls.join'] },
+    ];
+    assert.equal(hasPermission({ owner: true, roles: [] }, roles, 'server.edit'), true);
+    assert.equal(hasPermission({ owner: false, roles: ['member'] }, roles, 'server.edit'), false);
+    assert.equal(hasPermission({ owner: false, roles: ['member'] }, roles, 'calls.join'), true);
 });
 test('DM access requires exactly two existing distinct participants and membership', () => {
     const channelExists = (r) => r === 'general';

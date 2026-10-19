@@ -33,15 +33,15 @@ export function useCall(
     iceServers: RTCIceServer[],
     report: (s: string) => void,
     onInputFallback: () => void,
-    permission: (name: string) => boolean,
+    permission: (name: string, channel?: string | null) => boolean,
 ) {
     const permissionRef = useRef(permission);
     permissionRef.current = permission;
-    const canJoin = permission('calls.join'),
-        canSpeak = permission('calls.speak'),
-        canCamera = permission('calls.camera'),
-        canShare = permission('calls.share');
     const [channel, setChannel] = useState<string | null>(null);
+    const canJoin = permission('calls.join', channel),
+        canSpeak = permission('calls.speak', channel),
+        canCamera = permission('calls.camera', channel),
+        canShare = permission('calls.share', channel);
     const [muted, setMuted] = useState(false),
         [deafened, setDeafened] = useState(false),
         [camera, setCamera] = useState(false),
@@ -529,7 +529,7 @@ export function useCall(
         };
     }, [channel, showDetails]);
     const join = async (id: string, target?: { socket: string; shareId: string }) => {
-        if (!permissionRef.current('calls.join')) {
+        if (!permissionRef.current('calls.join', id)) {
             report('You do not have permission to join calls.');
             return;
         }
@@ -541,10 +541,10 @@ export function useCall(
         if (target) queueWatch({ ...target, channel: id });
         const attempt = operation.current;
         try {
-            const { stream, usedDefault } = permissionRef.current('calls.speak')
+            const { stream, usedDefault } = permissionRef.current('calls.speak', id)
                 ? await openMicrophone(prefs)
                 : { stream: new MediaStream(), usedDefault: false };
-            if (attempt !== operation.current || !permissionRef.current('calls.join')) {
+            if (attempt !== operation.current || !permissionRef.current('calls.join', id)) {
                 stream.getTracks().forEach((t) => t.stop());
                 return;
             }
@@ -554,9 +554,10 @@ export function useCall(
                     'The saved microphone is unavailable. Using System default for this call; your saved selection is kept for next time.',
                 );
             }
-            if (!permissionRef.current('calls.speak')) stream.getTracks().forEach((t) => t.stop());
+            if (!permissionRef.current('calls.speak', id))
+                stream.getTracks().forEach((t) => t.stop());
             audio.current = stream;
-            if (!permissionRef.current('calls.speak')) setMuted(true);
+            if (!permissionRef.current('calls.speak', id)) setMuted(true);
             callChannel.current = id;
             socket
                 .timeout(10000)

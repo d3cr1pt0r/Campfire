@@ -147,8 +147,9 @@ export function createApp({
                     get("SELECT value FROM settings WHERE key='reactionAuthors'")?.value !==
                     'false',
                 removedUsers:
-                    req.user.role === 'owner'
-                        ? all('SELECT id,username,role FROM users WHERE banned=1')
+                    sessions.can(req.user, 'members.ban') ||
+                    sessions.can(req.user, 'members.restore')
+                        ? all('SELECT * FROM users WHERE banned=1').map(sessions.publicUser)
                         : [],
                 users,
                 directMessages: users
@@ -162,14 +163,17 @@ export function createApp({
                         return latest ? [{ room, updated: latest.updated }] : [];
                     }),
                 presence: presence.snapshot(),
-                roles: all('SELECT * FROM roles').map((role) => ({
-                    ...role,
-                    permissions: JSON.parse(role.permissions),
-                })),
+                roles: all("SELECT * FROM roles WHERE id<>'owner' ORDER BY position DESC,id").map(
+                    (role) => ({
+                        ...role,
+                        permissions: JSON.parse(role.permissions),
+                    }),
+                ),
                 channels,
                 channelPermissions:
-                    req.user.role === 'owner' || sessions.can(req.user, 'channels.access')
-                        ? all('SELECT * FROM channel_access').filter((entry) =>
+                    sessions.can(req.user, 'roles.manage') ||
+                    sessions.can(req.user, 'channels.access')
+                        ? all('SELECT * FROM channel_overrides').filter((entry) =>
                               visible.has(entry.channel),
                           )
                         : [],

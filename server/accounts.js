@@ -51,11 +51,12 @@ export function registerAccounts({
                     );
                     const role = registration.authorize(req.body);
                     run(
-                        'INSERT INTO users(id,username,password,role) VALUES(?,?,?,?)',
+                        'INSERT INTO users(id,username,password,role,owner) VALUES(?,?,?,?,?)',
                         id,
                         username,
                         passwordHash,
-                        role,
+                        'everyone',
+                        Number(role === 'owner'),
                     );
                     run('INSERT INTO profiles(user,nickname) VALUES(?,?)', id, username);
                     // Check/consume within the same transaction as account creation.

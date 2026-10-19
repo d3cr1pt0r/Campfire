@@ -105,8 +105,12 @@ test('threads isolate history, share chat features, enforce permissions, and per
         { room: 'general', thread: dmRoot.id, body: 'Leak' },
         404,
     );
-    await api(owner, '/channels/general/access', 'PUT', {
-        permissions: [{ role: 'member', mode: 'read-only' }],
+    await api(owner, '/roles/everyone/access', 'PUT', {
+        overrides: ['messages.send', 'threads.reply', 'reactions.add'].map((permission) => ({
+            channel: 'general',
+            permission,
+            effect: 'deny',
+        })),
     });
     await api(
         member,
@@ -115,15 +119,19 @@ test('threads isolate history, share chat features, enforce permissions, and per
         { room: 'general', thread: root.id, body: 'Read only' },
         403,
     );
-    await api(member, `/messages/${first.id}`, 'PATCH', { body: 'Read only' }, 403);
+    await api(member, `/messages/${first.id}`, 'PATCH', { body: 'Own edits remain available' });
     await api(member, `/messages/${first.id}/reaction`, 'POST', { emoji: '👍' }, 403);
     assert.equal((await api(member, history)).length, 2);
-    await api(owner, '/channels/general/access', 'PUT', {
-        permissions: [{ role: 'member', mode: 'hidden' }],
+    await api(owner, '/roles/everyone/access', 'PUT', {
+        overrides: [{ channel: 'general', permission: 'channels.view', effect: 'deny' }],
     });
     await api(member, history, 'GET', undefined, 403);
     await api(member, `/messages/${first.id}`, 'GET', undefined, 404);
-    await api(owner, '/channels/general/access', 'PUT', { permissions: [] });
+    await api(owner, '/roles/everyone/access', 'PUT', {
+        overrides: ['channels.view', 'messages.send', 'threads.reply', 'reactions.add'].map(
+            (permission) => ({ channel: 'general', permission, effect: 'inherit' }),
+        ),
+    });
 
     // Database invariants also reject attempts outside the API.
     assert.throws(

@@ -488,7 +488,6 @@ export function ChatMessage({
                         aria-label="Reply in thread"
                         disabled={
                             !permission('threads.reply') ||
-                            !permission('messages.send') ||
                             (!m.replyCount && !permission('threads.create'))
                         }
                         onClick={() => onReply(m)}
@@ -503,7 +502,7 @@ export function ChatMessage({
                 >
                     <Smile size={16} />
                 </button>
-                {m.author === state.me.id && permission('messages.editOwn') && (
+                {m.author === state.me.id && (
                     <button
                         title="Edit"
                         onClick={() => {
@@ -528,9 +527,7 @@ export function ChatMessage({
                         <Pin size={16} />
                     </button>
                 )}
-                {(m.author === state.me.id
-                    ? permission('messages.deleteOwn')
-                    : permission('messages.deleteOthers')) && (
+                {(m.author === state.me.id || permission('messages.deleteOthers')) && (
                     <button title="Delete" onClick={() => setModal(`delete:${m.id}`)}>
                         <Trash2 size={16} />
                     </button>

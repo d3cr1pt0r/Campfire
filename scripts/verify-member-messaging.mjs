@@ -8,6 +8,7 @@ import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
 const root = path.resolve(import.meta.dirname, '..');
 const sound = process.argv.includes('--sound');
+const roles = process.argv.includes('--roles');
 const directory = await mkdtemp(path.join(tmpdir(), 'campfire-member-ui-'));
 const output = '/tmp/campfire-member-review';
 const service = createApp({
@@ -32,7 +33,7 @@ try {
         const username = `Member${i + 1}`;
         service.db
             .prepare('INSERT INTO users(id,username,password,role) VALUES(?,?,?,?)')
-            .run(id, username, 'fixture-unused-password', members[1].user.role);
+            .run(id, username, 'fixture-unused-password', 'everyone');
         service.db.prepare('INSERT INTO profiles(user,nickname) VALUES(?,?)').run(id, username);
     }
     await new Promise((resolve) => service.http.listen(0, '127.0.0.1', resolve));
@@ -49,7 +50,11 @@ try {
         [
             path.join(
                 root,
-                sound ? 'test-support/notification-sound.cjs' : 'test-support/member-messaging.cjs',
+                roles
+                    ? 'test-support/roles-permissions.cjs'
+                    : sound
+                      ? 'test-support/notification-sound.cjs'
+                      : 'test-support/member-messaging.cjs',
             ),
         ],
         {
