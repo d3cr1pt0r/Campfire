@@ -1,6 +1,8 @@
 const { readFileSync, writeFileSync, renameSync, mkdirSync } = require('node:fs');
 const path = require('node:path');
 const allowedKeys = new Set(['connection', 'preferences', 'rendererPort']);
+// Written only by the main process; the renderer's storage bridge cannot reach these.
+const internalKeys = new Set(['pins']);
 const isAllowedKey = (key) =>
     typeof key === 'string' &&
     (allowedKeys.has(key) ||
@@ -24,37 +26,37 @@ function createClientState(directory, encryption) {
     } catch {
         /* First launch, unavailable OS key, or corrupt state: sign in again. */
     }
-    return {
-        get(key) {
-            return isAllowedKey(key) && typeof state[key] === 'string' ? state[key] : null;
-        },
-        set(key, value) {
-            if (
-                !isAllowedKey(key) ||
-                (value !== null && (typeof value !== 'string' || value.length > 16384))
-            )
+    const read = (keys, key) => (keys(key) && typeof state[key] === 'string' ? state[key] : null);
+    const write = (keys, limit, key, value) => {
+        if (!keys(key) || (value !== null && (typeof value !== 'string' || value.length > limit)))
+            return false;
+        if (value !== null) {
+            try {
+                JSON.parse(value);
+            } catch {
                 return false;
-            if (value !== null) {
-                try {
-                    JSON.parse(value);
-                } catch {
-                    return false;
-                }
             }
-            const next = { ...state };
-            if (value === null) delete next[key];
-            else next[key] = value;
-            const json = JSON.stringify(next);
-            const encrypted = encryption.isEncryptionAvailable();
-            const bytes = Buffer.concat([
-                Buffer.from(encrypted ? 'E' : 'P'),
-                encrypted ? encryption.encryptString(json) : Buffer.from(json),
-            ]);
-            writeFileSync(file + '.tmp', bytes, { mode: 0o600 });
-            renameSync(file + '.tmp', file);
-            state = next;
-            return true;
-        },
+        }
+        const next = { ...state };
+        if (value === null) delete next[key];
+        else next[key] = value;
+        const json = JSON.stringify(next);
+        const encrypted = encryption.isEncryptionAvailable();
+        const bytes = Buffer.concat([
+            Buffer.from(encrypted ? 'E' : 'P'),
+            encrypted ? encryption.encryptString(json) : Buffer.from(json),
+        ]);
+        writeFileSync(file + '.tmp', bytes, { mode: 0o600 });
+        renameSync(file + '.tmp', file);
+        state = next;
+        return true;
+    };
+    return {
+        get: (key) => read(isAllowedKey, key),
+        set: (key, value) => write(isAllowedKey, 16384, key, value),
+        getInternal: (key) => read((candidate) => internalKeys.has(candidate), key),
+        setInternal: (key, value) =>
+            write((candidate) => internalKeys.has(candidate), 262144, key, value),
     };
 }
 module.exports = { createClientState };

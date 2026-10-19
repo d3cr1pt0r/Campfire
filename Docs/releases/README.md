@@ -47,3 +47,9 @@ The working `package.json` declares version 0.1.8. No local v0.1.8 tag exists. T
 Cross-checked against [v0.1.8](v0.1.8.md): the existing grid, resizable call section, participant hover/volume controls, stream-watch actions, and voice-roster status indicators are not presented as new v0.1.9 features. The notes describe the new view switches, sizing changes, tile badges, and specific alignment fixes.
 
 The working `package.json` declares version 0.1.9. No local v0.1.8 or v0.1.9 tag exists. The changelog link uses the recorded source cutoffs; reconcile it with the final release tags before publication. No live release lookup was performed, and no publication date or uploaded assets are assumed. This draft has not been published to GitHub.
+
+## v0.2.0 draft
+
+[Prepared description](v0.2.0.md). Covers the transport-encryption work after `4816289`: self-generated TLS server identity, desktop fingerprint pinning, server and invite links with fingerprints, the one-time sign-out on upgrade, change password, and constant-bitrate voice.
+
+The working `package.json` declares version 0.2.0. No local v0.2.0 tag exists; the changelog link points at the future tag and must be reconciled before publication. This draft has not been published to GitHub.

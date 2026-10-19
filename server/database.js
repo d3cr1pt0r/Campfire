@@ -112,6 +112,14 @@ export function migrate(db) {
         () => {
             db.exec('DROP TABLE IF EXISTS friends');
         },
+        () => {
+            // The encryption branch also used version 11; finish friend removal for either history.
+            db.exec('DROP TABLE IF EXISTS friends');
+            // Earlier versions served plain HTTP, so session tokens and invitation codes may
+            // have been observed in transit. Encrypted transport starts with fresh ones.
+            db.exec(`DELETE FROM sessions;
+                UPDATE invitations SET revoked=1 WHERE usedBy IS NULL AND revoked=0;`);
+        },
     ];
     migrations.forEach((apply, index) => {
         const version = index + 1;

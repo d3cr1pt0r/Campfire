@@ -1,24 +1,58 @@
+import path from 'node:path';
 import { createApp } from './app.js';
-const port = Number(process.env.PORT || 3001);
-const service = createApp({
-    dataDir: process.env.DATA_DIR || 'data',
-    name: process.env.SERVER_NAME || 'My Campfire server',
-    origins: (process.env.CLIENT_ORIGINS || '')
-        .split(',')
-        .map((origin) => origin.trim())
-        .filter(Boolean),
-    iceServers: JSON.parse(process.env.ICE_SERVERS || '[]'),
-    trustProxy: process.env.TRUST_PROXY
-        ? process.env.TRUST_PROXY.split(',')
-              .map((value) => value.trim())
-              .filter(Boolean)
-        : false,
-    maxStoredUploadBytes: Number(process.env.MAX_STORED_UPLOAD_BYTES || 1073741824),
-});
-if (service.setupCode)
+import { serverConfig } from './config.js';
+import { formatFingerprint } from './identity.js';
+// Database, identity key and certificate files are private to the server account.
+process.umask(0o077);
+let config;
+try {
+    config = serverConfig(process.env, process.argv.slice(2));
+} catch (error) {
+    console.error(`Invalid configuration: ${error.message}`);
+    process.exit(1);
+}
+for (const warning of config.warnings) console.warn(`Warning: ${warning}`);
+let service;
+try {
+    service = createApp({
+        ...config,
+        tls:
+            config.tls.mode === 'self'
+                ? {
+                      directory: path.join(config.dataDir, 'identity'),
+                      address: config.publicAddress,
+                      allowNew: config.allowNewIdentity,
+                  }
+                : config.tls.mode === 'files'
+                  ? config.tls
+                  : null,
+    });
+} catch (error) {
+    console.error(`Campfire could not start: ${error.message}`);
+    process.exit(1);
+}
+const scheme = config.tls.mode === 'off' ? 'http' : 'https';
+const address = config.publicAddress
+    ? config.publicAddress.includes(':')
+        ? `[${config.publicAddress}]`
+        : config.publicAddress
+    : 'YOUR-SERVER-ADDRESS';
+const origin = `${scheme}://${address}${config.port === (scheme === 'https' ? 443 : 80) ? '' : `:${config.port}`}`;
+const pin = service.identity?.fingerprint && formatFingerprint(service.identity.fingerprint);
+if (pin) {
+    console.log(`Server fingerprint: ${pin}`);
+    console.log(`Server link (share it so members can verify this server): ${origin}/#pin=${pin}`);
+} else if (service.identity)
+    console.log(`TLS certificate SHA-256: ${service.identity.certificateSha256}`);
+if (service.setupCode) {
     console.log(`Owner setup code (required for the first account): ${service.setupCode}`);
-service.http.listen(port, process.env.HOST || '0.0.0.0', () =>
-    console.log(`Campfire server listening on port ${port}`),
+    if (pin)
+        console.log(
+            `Owner setup link (paste into the Campfire desktop app): ${origin}/#pin=${pin}&setup=${service.setupCode}`,
+        );
+}
+service.http.listen(config.port, config.host, () =>
+    console.log(`Campfire server listening on ${scheme}://${config.host}:${config.port}`),
 );
 let stopping = false;
 const shutdown = () => {

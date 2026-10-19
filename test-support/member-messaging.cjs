@@ -89,6 +89,15 @@ async function client(account, partition) {
     win.webContents.on('console-message', (event) => {
         if (event.level === 'error') failures.push(event.message);
     });
+    await win.loadURL('about:blank');
+    win.webContents.debugger.attach('1.3');
+    await win.webContents.debugger.sendCommand('Page.enable');
+    await win.webContents.debugger.sendCommand('Page.addScriptToEvaluateOnNewDocument', {
+        source: `window.__memberPeers = []; const OriginalPeer = window.RTCPeerConnection;
+            window.RTCPeerConnection = class extends OriginalPeer {
+                constructor(...args) { super(...args); window.__memberPeers.push(this); }
+            };`,
+    });
     await win.loadURL(origin);
     await js(
         win,
@@ -284,6 +293,18 @@ app.whenReady()
                 (await api(alice, '/state')).calls.filter((c) => c.channel.startsWith('private:'))
                     .length === 2,
             'two real clients join private call with generated microphone capture',
+        );
+        await wait(
+            async () =>
+                (await js(
+                    a,
+                    'window.__memberPeers.some(peer => peer.connectionState === "connected")',
+                )) &&
+                (await js(
+                    b,
+                    'window.__memberPeers.some(peer => peer.connectionState === "connected")',
+                )),
+            'both clients establish a real WebRTC connection',
         );
         await fs.writeFile(path.join(output, 'member-call.png'), (await a.capturePage()).toPNG());
         const state = await api(alice, '/state');

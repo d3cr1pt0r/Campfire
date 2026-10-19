@@ -3,8 +3,42 @@ import { mentionSegments } from './mentions.ts';
 import { messageParts } from './messageText.ts';
 import { rememberedDevice } from './devices.ts';
 
+// Keyed by host so notification choices survive the http:// to https:// upgrade.
+const serverKey = (server: string) => {
+    try {
+        return new URL(server).host;
+    } catch {
+        return server.replace(/\/$/, '');
+    }
+};
+
 export function notificationKey(server: string, user: string, room: string) {
-    return JSON.stringify([server.replace(/\/$/, ''), user, room]);
+    return JSON.stringify([serverKey(server), user, room]);
+}
+
+// Rewrites notification choices saved under full server URLs by earlier versions.
+export function migrateNotificationKeys(prefs: Preferences): Preferences {
+    const migrate = <T>(choices?: Record<string, T>) =>
+        choices &&
+        Object.fromEntries(
+            Object.entries(choices).map(([key, value]) => {
+                try {
+                    const [server, user, room] = JSON.parse(key);
+                    return [notificationKey(server, user, room), value];
+                } catch {
+                    return [key, value];
+                }
+            }),
+        );
+    return {
+        ...prefs,
+        ...(prefs.serverNotifications && {
+            serverNotifications: migrate(prefs.serverNotifications),
+        }),
+        ...(prefs.channelNotifications && {
+            channelNotifications: migrate(prefs.channelNotifications),
+        }),
+    };
 }
 
 // Keep old on/off preferences: on meant mentions, while off muted the conversation.

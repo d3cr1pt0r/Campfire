@@ -1,6 +1,7 @@
 import express from 'express';
 import { createRegistration } from './registration.js';
 import { createServer } from 'node:http';
+import { createServer as createSecureServer } from 'node:https';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +17,7 @@ import { registerProfiles } from './profiles.js';
 import { registerAdministration } from './administration.js';
 import { registerCalls } from './calls.js';
 import { registerPresence } from './presence.js';
+import { loadCertificateFiles, loadIdentity } from './identity.js';
 
 export function createApp({
     dataDir = 'data',
@@ -26,16 +28,49 @@ export function createApp({
     maxStoredUploadBytes = 1024 * 1024 * 1024,
     setupCode,
     sessionLifetimeMs = 30 * 86400000,
+    // null: plain HTTP (loopback development, tests or behind a TLS proxy).
+    // { directory, address, allowNew }: self-managed identity. { certFile, keyFile }: host files.
+    tls = null,
 } = {}) {
     if (!Number.isSafeInteger(maxStoredUploadBytes) || maxStoredUploadBytes < 0)
         throw new Error('Invalid upload storage limit');
     if (!Number.isSafeInteger(sessionLifetimeMs) || sessionLifetimeMs <= 0)
         throw new Error('Invalid session lifetime');
     const database = openDatabase(dataDir, name);
-    const { db, get, all } = database;
+    const { db, get, all, run } = database;
+    let identity = null;
+    try {
+        if (tls?.directory) {
+            identity = loadIdentity({
+                ...tls,
+                recorded: get("SELECT value FROM settings WHERE key='identity'")?.value || null,
+            });
+            run(
+                "INSERT INTO settings(key,value) VALUES('identity',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                identity.fingerprint,
+            );
+        } else if (tls) identity = loadCertificateFiles(tls);
+    } catch (error) {
+        db.close();
+        throw error;
+    }
     const app = express();
     app.set('trust proxy', trustProxy);
-    const http = createServer(app);
+    const secureContext = () => ({ ...identity.context(), minVersion: 'TLSv1.3' });
+    const http = identity ? createSecureServer(secureContext(), app) : createServer(app);
+    const renewal =
+        identity &&
+        setInterval(() => {
+            if (identity.renew()) http.setSecureContext(secureContext());
+        }, 86400000);
+    renewal?.unref();
+    const publicIdentity = () =>
+        identity
+            ? {
+                  ...(identity.fingerprint ? { fingerprint: identity.fingerprint } : {}),
+                  certificateSha256: identity.certificateSha256,
+              }
+            : undefined;
     const allowed = originPolicy(origins);
     app.use((req, res, next) => {
         if (!allowed(req.headers.origin, req.get('host')))
@@ -47,7 +82,7 @@ export function createApp({
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader(
             'Content-Security-Policy',
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' http: https: ws: wss:; img-src 'self' data: blob:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; img-src 'self' data: blob:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
         );
         if (req.method === 'OPTIONS') return res.sendStatus(204);
         next();
@@ -85,9 +120,10 @@ export function createApp({
     const registration = createRegistration({ ...context, setupCode });
     context.registration = registration;
     // Public registration/login must precede the authenticated feature routes.
-    registerAccounts(context);
+    const accounts = registerAccounts(context);
     app.use('/api', sessions.auth);
     registration.mount();
+    accounts.mount();
     app.post(
         '/api/logout',
         route((req, res) => {
@@ -146,6 +182,7 @@ export function createApp({
                 directCalls: calls.privateState(req.user.id),
                 emojis: all('SELECT id,name,author FROM emojis'),
                 iceServers,
+                identity: publicIdentity(),
             });
         }),
     );
@@ -166,12 +203,14 @@ export function createApp({
     let closing;
     return {
         setupCode: registration.setupCode,
+        identity: publicIdentity(),
         app,
         http,
         io,
         db,
         close: () => {
             closing ??= (async () => {
+                clearInterval(renewal);
                 await messages.close();
                 calls.close();
                 sessions.close();
