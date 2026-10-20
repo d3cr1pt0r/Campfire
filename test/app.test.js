@@ -82,6 +82,33 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
             );
         },
     );
+    await t.test('profile frames are validated, visible to others, and removable', async () => {
+        assert.equal(alice.user.frame, null);
+        const framed = await api(alice, '/profile', 'PATCH', { frame: 'ember' });
+        assert.equal(framed.data.user.frame, 'ember');
+        assert.equal(framed.data.user.nickname, 'Alice Display');
+        assert.equal(
+            (await api(bob, '/state')).data.users.find((u) => u.id === alice.user.id).frame,
+            'ember',
+        );
+        for (const frame of ['sparkles', '', 1, { id: 'ember' }])
+            await api(alice, '/profile', 'PATCH', { frame }, 400);
+        await api(alice, '/profile', 'PATCH', {}, 400);
+        await api(null, '/profile', 'PATCH', { frame: 'aurora' }, 401);
+        // A frame retired from the list must not reach clients.
+        service.db
+            .prepare('UPDATE profiles SET frame=? WHERE user=?')
+            .run('retired', alice.user.id);
+        assert.equal(
+            (await api(bob, '/state')).data.users.find((u) => u.id === alice.user.id).frame,
+            null,
+        );
+        for (const frame of ['heartbeat', 'gilded', 'frost', 'neon', 'glitch', 'storm', 'vortex'])
+            assert.equal((await api(alice, '/profile', 'PATCH', { frame })).data.user.frame, frame);
+        const removed = await api(alice, '/profile', 'PATCH', { frame: null });
+        assert.equal(removed.data.user.frame, null);
+        assert.equal((await api(bob, '/state')).data.me.frame, null);
+    });
     await t.test(
         'avatars are authenticated, bounded, replaceable and visible in state',
         async () => {

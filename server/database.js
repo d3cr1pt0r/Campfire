@@ -224,6 +224,10 @@ export function migrate(db, through = Infinity) {
                 tokenHash TEXT UNIQUE NOT NULL, expires INTEGER NOT NULL
             );`);
         },
+        () => {
+            // The API validates frame IDs; no CHECK, so adding frames needs no table rebuild.
+            db.exec('ALTER TABLE profiles ADD COLUMN frame TEXT');
+        },
     ];
     migrations.forEach((apply, index) => {
         const version = index + 1;

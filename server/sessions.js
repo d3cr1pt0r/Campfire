@@ -1,6 +1,7 @@
 import { tokenHash } from './security.js';
 import { permissionIds, effectiveRoleIds } from '../shared/permissions.js';
 import { check } from './policies.js';
+import { isAvatarFrame } from '../shared/frames.js';
 
 export function createSessions({ get, all, run, io }) {
     const timers = new Map();
@@ -12,16 +13,21 @@ export function createSessions({ get, all, run, io }) {
             tokenHash(token),
             Date.now(),
         );
-    const publicUser = (u) => ({
-        id: u.id,
-        username: u.username,
-        nickname: get('SELECT nickname FROM profiles WHERE user=?', u.id)?.nickname || u.username,
-        owner: !!u.owner,
-        roles: all('SELECT role FROM user_roles WHERE user=?', u.id).map((entry) => entry.role),
-        status:
-            get('SELECT status FROM presence_preferences WHERE user=?', u.id)?.status || 'online',
-        avatar: get('SELECT id FROM avatars WHERE user=?', u.id)?.id || null,
-    });
+    const publicUser = (u) => {
+        const profile = get('SELECT nickname,frame FROM profiles WHERE user=?', u.id);
+        return {
+            id: u.id,
+            username: u.username,
+            nickname: profile?.nickname || u.username,
+            frame: isAvatarFrame(profile?.frame) ? profile.frame : null,
+            owner: !!u.owner,
+            roles: all('SELECT role FROM user_roles WHERE user=?', u.id).map((entry) => entry.role),
+            status:
+                get('SELECT status FROM presence_preferences WHERE user=?', u.id)?.status ||
+                'online',
+            avatar: get('SELECT id FROM avatars WHERE user=?', u.id)?.id || null,
+        };
+    };
     const users = () => all('SELECT * FROM users WHERE banned=0').map(publicUser);
     const roleIds = (u) =>
         effectiveRoleIds(
