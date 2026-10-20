@@ -821,16 +821,30 @@ label,
     color: #c9bba5;
 }
 .auth-form {
-    max-width: 520px;
-    padding: 44px 50px;
+    max-width: 440px;
+    align-self: start;
+    margin: 0 auto;
+    padding: clamp(32px, 16vh, 144px) 32px 32px;
 }
 .auth-form h2 {
-    font-size: 34px;
+    font-size: 24px;
     font-weight: 500;
     line-height: 1.2;
+    margin: 0 0 20px;
 }
 .auth-form label {
-    margin-top: 20px;
+    margin-top: 16px;
+}
+.auth-form form > label:first-child {
+    margin-top: 0;
+}
+.auth-credentials {
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+}
+.auth-credentials .auth-switch {
+    margin: 16px 0 0;
 }
 .auth-form .primary {
     min-height: 48px;

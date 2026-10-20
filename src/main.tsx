@@ -163,7 +163,7 @@ function App() {
     const [socket, setSocket] = useState<AppSocket | null>(null),
         [error, setError] = useState(''),
         [busy, setBusy] = useState(false),
-        [register, setRegister] = useState(true);
+        [register, setRegister] = useState(false);
     const [authUrl, setAuthUrl] = useState(
         invitationFromLink || setupFromLink ? window.location.origin : initial.url,
     );
@@ -175,11 +175,14 @@ function App() {
     const [trustPrompt, setTrustPrompt] = useState<TrustPrompt | null>(null);
     const [verifiedUrl, setVerifiedUrl] = useState<string | null>(null);
     const [probe, setProbe] = useState(0);
+    const [requestedAddress, setRequestedAddress] = useState<string | null>(null);
     const [httpBusy, setHttpBusy] = useState(false);
     const httpTarget = remoteHttpOrigin(authUrl);
     const httpApproved = httpTarget !== null && insecureHttpAllowed(httpTarget);
+    const showHttpApproval = requestedAddress === authUrl && httpTarget !== null;
     const setHttpApproval = async (enabled: boolean) => {
         if (!httpTarget || httpBusy || !window.campfire?.insecureHttp) return;
+        setServerInfo(null);
         setHttpBusy(true);
         try {
             await window.campfire.insecureHttp.setAllowed(httpTarget, enabled);
@@ -221,22 +224,32 @@ function App() {
         throw new Error(`Could not reach the server: ${step.message}`);
     };
     const [serverInfo, setServerInfo] = useState<{
+        address: string;
         registrationMode: 'open' | 'invite';
         setupRequired: boolean;
     } | null>(null);
+    const resolvedServerInfo = serverInfo?.address === authUrl ? serverInfo : null;
+    const [infoChecking, setInfoChecking] = useState(false);
     const [infoError, setInfoError] = useState('');
     useEffect(() => {
-        if (token) return;
+        if (token || requestedAddress === null || requestedAddress !== authUrl) return;
         setServerInfo(null);
         setInfoError('');
         setInfoNote('');
+        setInfoChecking(!!authUrl.trim());
         const controller = new AbortController();
         const timer = setTimeout(() => {
+            if (httpTarget && !httpApproved) {
+                setInfoChecking(false);
+                return;
+            }
             let link: ServerLink;
             try {
                 link = parseConnectionLink(authUrl);
-            } catch {
-                return; // The submit handler explains invalid addresses.
+            } catch (e) {
+                if (authUrl.trim()) setInfoError((e as Error).message);
+                setInfoChecking(false);
+                return;
             }
             const pins = pinsFor(link.origin);
             void (async () => {
@@ -269,20 +282,35 @@ function App() {
                 const info = await createApiClient(link.origin, '').json<{
                     registrationMode: 'open' | 'invite';
                     setupRequired: boolean;
-                }>('/info', 'GET', undefined, controller.signal);
-                if (!controller.signal.aborted) setServerInfo(info);
-            })().catch((e) => {
-                if (!controller.signal.aborted)
-                    setInfoError(
-                        `Could not check registration: ${connectionHint(e, link.origin, window.location.origin, !!window.campfire)}`,
-                    );
-            });
-        }, 350);
+                }>(
+                    '/info',
+                    'GET',
+                    undefined,
+                    AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]),
+                );
+                if (
+                    !info ||
+                    !['open', 'invite'].includes(info.registrationMode) ||
+                    typeof info.setupRequired !== 'boolean'
+                )
+                    throw new Error('This address is not a Campfire server.');
+                if (!controller.signal.aborted) setServerInfo({ ...info, address: authUrl });
+            })()
+                .catch((e) => {
+                    if (!controller.signal.aborted)
+                        setInfoError(
+                            `Could not connect: ${connectionHint(e, link.origin, window.location.origin, !!window.campfire)}`,
+                        );
+                })
+                .finally(() => {
+                    if (!controller.signal.aborted) setInfoChecking(false);
+                });
+        }, 0);
         return () => {
             clearTimeout(timer);
             controller.abort();
         };
-    }, [authUrl, token, linkPin, probe]);
+    }, [authUrl, token, linkPin, probe, requestedAddress, httpTarget, httpApproved]);
     const [room, setRoom] = useState('general'),
         [draft, setDraft] = useState(''),
         [attachments, setAttachments] = useState<File[]>([]);
@@ -731,6 +759,22 @@ function App() {
     };
     const login = (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        if (!resolvedServerInfo) {
+            if (busy || httpBusy || infoChecking) return;
+            if (httpTarget && !httpApproved) {
+                setRequestedAddress(authUrl);
+                return;
+            }
+            void act(async () => {
+                const link = parseConnectionLink(authUrl);
+                const retry = () => {
+                    setRequestedAddress(authUrl);
+                    setProbe((n) => n + 1);
+                };
+                if (await ensureTrusted(link.origin, pinFor(link), retry)) retry();
+            });
+            return;
+        }
         void submitLogin(new FormData(e.currentTarget));
     };
     const trustServer = async () => {
@@ -954,29 +998,9 @@ function App() {
                     </div>
                 </div>
                 <main className="auth-form">
-                    <div className="mini-label">MAKE YOURSELF AT HOME</div>
-                    <h2>
-                        {trustPrompt
-                            ? 'Check this server.'
-                            : token
-                              ? 'Connecting to your server…'
-                              : resetPassword
-                                ? 'Reset your password.'
-                                : register
-                                  ? 'Good conversations start here.'
-                                  : 'Welcome back.'}
-                    </h2>
-                    <p className="muted">
-                        {trustPrompt
-                            ? 'Campfire remembers each server’s identity so nobody can impersonate it.'
-                            : token
-                              ? 'Waiting for your server to respond.'
-                              : resetPassword
-                                ? 'Ask an authorized server member for a password reset token.'
-                                : register
-                                  ? 'Create an account on your community’s server.'
-                                  : 'Your people are just a sign-in away.'}
-                    </p>
+                    {(trustPrompt || token) && (
+                        <h2>{trustPrompt ? 'Check server' : 'Connecting…'}</h2>
+                    )}
                     {trustPrompt ? (
                         trustPrompt.kind === 'confirm' ? (
                             <div
@@ -1080,6 +1104,13 @@ function App() {
                                     value={authUrl}
                                     onChange={(e) => {
                                         const value = e.target.value;
+                                        setRequestedAddress(null);
+                                        setServerInfo(null);
+                                        setInfoError('');
+                                        setInfoNote('');
+                                        setInfoChecking(false);
+                                        setRegister(false);
+                                        setResetPassword(false);
                                         if (value.includes('#')) {
                                             try {
                                                 // A pasted server or invite link fills the form.
@@ -1095,7 +1126,6 @@ function App() {
                                                 );
                                                 if (link.invite) setInviteCode(link.invite);
                                                 if (link.setup) setSetupCode(link.setup);
-                                                if (link.invite || link.setup) setRegister(true);
                                                 return;
                                             } catch {
                                                 /* Keep the text; submitting explains the problem. */
@@ -1105,15 +1135,17 @@ function App() {
                                     }}
                                     required
                                     placeholder="Server address or link"
+                                    autoFocus
+                                    disabled={busy}
                                 />
                             </label>
-                            {httpTarget && !window.campfire?.insecureHttp && (
+                            {showHttpApproval && !window.campfire?.insecureHttp && (
                                 <p className="field-help" role="alert">
                                     Use HTTPS in your browser. Remote HTTP requires an explicit
                                     opt-in in the Campfire desktop app.
                                 </p>
                             )}
-                            {window.campfire?.insecureHttp && httpTarget && (
+                            {window.campfire?.insecureHttp && showHttpApproval && (
                                 <div className="http-approval">
                                     <label className="http-approval-toggle">
                                         <input
@@ -1133,145 +1165,172 @@ function App() {
                                     </p>
                                 </div>
                             )}
-                            <label>
-                                Username
-                                <input
-                                    name="username"
-                                    autoComplete="username"
-                                    minLength={2}
-                                    maxLength={32}
-                                    required
-                                    placeholder={
-                                        register
-                                            ? 'Choose a permanent username'
-                                            : 'Enter your username'
-                                    }
-                                    autoCapitalize="none"
-                                    spellCheck={false}
-                                />
-                            </label>
-                            {register && (
-                                <p className="field-help">
-                                    Your username is permanent. You can change your display nickname
-                                    later.
-                                </p>
-                            )}
-                            {resetPassword && (
-                                <label>
-                                    Reset token
-                                    <input
-                                        name="resetToken"
-                                        required
-                                        autoComplete="off"
-                                        maxLength={64}
-                                        spellCheck={false}
-                                    />
-                                </label>
-                            )}
-                            <label>
-                                {resetPassword ? 'New password' : 'Password'}
-                                <input
-                                    name="password"
-                                    type="password"
-                                    autoComplete={
-                                        register || resetPassword
-                                            ? 'new-password'
-                                            : 'current-password'
-                                    }
-                                    minLength={8}
-                                    maxLength={128}
-                                    required
-                                    placeholder="At least 8 characters"
-                                />
-                            </label>
-                            {register && serverInfo?.setupRequired && (
-                                <label>
-                                    Owner setup code
-                                    <input
-                                        name="setupCode"
-                                        value={setupCode}
-                                        onChange={(e) => setSetupCode(e.target.value)}
-                                        required
-                                        autoComplete="off"
-                                        maxLength={256}
-                                    />
-                                    <span className="field-help">
-                                        Find this one-time code in your server console. This account
-                                        becomes the owner.
-                                    </span>
-                                </label>
-                            )}
-                            {register &&
-                                !serverInfo?.setupRequired &&
-                                serverInfo?.registrationMode !== 'open' && (
-                                    <label>
-                                        Invitation code
-                                        <input
-                                            value={inviteCode}
-                                            onChange={(e) => setInviteCode(e.target.value)}
-                                            required={serverInfo?.registrationMode === 'invite'}
-                                            autoComplete="off"
-                                            maxLength={64}
-                                            spellCheck={false}
-                                        />
-                                        <span className="field-help">
-                                            {serverInfo?.registrationMode === 'invite'
-                                                ? 'This server is invite only. Ask its owner for an invitation.'
-                                                : 'Enter an invitation if required by this server.'}
-                                        </span>
-                                    </label>
-                                )}
                             {infoNote && <p className="field-help">{infoNote}</p>}
                             {infoError && (
                                 <p className="field-help" role="alert">
                                     {infoError}
                                 </p>
                             )}
-                            <button
-                                className="primary"
-                                disabled={busy || httpBusy || (!!httpTarget && !httpApproved)}
-                            >
-                                {busy
-                                    ? 'Just a moment…'
-                                    : resetPassword
-                                      ? 'Reset password & sign in'
-                                      : register
-                                        ? 'Create account'
-                                        : 'Sign in'}
-                                <ArrowRight size={18} />
-                            </button>
-                            {!register && !resetPassword && (
-                                <p className="auth-switch">
-                                    <button type="button" onClick={() => setResetPassword(true)}>
-                                        Reset password
-                                    </button>
-                                </p>
-                            )}
-                            <p className="auth-switch">
-                                {register || resetPassword
-                                    ? 'Already have an account?'
-                                    : 'New around here?'}{' '}
+                            {!resolvedServerInfo ? (
                                 <button
-                                    type="button"
-                                    onClick={() => {
-                                        setResetPassword(false);
-                                        setRegister(resetPassword ? false : !register);
-                                    }}
+                                    className="primary"
+                                    disabled={
+                                        busy ||
+                                        httpBusy ||
+                                        infoChecking ||
+                                        !authUrl.trim() ||
+                                        (showHttpApproval && !httpApproved)
+                                    }
                                 >
-                                    {register || resetPassword ? 'Sign in' : 'Create account'}
+                                    {infoChecking ? 'Checking server…' : 'Continue'}
+                                    <ArrowRight size={18} />
                                 </button>
-                            </p>
+                            ) : (
+                                <div className="auth-credentials">
+                                    <h2>
+                                        {resetPassword
+                                            ? 'Reset password'
+                                            : register
+                                              ? 'Create account'
+                                              : 'Sign in'}
+                                    </h2>
+                                    <label>
+                                        Username
+                                        <input
+                                            name="username"
+                                            autoComplete="username"
+                                            minLength={2}
+                                            maxLength={32}
+                                            required
+                                            placeholder={
+                                                register
+                                                    ? 'Choose a permanent username'
+                                                    : 'Enter your username'
+                                            }
+                                            autoCapitalize="none"
+                                            spellCheck={false}
+                                        />
+                                    </label>
+                                    {register && (
+                                        <p className="field-help">
+                                            Your username is permanent. You can change your display
+                                            nickname later.
+                                        </p>
+                                    )}
+                                    {resetPassword && (
+                                        <label>
+                                            Reset token
+                                            <input
+                                                name="resetToken"
+                                                required
+                                                autoComplete="off"
+                                                maxLength={64}
+                                                spellCheck={false}
+                                            />
+                                        </label>
+                                    )}
+                                    <label>
+                                        {resetPassword ? 'New password' : 'Password'}
+                                        <input
+                                            name="password"
+                                            type="password"
+                                            autoComplete={
+                                                register || resetPassword
+                                                    ? 'new-password'
+                                                    : 'current-password'
+                                            }
+                                            minLength={8}
+                                            maxLength={128}
+                                            required
+                                            placeholder="Enter your password"
+                                        />
+                                    </label>
+                                    {register && resolvedServerInfo?.setupRequired && (
+                                        <label>
+                                            Owner setup code
+                                            <input
+                                                name="setupCode"
+                                                value={setupCode}
+                                                onChange={(e) => setSetupCode(e.target.value)}
+                                                required
+                                                autoComplete="off"
+                                                maxLength={256}
+                                            />
+                                            <span className="field-help">
+                                                Find this one-time code in your server console. This
+                                                account becomes the owner.
+                                            </span>
+                                        </label>
+                                    )}
+                                    {register &&
+                                        !resolvedServerInfo?.setupRequired &&
+                                        resolvedServerInfo?.registrationMode !== 'open' && (
+                                            <label>
+                                                Invitation code
+                                                <input
+                                                    value={inviteCode}
+                                                    onChange={(e) => setInviteCode(e.target.value)}
+                                                    required={
+                                                        resolvedServerInfo?.registrationMode ===
+                                                        'invite'
+                                                    }
+                                                    autoComplete="off"
+                                                    maxLength={64}
+                                                    spellCheck={false}
+                                                />
+                                                <span className="field-help">
+                                                    {resolvedServerInfo?.registrationMode ===
+                                                    'invite'
+                                                        ? 'This server is invite only. Ask its owner for an invitation.'
+                                                        : 'Enter an invitation if required by this server.'}
+                                                </span>
+                                            </label>
+                                        )}
+                                    <button
+                                        className="primary"
+                                        disabled={
+                                            busy || httpBusy || (!!httpTarget && !httpApproved)
+                                        }
+                                    >
+                                        {busy
+                                            ? 'Just a moment…'
+                                            : resetPassword
+                                              ? 'Reset password & sign in'
+                                              : register
+                                                ? 'Create account'
+                                                : 'Sign in'}
+                                        <ArrowRight size={18} />
+                                    </button>
+                                    {!register && !resetPassword && (
+                                        <p className="auth-switch">
+                                            <button
+                                                type="button"
+                                                onClick={() => setResetPassword(true)}
+                                            >
+                                                Reset password
+                                            </button>
+                                        </p>
+                                    )}
+                                    <p className="auth-switch">
+                                        {register || resetPassword
+                                            ? 'Already have an account?'
+                                            : 'Need an account?'}{' '}
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setResetPassword(false);
+                                                setRegister(resetPassword ? false : !register);
+                                            }}
+                                        >
+                                            {register || resetPassword
+                                                ? 'Sign in'
+                                                : 'Create account'}
+                                        </button>
+                                    </p>
+                                </div>
+                            )}
                         </form>
                     )}
-                    <div className="self-host-note">
-                        <Server size={20} />
-                        <p>
-                            Paste the server or invite link you were given. New servers print an
-                            owner setup link in their console.
-                            <br />
-                            Your account and conversations stay on that server.
-                        </p>
-                    </div>
                 </main>
                 {showError}
             </div>
