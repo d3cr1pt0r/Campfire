@@ -26,7 +26,8 @@ export function Avatar({
         <span
             title={user ? `${displayName(user)} (@${user.username})` : undefined}
             className={`avatar ${small ? 'small' : ''} ${speaking ? 'speaking' : ''} ${framed ? `framed frame-${framed}` : ''}`}
-            style={{ background: color || '#d9a466' }}
+            // Saved pictures are opaque; a fill behind them bleeds through the antialiased corners.
+            style={user?.avatar ? undefined : { background: color || '#d9a466' }}
         >
             {user?.avatar ? (
                 <AuthImage path={`/avatars/${user.avatar}`} alt={displayName(user)} />
