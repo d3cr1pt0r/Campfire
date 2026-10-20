@@ -71,7 +71,7 @@ docker compose up --build -d
 
 The fingerprint, server link and owner setup link appear in `docker compose logs campfire`. Community data and the server's identity are kept in a persistent Docker volume; back it up.
 
-For an existing installation, follow the [Campfire branding upgrade steps](REWORK.md#campfire-branding-upgrade) before starting this version.
+This version does not upgrade databases from earlier versions. For an existing installation, read [database upgrades](REWORK.md#configuration-and-database-upgrades) before starting it.
 
 ## Run the desktop app from source
 

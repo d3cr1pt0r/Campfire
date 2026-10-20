@@ -1,4 +1,3 @@
-import { migratePermissions } from '../shared/permissions.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -71,7 +70,22 @@ test('only the owner controls registration and invitations, including managers',
     const member = (await f.signup('Member', { inviteCode: invitation.code })).data;
     f.service.db
         .prepare('INSERT INTO roles(id,name,color,permissions) VALUES(?,?,?,?)')
-        .run('manager', 'Manager', '#ffffff', JSON.stringify(migratePermissions(['manage'])));
+        .run(
+            'manager',
+            'Manager',
+            '#ffffff',
+            JSON.stringify([
+                'messages.pin',
+                'messages.deleteOthers',
+                'channels.edit',
+                'channels.create',
+                'channels.reorder',
+                'channels.delete',
+                'channels.access',
+                'emojis.deleteOthers',
+                'server.edit',
+            ]),
+        );
     for (const role of [null, 'manager']) {
         f.service.db.prepare('DELETE FROM user_roles WHERE user=?').run(member.user.id);
         if (role)
@@ -166,17 +180,6 @@ test('registration rechecks the mode after asynchronous password hashing', async
         undefined,
     );
 });
-test('legacy servers with accounts migrate to open registration', async (t) => {
-    const f = await fixture(t);
-    await f.owner();
-    f.service.db.exec(
-        "DROP TABLE invitations; DELETE FROM settings WHERE key='registrationMode'; DELETE FROM migrations WHERE version=7;",
-    );
-    await f.restart();
-    assert.equal((await f.api(null, '/info')).data.registrationMode, 'open');
-    assert.equal((await f.signup('LegacyMember')).status, 200);
-});
-
 test('revoking an invitation during password hashing prevents account creation', async (t) => {
     const f = await fixture(t);
     const owner = await f.owner();

@@ -1,77 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
 import { io as client } from 'socket.io-client';
-import { migrate } from '../server/database.js';
 import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
-import { currentMigrationVersions } from '../test-support/migrations.js';
-
-test('upgrading signs everyone out and revokes unused invitations exactly once', () => {
-    const db = new DatabaseSync(':memory:');
-    try {
-        db.exec(readFileSync(new URL('../server/schema.sql', import.meta.url), 'utf8'));
-        db.exec(
-            "INSERT INTO roles VALUES('member','Member','#112233','[]'); INSERT INTO users(id,username,password,role) VALUES('a','Alice','hash','member')",
-        );
-        // Simulate a 0.1.x database that already has every earlier migration.
-        migrate(db, 12);
-        db.exec('DELETE FROM migrations WHERE version>=12');
-        db.exec(
-            "INSERT INTO sessions VALUES('old-session','a',9999999999999); INSERT INTO invitations(id,tokenHash,label,created,expires) VALUES('unused','u','',1,9999999999999),('used','v','',1,9999999999999); UPDATE invitations SET usedBy='a' WHERE id='used'",
-        );
-        migrate(db);
-        assert.equal(db.prepare('SELECT COUNT(*) n FROM sessions').get().n, 0);
-        assert.deepEqual(
-            db
-                .prepare('SELECT id,revoked FROM invitations ORDER BY id')
-                .all()
-                .map((row) => ({ ...row })),
-            [
-                { id: 'unused', revoked: 1 },
-                { id: 'used', revoked: 0 },
-            ],
-        );
-        db.exec("INSERT INTO sessions VALUES('new-session','a',9999999999999)");
-        migrate(db);
-        assert.equal(db.prepare('SELECT COUNT(*) n FROM sessions').get().n, 1);
-    } finally {
-        db.close();
-    }
-});
-
-test('upgrading an encryption-branch version 11 database also removes friends', () => {
-    const db = new DatabaseSync(':memory:');
-    try {
-        db.exec(readFileSync(new URL('../server/schema.sql', import.meta.url), 'utf8'));
-        migrate(db, 12);
-        // Encryption version 11 rotated credentials but still retained the friends table.
-        db.exec(
-            'DELETE FROM migrations WHERE version>=12; CREATE TABLE friends(sender TEXT,recipient TEXT);',
-        );
-        migrate(db);
-        assert.equal(
-            db.prepare("SELECT name FROM sqlite_master WHERE name='friends'").get(),
-            undefined,
-        );
-        const expectedVersions = currentMigrationVersions();
-        const versions = () =>
-            db
-                .prepare('SELECT version FROM migrations ORDER BY version')
-                .all()
-                .map((row) => row.version);
-        assert.deepEqual(versions(), expectedVersions);
-        migrate(db);
-        assert.deepEqual(versions(), expectedVersions);
-        assert.equal(db.prepare('PRAGMA quick_check').get().quick_check, 'ok');
-    } finally {
-        db.close();
-    }
-});
 
 test('the server CSP allows plain HTTP connections only to this machine', async (t) => {
     const dataDir = mkdtempSync(path.join(tmpdir(), 'campfire-csp-'));

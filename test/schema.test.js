@@ -1,14 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { openDatabase } from '../server/database.js';
+
 test('schema initializes twice and enforces identity, role and attachment integrity', () => {
     const db = new DatabaseSync(':memory:');
     try {
         const schema = readFileSync(new URL('../server/schema.sql', import.meta.url), 'utf8');
         db.exec(schema);
         db.exec(schema);
-        db.prepare('INSERT INTO roles VALUES(?,?,?,?)').run(
+        db.prepare('INSERT INTO roles(id,name,color,permissions) VALUES(?,?,?,?)').run(
             'member',
             'Member',
             '#112233',
@@ -41,7 +45,7 @@ test('schema initializes twice and enforces identity, role and attachment integr
             'Hello',
             Date.now(),
         );
-        db.prepare('INSERT INTO attachments VALUES(?,?,?,?,?)').run(
+        db.prepare('INSERT INTO attachments(id,message,name,mime,data) VALUES(?,?,?,?,?)').run(
             'f',
             'm',
             'test.txt',
@@ -57,42 +61,38 @@ test('schema initializes twice and enforces identity, role and attachment integr
     }
 });
 
-test('profile migration backfills existing usernames and preserves changed nicknames on restart', () => {
-    const db = new DatabaseSync(':memory:');
+test('a database from an older version is refused with a way forward', () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-older-'));
     try {
-        const schema = readFileSync(new URL('../server/schema.sql', import.meta.url), 'utf8');
-        db.exec(schema);
-        db.prepare('INSERT INTO roles VALUES(?,?,?,?)').run('member', 'Member', '#112233', '[]');
-        db.prepare('INSERT INTO users(id,username,password,role) VALUES(?,?,?,?)').run(
-            'legacy',
-            'Original',
-            'hash',
-            'member',
-        );
-        db.exec(schema);
-        assert.equal(
-            db.prepare('SELECT nickname FROM profiles WHERE user=?').get('legacy').nickname,
-            'Original',
-        );
-        db.prepare('UPDATE profiles SET nickname=? WHERE user=?').run('New Display', 'legacy');
-        db.exec(schema);
-        assert.equal(
-            db.prepare('SELECT nickname FROM profiles WHERE user=?').get('legacy').nickname,
-            'New Display',
-        );
-        assert.equal(
-            db.prepare('SELECT username FROM users WHERE id=?').get('legacy').username,
-            'Original',
-        );
-        assert.throws(
-            () => db.prepare('UPDATE users SET username=? WHERE id=?').run('Other', 'legacy'),
-            /cannot be changed/,
-        );
-        assert.throws(
-            () => db.prepare('UPDATE users SET username=? WHERE id=?').run('original', 'legacy'),
-            /cannot be changed/,
-        );
+        const old = new DatabaseSync(path.join(directory, 'campfire.sqlite'));
+        old.exec(`CREATE TABLE users(id TEXT PRIMARY KEY, username TEXT);
+            INSERT INTO users VALUES('a', 'Alice');
+            CREATE TABLE profiles(user TEXT PRIMARY KEY, nickname TEXT NOT NULL);`);
+        old.close();
+        assert.throws(() => openDatabase(directory, 'Test'), /older Campfire version/);
     } finally {
+        rmSync(directory, { recursive: true, force: true });
+    }
+});
+
+test('a community saved under an earlier filename is refused instead of starting empty', () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'campfire-renamed-'));
+    try {
+        const { db } = openDatabase(directory, 'Test');
+        db.prepare('INSERT INTO users(id,username,password) VALUES(?,?,?)').run('a', 'Alice', 'h');
+        // Closing the last connection folds the WAL back into the file, so it can be renamed.
         db.close();
+        const current = path.join(directory, 'campfire.sqlite');
+        const earlier = path.join(directory, 'driskord.sqlite');
+        renameSync(current, earlier);
+        assert.throws(() => openDatabase(directory, 'Test'), /rename it to campfire\.sqlite/);
+        assert.equal(existsSync(current), false);
+        // A current database with accounts opens normally and keeps them.
+        renameSync(earlier, current);
+        const reopened = openDatabase(directory, 'Test');
+        assert.equal(reopened.get('SELECT username FROM users WHERE id=?', 'a').username, 'Alice');
+        reopened.db.close();
+    } finally {
+        rmSync(directory, { recursive: true, force: true });
     }
 });

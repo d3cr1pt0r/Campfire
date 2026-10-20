@@ -47,7 +47,7 @@ The UI is shared by browser and Electron. No Node.js primitives are exposed to r
 
 ## Data model
 
-SQLite runs in WAL mode with foreign keys. All SQL inputs use bound parameters. The base schema is idempotent for fresh/repeated startup. `server/database.js` applies versioned, transactional migrations recorded in the `migrations` table.
+SQLite runs in WAL mode with foreign keys. All SQL inputs use bound parameters. `server/schema.sql` is the complete schema and is idempotent for fresh/repeated startup. Databases are not upgraded in place; `server/database.js` refuses an older database, or one saved under an earlier filename, with instructions (see REWORK.md).
 
 - `roles`: ID, name, hex name color, JSON permission array.
 - `users`: UUID, unique case-insensitive username, salted scrypt hash, role FK, reserved banned flag.

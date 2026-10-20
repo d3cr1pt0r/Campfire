@@ -8,8 +8,8 @@ import { request } from '../test-support/http.js';
 import { canonicalRoom } from '../shared/rooms.js';
 import { roleFixture } from '../test-support/role-fixture.js';
 
-test('upgrade removes relationships and endpoints while preserving member DMs, attachments and sessions', async () => {
-    const dataDir = mkdtempSync(path.join(tmpdir(), 'campfire-member-upgrade-'));
+test('member DMs, attachments and sessions survive a restart without relationship endpoints', async () => {
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'campfire-member-restart-'));
     let service = createApp({ dataDir });
     try {
         const signup = async (username) => {
@@ -33,22 +33,8 @@ test('upgrade removes relationships and endpoints while preserving member DMs, a
             ],
         });
         assert.equal(sent.status, 200);
-        // Recreate the previous database version with accepted and pending relationships.
-        service.db.exec(
-            'DELETE FROM migrations WHERE version=11; CREATE TABLE friends(sender TEXT REFERENCES users(id),recipient TEXT REFERENCES users(id),accepted INTEGER DEFAULT 0,PRIMARY KEY(sender,recipient)); CREATE INDEX friends_recipient ON friends(recipient);',
-        );
-        service.db.prepare('INSERT INTO friends VALUES(?,?,?)').run(alice.user.id, bob.user.id, 1);
-        service.db.prepare('INSERT INTO friends VALUES(?,?,?)').run(bob.user.id, other.user.id, 0);
         await service.close();
         service = createApp({ dataDir });
-        assert.deepEqual(
-            service.db
-                .prepare(
-                    "SELECT name FROM sqlite_master WHERE name IN ('friends','friends_recipient')",
-                )
-                .all(),
-            [],
-        );
         assert.equal(service.db.prepare('PRAGMA quick_check').get().quick_check, 'ok');
         const state = await request(service.app, '/state', alice.token);
         assert.equal(state.status, 200);

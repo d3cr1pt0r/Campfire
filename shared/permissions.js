@@ -94,47 +94,6 @@ export const channelPermissionIds = (kind) =>
               'messages.pin',
               'messages.deleteOthers',
           ];
-// Historical migrations and imported legacy roles only.
-export function migratePermissions(permissions) {
-    return [
-        ...new Set(
-            permissions
-                .flatMap((p) =>
-                    p === 'send'
-                        ? [
-                              'messages.send',
-                              'files.attach',
-                              'reactions.add',
-                              'threads.create',
-                              'threads.reply',
-                              'emojis.upload',
-                          ]
-                        : p === 'voice'
-                          ? [
-                                'calls.join',
-                                'calls.start',
-                                'calls.speak',
-                                'calls.camera',
-                                'calls.share',
-                            ]
-                          : p === 'manage'
-                            ? [
-                                  'messages.pin',
-                                  'messages.deleteOthers',
-                                  'channels.edit',
-                                  'channels.create',
-                                  'channels.reorder',
-                                  'channels.delete',
-                                  'channels.access',
-                                  'emojis.deleteOthers',
-                                  'server.edit',
-                              ]
-                            : [p],
-                )
-                .filter((p) => permissionIds.includes(p)),
-        ),
-    ];
-}
 export function effectiveRoleIds(assigned = []) {
     return assigned.length ? assigned : ['everyone'];
 }

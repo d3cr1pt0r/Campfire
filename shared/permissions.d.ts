@@ -3,7 +3,6 @@ export const permissionGroups: { name: string; permissions: [string, string][] }
 export const permissionIds: string[];
 export const memberPermissions: string[];
 export function channelPermissionIds(kind: string): string[];
-export function migratePermissions(permissions: string[]): string[];
 export function rolePermissions(user: User | undefined, roles: Role[]): string[];
 export function hasPermission(
     user: User | undefined,

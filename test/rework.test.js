@@ -1,16 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { EventEmitter } from 'node:events';
-import { migrate, messageViews } from '../server/database.js';
+import { messageViews } from '../server/database.js';
 import { createSessions } from '../server/sessions.js';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRateLimit, originPolicy } from '../server/policies.js';
 import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
-import { currentMigrationVersions } from '../test-support/migrations.js';
 
 test('overlapping and repeated shutdown calls close SQLite only once', async (t) => {
     const dir = mkdtempSync(path.join(tmpdir(), 'campfire-shutdown-'));
@@ -32,66 +30,6 @@ test('overlapping and repeated shutdown calls close SQLite only once', async (t)
     await service.close();
     assert.equal(databaseCloses, 1);
     assert.equal(service.db.isOpen, false);
-});
-
-test('legacy migration merges DM histories and accounts for attachment bytes once', () => {
-    const db = new DatabaseSync(':memory:');
-    try {
-        db.exec(readFileSync(new URL('../server/schema.sql', import.meta.url), 'utf8'));
-        db.exec(
-            "INSERT INTO roles VALUES('member','Member','#112233','[]'); INSERT INTO users(id,username,password,role) VALUES('a','Alice','hash','member');",
-        );
-        db.exec(
-            "INSERT INTO messages(id,room,author,body,created) VALUES('first','dm:b:a','a','old',1),('second','dm:a:b','a','new',2)",
-        );
-        db.exec(
-            "INSERT INTO attachments VALUES('file','first','hello','text/plain','aGVsbG8='); INSERT INTO reactions VALUES('first','a','👍');",
-        );
-        db.exec("INSERT INTO attachments VALUES('unpadded','first','hi','text/plain','aGk')");
-        migrate(db);
-        migrate(db);
-        assert.deepEqual(
-            db
-                .prepare('SELECT version FROM migrations ORDER BY version')
-                .all()
-                .map((row) => row.version),
-            currentMigrationVersions(),
-        );
-        assert.equal(db.prepare("SELECT COUNT(*) n FROM messages WHERE room='dm:a:b'").get().n, 2);
-        assert.equal(db.prepare('SELECT bytes FROM storage_usage').get().bytes, 7);
-        assert.equal(db.prepare('SELECT COUNT(*) n FROM reactions').get().n, 1);
-        db.prepare("DELETE FROM messages WHERE id='first'").run();
-        assert.equal(db.prepare('SELECT bytes FROM storage_usage').get().bytes, 0);
-    } finally {
-        db.close();
-    }
-});
-
-test('failed migrations roll back schema changes and can resume after the cause is fixed', () => {
-    const db = new DatabaseSync(':memory:');
-    try {
-        db.exec(readFileSync(new URL('../server/schema.sql', import.meta.url), 'utf8'));
-        db.exec('CREATE TABLE storage_usage(conflict INTEGER)');
-        assert.throws(() => migrate(db), /already exists/);
-        assert.equal(
-            db
-                .prepare("SELECT name FROM pragma_table_info('attachments') WHERE name='bytes'")
-                .get(),
-            undefined,
-        );
-        assert.equal(db.prepare('SELECT MAX(version) version FROM migrations').get().version, 1);
-        db.exec('DROP TABLE storage_usage');
-        migrate(db);
-        assert.deepEqual(
-            db
-                .prepare('SELECT version FROM migrations ORDER BY version')
-                .all()
-                .map((row) => row.version),
-            currentMigrationVersions(),
-        );
-    } finally {
-        db.close();
-    }
 });
 
 test('history enrichment uses three queries regardless of message count', () => {

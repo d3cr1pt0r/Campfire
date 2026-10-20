@@ -1,13 +1,9 @@
-import { migratePermissions } from '../shared/permissions.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
 import { createApp } from '../test-support/open-server.js';
-import { migrate } from '../server/database.js';
 import { request } from '../test-support/http.js';
 
 async function fixture(t) {
@@ -103,30 +99,6 @@ test('protected channels can be renamed; additional channel deletion cascades an
     await api(member, `/attachments/${msg.attachments[0].id}`, 'GET', undefined, 404);
 });
 
-test('legacy custom channel names are retained and one channel of each type becomes permanent', () => {
-    const db = new DatabaseSync(':memory:');
-    try {
-        db.exec(readFileSync(new URL('../server/schema.sql', import.meta.url), 'utf8'));
-        db.exec(
-            "INSERT INTO channels VALUES('custom-text','Our Chat','text'),('custom-voice','Our Voice','voice')",
-        );
-        migrate(db);
-        migrate(db);
-        const channels = db.prepare('SELECT * FROM channels').all();
-        assert.equal(channels.length, 2);
-        assert.equal(
-            channels.every((c) => c.protected === 1),
-            true,
-        );
-        assert.deepEqual(
-            channels.map((c) => c.name),
-            ['Our Chat', 'Our Voice'],
-        );
-    } finally {
-        db.close();
-    }
-});
-
 test('channel ordering is type-specific, manager-only, persistent and preserves hidden channels', async (t) => {
     const f = await fixture(t),
         { owner, member, api } = f;
@@ -165,7 +137,29 @@ test('channel ordering is type-specific, manager-only, persistent and preserves 
     const role = await api(owner, '/roles', 'POST', {
         name: 'Manager',
         color: '#123456',
-        permissions: ['channels.view', ...migratePermissions(['manage', 'send', 'voice'])],
+        permissions: [
+            'channels.view',
+            'messages.pin',
+            'messages.deleteOthers',
+            'channels.edit',
+            'channels.create',
+            'channels.reorder',
+            'channels.delete',
+            'channels.access',
+            'emojis.deleteOthers',
+            'server.edit',
+            'messages.send',
+            'files.attach',
+            'reactions.add',
+            'threads.create',
+            'threads.reply',
+            'emojis.upload',
+            'calls.join',
+            'calls.start',
+            'calls.speak',
+            'calls.camera',
+            'calls.share',
+        ],
     });
     await api(owner, `/users/${member.user.id}/roles`, 'PATCH', { roles: [role.id] });
     await api(owner, `/roles/${role.id}/access`, 'PUT', {
@@ -202,7 +196,29 @@ test('channel descriptions are owner/manager editable, persisted, and independen
     const moderator = await api(owner, '/roles', 'POST', {
         name: 'Moderator',
         color: '#abcdef',
-        permissions: ['channels.view', ...migratePermissions(['manage', 'send', 'voice'])],
+        permissions: [
+            'channels.view',
+            'messages.pin',
+            'messages.deleteOthers',
+            'channels.edit',
+            'channels.create',
+            'channels.reorder',
+            'channels.delete',
+            'channels.access',
+            'emojis.deleteOthers',
+            'server.edit',
+            'messages.send',
+            'files.attach',
+            'reactions.add',
+            'threads.create',
+            'threads.reply',
+            'emojis.upload',
+            'calls.join',
+            'calls.start',
+            'calls.speak',
+            'calls.camera',
+            'calls.share',
+        ],
     });
     await api(owner, `/users/${member.user.id}/roles`, 'PATCH', { roles: [moderator.id] });
     await api(member, '/channels/general', 'PATCH', { description: 'Moderator update' });
@@ -228,33 +244,6 @@ test('channel descriptions are owner/manager editable, persisted, and independen
         (await api(owner, '/state')).channels.find((c) => c.id === added.id).description,
         'A place for everyday conversations.',
     );
-});
-
-test('upgrading existing channels supplies descriptions once without overwriting edits', () => {
-    const db = new DatabaseSync(':memory:');
-    try {
-        db.exec(readFileSync(new URL('../server/schema.sql', import.meta.url), 'utf8'));
-        db.exec(
-            "INSERT INTO channels(id,name,kind) VALUES('text','Text','text'),('voice','Voice','voice')",
-        );
-        migrate(db);
-        assert.equal(
-            db.prepare("SELECT description FROM channels WHERE id='text'").get().description,
-            'A place for everyday conversations.',
-        );
-        assert.equal(
-            db.prepare("SELECT description FROM channels WHERE id='voice'").get().description,
-            '',
-        );
-        db.prepare("UPDATE channels SET description='Edited' WHERE id='text'").run();
-        migrate(db);
-        assert.equal(
-            db.prepare("SELECT description FROM channels WHERE id='text'").get().description,
-            'Edited',
-        );
-    } finally {
-        db.close();
-    }
 });
 
 test('drop reordering preserves channel types, denies hidden targets and persists', async (t) => {

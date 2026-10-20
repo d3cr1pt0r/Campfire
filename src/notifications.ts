@@ -16,31 +16,6 @@ export function notificationKey(server: string, user: string, room: string) {
     return JSON.stringify([serverKey(server), user, room]);
 }
 
-// Rewrites notification choices saved under full server URLs by earlier versions.
-export function migrateNotificationKeys(prefs: Preferences): Preferences {
-    const migrate = <T>(choices?: Record<string, T>) =>
-        choices &&
-        Object.fromEntries(
-            Object.entries(choices).map(([key, value]) => {
-                try {
-                    const [server, user, room] = JSON.parse(key);
-                    return [notificationKey(server, user, room), value];
-                } catch {
-                    return [key, value];
-                }
-            }),
-        );
-    return {
-        ...prefs,
-        ...(prefs.serverNotifications && {
-            serverNotifications: migrate(prefs.serverNotifications),
-        }),
-        ...(prefs.channelNotifications && {
-            channelNotifications: migrate(prefs.channelNotifications),
-        }),
-    };
-}
-
 // Keep old on/off preferences: on meant mentions, while off muted the conversation.
 export function channelNotificationMode(value: unknown): ChannelNotificationMode {
     if (value === false || value === 'muted') return 'muted';

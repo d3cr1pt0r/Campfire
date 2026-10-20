@@ -9,7 +9,7 @@ existing eight-person cap and media protocol version 2.
 | Concern | Files |
 | --- | --- |
 | Server composition, middleware, state endpoint | `server/app.js` |
-| Database initialization, versioned migrations, batched message enrichment | `server/database.js`, `server/schema.sql` |
+| Database schema, startup checks, batched message enrichment | `server/database.js`, `server/schema.sql` |
 | Password derivation, sessions, expiry, revocation | `server/security.js`, `server/sessions.js`, `server/accounts.js` |
 | Conversation history, messages, reactions, attachments | `server/messages.js` |
 | Profiles, avatars, custom emojis | `server/profiles.js` |
@@ -28,9 +28,8 @@ client event contracts but do not replace server-side runtime validation.
 
 ## Behavior and compatibility
 
-- DM room IDs are normalized on the server. Migration 1 merges reversed legacy
-  room IDs into the canonical history while preserving message IDs, attachments
-  and reactions.
+- DM room IDs are normalized on the server, so both participants share one
+  canonical history.
 - Conversation requests are cancelled when replaced. Messages, edits and deletions
   received while a request is pending are replayed over its snapshot. Only the
   active request can publish a response. Full-state refreshes coalesce bursts and
@@ -59,16 +58,23 @@ client event contracts but do not replace server-side runtime validation.
 
 ## Configuration and database upgrades
 
+Databases are no longer upgraded in place. `server/schema.sql` defines the
+complete schema and runs on every start, creating whatever a new data directory
+needs and leaving an existing database as it is. A database from an older
+version is refused at startup with instructions. To keep one, start it once with
+a Campfire build up to commit `e1d6373`, which still upgrades databases, and
+then start this version. New tables can be added to the schema freely; changing
+an existing table needs an upgrade step again.
+
 ### Campfire branding upgrade
 
 Before starting this version on an existing installation:
 
-1. Stop the backend and back up its complete data directory. The server reuses
-   an existing `.sqlite` community database when `campfire.sqlite` is absent or
-   has no accounts. If multiple previous databases contain accounts, startup
-   stops rather than selecting one arbitrarily. A populated `campfire.sqlite`
-   takes precedence. To standardize the filename, rename the intended database
-   to `campfire.sqlite` with matching `-wal` and `-shm` sidecars while stopped.
+1. Stop the backend and back up its complete data directory. The server opens
+   only `campfire.sqlite`. If it finds a community database under another name
+   instead, it refuses to start rather than creating an empty community. Rename
+   that database to `campfire.sqlite`, with its `-wal` and `-shm` files, while
+   the server is stopped.
 2. Docker Compose now uses the `campfire` service and `campfire-data` volume.
    Reuse the existing volume with an override declaring `campfire-data` as
    `external: true` and setting `name` to the existing Docker volume name.
@@ -84,12 +90,6 @@ Back up the database before upgrading, using the SQLite backup mechanism or by
 stopping the service and copying the data directory including WAL files. Restart
 the backend, then update browser/desktop clients. Existing accounts, password
 hashes, sessions, preferences and media behavior are retained.
-
-Database migrations run transactionally and record their versions. Migration 2
-adds decoded attachment sizes and a trigger-maintained usage total. Re-running
-startup does not reapply migrations. Old server code inserts attachments using
-the former schema, so rolling back requires restoring the pre-upgrade database
-backup along with the old code.
 
 `MAX_STORED_UPLOAD_BYTES` defaults to **1073741824** (1 GiB). It limits aggregate
 decoded attachment bytes, with accounting and checks inside message transactions.

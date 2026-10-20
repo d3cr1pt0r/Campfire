@@ -1,4 +1,3 @@
-import { migratePermissions } from '../shared/permissions.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -235,7 +234,14 @@ test(
             await api(alice, `/roles/${readonly.id}`, 'PATCH', {
                 name: 'Listener',
                 color: '#112233',
-                permissions: ['channels.view', ...migratePermissions(['voice'])],
+                permissions: [
+                    'channels.view',
+                    'calls.join',
+                    'calls.start',
+                    'calls.speak',
+                    'calls.camera',
+                    'calls.share',
+                ],
             });
             assert.equal(
                 (await api(bob, '/state')).roles.find((r) => r.id === readonly.id).color,

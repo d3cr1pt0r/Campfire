@@ -1,4 +1,3 @@
-import { migratePermissions } from '../shared/permissions.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -48,7 +47,20 @@ test(
         const role = await api(owner, '/roles', 'POST', {
             name: 'Bob role',
             color: '#abcdef',
-            permissions: ['channels.view', ...migratePermissions(['send', 'voice'])],
+            permissions: [
+                'channels.view',
+                'messages.send',
+                'files.attach',
+                'reactions.add',
+                'threads.create',
+                'threads.reply',
+                'emojis.upload',
+                'calls.join',
+                'calls.start',
+                'calls.speak',
+                'calls.camera',
+                'calls.share',
+            ],
         });
         await api(owner, `/users/${bob.user.id}/roles`, 'PATCH', { roles: [role.id] });
         const text = await api(owner, '/channels', 'POST', { name: 'Secret chat', kind: 'text' });

@@ -4,7 +4,7 @@ import {
     channelPermissionIds,
     canManageRole,
 } from '../shared/permissions.js';
-import { shouldNotify, createNotificationSound, migrateNotificationKeys } from './notifications';
+import { shouldNotify, createNotificationSound } from './notifications';
 import {
     formatFingerprint,
     isLoopbackHost,
@@ -118,10 +118,10 @@ function stored<T>(key: string, fallback: T): T {
         return fallback;
     }
 }
-const initialPreferences: Preferences = migrateNotificationKeys({
+const initialPreferences: Preferences = {
     ...defaultPrefs,
     ...stored<Partial<Preferences>>('preferences', {}),
-});
+};
 initialPreferences.theme = themePreference(initialPreferences.theme);
 applyTheme(
     initialPreferences.theme,

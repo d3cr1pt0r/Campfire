@@ -1,72 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
-import { migrate } from '../server/database.js';
 import { roleFixture } from '../test-support/role-fixture.js';
-import { memberPermissions, permissionIds, migratePermissions } from '../shared/permissions.js';
+import { memberPermissions, permissionIds } from '../shared/permissions.js';
 
-test('legacy roles and channel restrictions migrate once without widening private access', () => {
-    const db = new DatabaseSync(':memory:');
-    try {
-        db.exec(readFileSync(new URL('../server/schema.sql', import.meta.url), 'utf8'));
-        db.exec(`INSERT INTO roles VALUES('owner','Owner','#ffffff','[]'),('reader','Reader','#abcdef','["send","voice"]'),('staff','Staff','#123456','["send","manage"]');
-            INSERT INTO users(id,username,password,role) VALUES('o','Owner','hash','owner'),('m','Reader','hash','reader'),('s','Staff','hash','staff');`);
-        migrate(db, 12);
-        db.exec(
-            "INSERT INTO channels(id,name,kind) VALUES('introductions','introductions','text'); INSERT INTO channel_access VALUES('general','reader','hidden'),('introductions','staff','read-only')",
-        );
-        migrate(db);
-        migrate(db);
-        assert.equal(db.prepare('SELECT owner FROM users WHERE id=?').get('o').owner, 1);
-        assert.deepEqual(
-            db
-                .prepare("SELECT role FROM user_roles WHERE user='s'")
-                .all()
-                .map((r) => r.role),
-            ['staff'],
-        );
-        assert.equal(
-            db.prepare("SELECT private FROM channels WHERE id='general'").get().private,
-            1,
-        );
-        assert.equal(
-            db
-                .prepare(
-                    "SELECT effect FROM channel_overrides WHERE channel='general' AND role='staff' AND permission='channels.view'",
-                )
-                .get().effect,
-            'allow',
-        );
-        assert.equal(
-            db
-                .prepare(
-                    "SELECT effect FROM channel_overrides WHERE channel='general' AND role='reader' AND permission='channels.view'",
-                )
-                .get().effect,
-            'deny',
-        );
-        assert.equal(
-            db
-                .prepare(
-                    "SELECT effect FROM channel_overrides WHERE channel='introductions' AND role='staff' AND permission='messages.send'",
-                )
-                .get().effect,
-            'deny',
-        );
-        assert.equal(
-            db
-                .prepare(
-                    "SELECT * FROM channel_overrides WHERE role='staff' AND permission='messages.pin'",
-                )
-                .get(),
-            undefined,
-        );
-        assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
-    } finally {
-        db.close();
-    }
-});
 test('assigned grants combine without Default, and role allows win over role denies regardless of order', async (t) => {
     const f = await roleFixture(t),
         deny = await f.role('Deny'),

@@ -8,7 +8,7 @@ import {
     serverLink,
 } from '../src/serverLink.ts';
 import { connectionHint, trustStep } from '../src/serverTrust.ts';
-import { migrateNotificationKeys, notificationKey } from '../src/notifications.ts';
+import { notificationKey } from '../src/notifications.ts';
 import { preferConstantBitrate } from '../src/signaling.ts';
 
 const pin = 'WMCFB4XOUTLT2JV4NRB45NS7MHMYODME7WWVQCCLSBMAY2ZQBEJQ';
@@ -149,36 +149,11 @@ test('browser network failures to another HTTPS origin explain the certificate s
     assert.equal(connectionHint(new Error('Denied'), remote, 'x', false), 'Denied');
 });
 
-test('notification choices are keyed by host and survive the HTTPS upgrade', () => {
+test('notification choices are keyed by host, so HTTP and HTTPS share them', () => {
     assert.equal(
         notificationKey('http://203.0.113.5:3001', 'me', 'general'),
         notificationKey('https://203.0.113.5:3001/', 'me', 'general'),
     );
-    const legacy = JSON.stringify(['http://203.0.113.5:3001', 'me', 'general']);
-    const migrated = migrateNotificationKeys({
-        theme: 'system',
-        channelNotifications: { [legacy]: false, junk: true },
-        serverNotifications: { [JSON.stringify(['http://203.0.113.5:3001', 'me', '*'])]: false },
-    });
-    assert.equal(
-        migrated.channelNotifications[notificationKey('https://203.0.113.5:3001', 'me', 'general')],
-        false,
-    );
-    assert.equal(migrated.channelNotifications.junk, true);
-    assert.equal(
-        migrated.serverNotifications[notificationKey('https://203.0.113.5:3001', 'me', '*')],
-        false,
-    );
-    assert.deepEqual(migrateNotificationKeys({ theme: 'dark' }), { theme: 'dark' });
-    for (const mode of ['all', 'mentions', 'muted']) {
-        const choices = migrateNotificationKeys({ channelNotifications: { [legacy]: mode } });
-        assert.equal(
-            choices.channelNotifications[
-                notificationKey('https://203.0.113.5:3001', 'me', 'general')
-            ],
-            mode,
-        );
-    }
 });
 
 test('voice uses constant-bitrate Opus without disturbing other codecs or parameters', () => {
