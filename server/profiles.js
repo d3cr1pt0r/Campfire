@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { boundedPng } from './images.js';
 import { check, route } from './policies.js';
+import { isAvatarFrame } from '../shared/frames.js';
 export function registerProfiles({
     app,
     io,
@@ -16,22 +17,36 @@ export function registerProfiles({
     app.patch(
         '/api/profile',
         route((req, res) => {
+            const keys = Object.keys(req.body);
             check(
-                Object.keys(req.body).every((key) => key === 'nickname'),
-                'Only the nickname can be changed; account usernames are permanent',
+                keys.length > 0 && keys.every((key) => key === 'nickname' || key === 'frame'),
+                'Only the nickname and profile frame can be changed; account usernames are permanent',
             );
-            const nickname = typeof req.body.nickname === 'string' ? req.body.nickname.trim() : '';
-            check(
-                nickname.length > 0 &&
-                    nickname.length <= 32 &&
-                    !/[\u0000-\u001f\u007f]/.test(nickname),
-                'Nickname must contain 1–32 characters without line breaks or control characters',
-            );
-            run(
-                'INSERT INTO profiles(user,nickname) VALUES(?,?) ON CONFLICT(user) DO UPDATE SET nickname=excluded.nickname',
-                req.user.id,
-                nickname,
-            );
+            if ('nickname' in req.body) {
+                const nickname =
+                    typeof req.body.nickname === 'string' ? req.body.nickname.trim() : '';
+                check(
+                    nickname.length > 0 &&
+                        nickname.length <= 32 &&
+                        !/[\u0000-\u001f\u007f]/.test(nickname),
+                    'Nickname must contain 1–32 characters without line breaks or control characters',
+                );
+                run(
+                    'INSERT INTO profiles(user,nickname) VALUES(?,?) ON CONFLICT(user) DO UPDATE SET nickname=excluded.nickname',
+                    req.user.id,
+                    nickname,
+                );
+            }
+            if ('frame' in req.body) {
+                const frame = req.body.frame;
+                check(frame === null || isAvatarFrame(frame), 'Unknown profile frame');
+                run(
+                    'INSERT INTO profiles(user,nickname,frame) VALUES(?,?,?) ON CONFLICT(user) DO UPDATE SET frame=excluded.frame',
+                    req.user.id,
+                    req.user.username,
+                    frame,
+                );
+            }
             io.emit('refresh');
             res.json({ user: publicUser(req.user) });
         }),

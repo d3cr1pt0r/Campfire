@@ -1,9 +1,11 @@
+import type { AvatarFrame } from './frames.js';
 export type PresenceStatus = 'online' | 'idle' | 'dnd';
 export type User = {
     id: string;
     username: string;
     nickname: string;
     avatar?: string | null;
+    frame?: AvatarFrame | null;
     roles: string[];
     owner: boolean;
     status?: PresenceStatus;
