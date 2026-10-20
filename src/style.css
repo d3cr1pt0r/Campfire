@@ -2349,14 +2349,6 @@ small {
     padding: 16px;
     margin: 18px 0;
 }
-.channel-settings-card h3 {
-    overflow-wrap: anywhere;
-}
-.channel-settings-card h3 small {
-    display: block;
-    color: var(--muted);
-    margin-top: 6px;
-}
 .channel-settings-card form {
     margin-bottom: 18px;
 }
@@ -3322,8 +3314,30 @@ button:disabled {
 .channel-settings-list > section {
     margin: 14px 0;
 }
-.channel-settings-list > section > h3 {
-    margin: 12px 0 6px;
+.channel-settings-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+.channel-settings-heading > h3 {
+    margin: 0;
+}
+.channel-settings-create {
+    min-height: 32px;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--raised);
+    color: var(--ink);
+    font-size: 12px;
+    white-space: nowrap;
+}
+.channel-settings-create:hover {
+    background: var(--soft-accent);
 }
 .channel-settings-item {
     border-bottom: 1px solid var(--border);
@@ -3361,20 +3375,48 @@ button:disabled {
     margin: 0 0 8px;
     padding: 12px;
 }
-.channel-settings-list .channel-settings-card h3 {
+.channel-settings-list .channel-settings-card form {
+    display: grid;
+    gap: 10px;
     margin: 0 0 10px;
 }
-.channel-settings-list .channel-settings-card form {
-    margin: 0 0 12px;
-}
 .channel-settings-list .channel-settings-card label {
-    margin: 6px 0;
+    margin: 0;
 }
 .channel-settings-list .channel-settings-card p {
-    margin: 6px 0;
+    margin: 0 0 8px;
+    font-size: 12px;
+    line-height: 1.5;
 }
 .channel-settings-list .channel-settings-card input {
-    margin: 4px 0;
+    margin: 4px 0 0;
+}
+.channel-settings-card form > .secondary {
+    justify-self: start;
+    margin: 0;
+    padding: 7px 12px;
+}
+.channel-settings-card .channel-privacy {
+    margin: 0;
+    border-top: 1px solid var(--border);
+}
+.channel-settings-card .toggle-label {
+    min-height: 44px;
+    padding: 8px 0;
+    border-bottom: 0;
+}
+.channel-settings-card > .toggle-label {
+    border-top: 1px solid var(--border);
+}
+.channel-settings-card > .danger-text,
+.channel-settings-card > .channel-delete-confirm {
+    margin-top: 4px;
+    border-top: 1px solid var(--border);
+    padding: 8px 0 0;
+    width: 100%;
+    justify-content: flex-start;
+    text-align: left;
+    border-radius: 0;
 }
 .channel-settings-list .channel-access-row {
     gap: 8px;

@@ -1,6 +1,6 @@
 import { Toggle } from './forms';
 import { useRef, useState } from 'react';
-import { GripVertical, ChevronDown, Hash, Volume2 } from 'lucide-react';
+import { GripVertical, ChevronDown, Hash, Plus, Volume2 } from 'lucide-react';
 import type { State, Channel } from './types';
 import type { ApiClient } from './api';
 
@@ -11,6 +11,7 @@ type Props = {
     busy: boolean;
     permission: (name: string) => boolean;
     act: (fn: () => Promise<unknown>) => Promise<void>;
+    create: (kind: 'text' | 'voice') => void;
 };
 export function ChannelSettings(props: Props) {
     const [expanded, setExpanded] = useState<string | null>(null);
@@ -48,17 +49,28 @@ export function ChannelSettings(props: Props) {
                       : ''}
             </span>
             <p className="muted">
-                Select a channel to edit its name and description. Channel access is configured in
-                Roles & permissions. Drag the handles to reorder channels within each type. The
-                highlighted line shows where the channel will be inserted. Focus a handle and use
-                Alt + Arrow keys to reorder with the keyboard. Permanent channels can be renamed and
-                reordered.
+                Select a channel to edit it. Manage access in Roles & permissions. Reorder using the
+                handles or Alt + Arrow keys. Permanent channels can be renamed and reordered.
             </p>
             {(['text', 'voice'] as const).map((kind) => {
                 const channels = props.state.channels.filter((channel) => channel.kind === kind);
                 return (
                     <section key={kind} aria-label={`${kind} channel settings`}>
-                        <h3>{kind === 'text' ? 'Text channels' : 'Voice channels'}</h3>
+                        <div className="channel-settings-heading">
+                            <h3>{kind === 'text' ? 'Text channels' : 'Voice channels'}</h3>
+                            {props.permission('channels.create') && (
+                                <button
+                                    type="button"
+                                    className="channel-settings-create"
+                                    aria-label={`Create ${kind} channel`}
+                                    disabled={props.busy || reordering}
+                                    onClick={() => props.create(kind)}
+                                >
+                                    <Plus size={14} />
+                                    New channel
+                                </button>
+                            )}
+                        </div>
                         {channels.map((channel, index) => (
                             <div
                                 className={`channel-settings-item ${dragged === channel.id ? 'is-dragging' : ''} ${destination?.id === channel.id ? `drop-${destination.placement}` : ''}`}
@@ -205,10 +217,6 @@ function ChannelEditor({
     const [confirming, setConfirming] = useState(false);
     return (
         <section className="channel-settings-card" aria-label={`${channel.name} channel settings`}>
-            <h3>
-                {channel.kind === 'text' ? '#' : '🔊'} {channel.name}{' '}
-                {channel.protected && <small>Permanent channel</small>}
-            </h3>
             <form
                 onSubmit={(event) => {
                     event.preventDefault();
@@ -248,8 +256,7 @@ function ChannelEditor({
                             placeholder="What is this channel for?"
                         />
                         <span className="field-help">
-                            Shown next to the channel name. Leave empty to hide it. Up to 200
-                            characters.
+                            Optional · Up to 200 characters. Shown beside the channel name.
                         </span>
                     </label>
                 )}

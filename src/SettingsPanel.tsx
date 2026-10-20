@@ -94,9 +94,13 @@ export function SettingsPanel({
         ['notifications', 'Notifications'],
         ['server', 'Server settings'],
         ['roles', 'Roles & permissions'],
-        ...(['channels.edit', 'channels.create', 'channels.delete', 'channels.reorder'].some(
-            permission,
-        )
+        ...([
+            'channels.edit',
+            'channels.access',
+            'channels.create',
+            'channels.delete',
+            'channels.reorder',
+        ].some(permission)
             ? [['channels', 'Channels']]
             : []),
         ['emojis', 'Custom emojis'],
@@ -1032,6 +1036,7 @@ export function SettingsPanel({
                         'channels.reorder',
                     ].some(permission) && (
                         <ChannelSettings
+                            create={(kind) => setModal(`channel:${kind}`)}
                             permission={permission}
                             state={state}
                             api={api}

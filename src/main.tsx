@@ -686,13 +686,14 @@ function App() {
         if (modal) setNavigationOpen(false);
     }, [modal]);
     const modalContainer = useRef<HTMLElement>(null);
+    const channelNameInput = useRef<HTMLInputElement>(null);
     useDialog(
         modalContainer,
         () => {
             if (!busy) setModal(null);
         },
         !!modal,
-        undefined,
+        modal?.startsWith('channel:') ? channelNameInput : undefined,
         modal || undefined,
     );
     const act = async (fn: () => Promise<unknown>) => {
@@ -1446,6 +1447,7 @@ function App() {
                             <div className="category">
                                 <span>TEXT CHANNELS</span>
                                 {[
+                                    'channels.create',
                                     'channels.edit',
                                     'channels.reorder',
                                     'channels.delete',
@@ -1453,17 +1455,10 @@ function App() {
                                 ].some(permission) && (
                                     <button
                                         title="Manage channels"
+                                        aria-label="Text channel settings"
                                         onClick={() => openSettings('channels')}
                                     >
                                         <Settings size={15} />
-                                    </button>
-                                )}
-                                {permission('channels.create') && (
-                                    <button
-                                        title="Create text channel"
-                                        onClick={() => setModal('channel:text')}
-                                    >
-                                        <Plus size={16} />
                                     </button>
                                 )}
                             </div>
@@ -1486,6 +1481,7 @@ function App() {
                             <div className="category">
                                 <span>VOICE CHANNELS</span>
                                 {[
+                                    'channels.create',
                                     'channels.edit',
                                     'channels.reorder',
                                     'channels.delete',
@@ -1493,17 +1489,10 @@ function App() {
                                 ].some(permission) && (
                                     <button
                                         title="Manage voice channels"
+                                        aria-label="Voice channel settings"
                                         onClick={() => openSettings('channels')}
                                     >
                                         <Settings size={15} />
-                                    </button>
-                                )}
-                                {permission('channels.create') && (
-                                    <button
-                                        title="Create voice channel"
-                                        onClick={() => setModal('channel:voice')}
-                                    >
-                                        <Plus size={16} />
                                     </button>
                                 )}
                             </div>
@@ -2141,11 +2130,13 @@ function App() {
                                         Create a {modal.split(':')[1]} channel
                                     </h2>
                                     <p className="muted">
-                                        Voice names can include capitals and spaces. Text names
-                                        convert to lowercase with hyphens.
+                                        {modal === 'channel:text'
+                                            ? 'Text channel names convert to lowercase with hyphens, e.g. project-updates.'
+                                            : 'Voice channel names can include capitals and spaces, e.g. Game Night.'}
                                     </p>
                                     <SimpleForm
                                         label="Channel name"
+                                        inputRef={channelNameInput}
                                         submit="Create channel"
                                         busy={busy}
                                         onSubmit={(value) =>
@@ -2154,6 +2145,7 @@ function App() {
                                                     name: value,
                                                     kind: modal.split(':')[1],
                                                 });
+                                                await refresh();
                                                 setModal(null);
                                             })
                                         }

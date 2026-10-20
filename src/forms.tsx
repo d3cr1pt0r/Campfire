@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type Ref } from 'react';
 import {
     permissionGroups,
     channelPermissionIds,
@@ -37,12 +37,14 @@ export function SimpleForm({
     submit,
     busy,
     onSubmit,
+    inputRef,
 }: {
     label: string;
     initialValue?: string;
     submit: string;
     busy: boolean;
     onSubmit: (v: string) => unknown;
+    inputRef?: Ref<HTMLInputElement>;
 }) {
     return (
         <form
@@ -64,6 +66,7 @@ export function SimpleForm({
                     />
                 ) : (
                     <input
+                        ref={inputRef}
                         name="value"
                         autoFocus
                         defaultValue={initialValue}
