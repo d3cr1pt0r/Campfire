@@ -65,7 +65,11 @@ export function MemberList({
                                         onClick={() => (self ? onSettings() : dm(user.id))}
                                     >
                                         <div className="avatar-status">
-                                            <Avatar user={user} color={color(user)} />
+                                            <Avatar
+                                                user={user}
+                                                color={color(user)}
+                                                frame={user.frame}
+                                            />
                                             <PresenceDot status={status} />
                                         </div>
                                         <span>

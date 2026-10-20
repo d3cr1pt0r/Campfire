@@ -1637,7 +1637,11 @@ function App() {
                         )}
                         <div className="user-bar">
                             <div className="avatar-status self-avatar">
-                                <Avatar user={state.me} color={color(state.me)} />
+                                <Avatar
+                                    user={state.me}
+                                    color={color(state.me)}
+                                    frame={state.me.frame}
+                                />
                                 <PresenceDot
                                     status={connected ? userStatus(state, state.me.id) : 'offline'}
                                 />

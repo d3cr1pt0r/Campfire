@@ -39,13 +39,13 @@ export function Avatar({
     color,
     small = false,
     speaking = false,
-    frame = user?.frame,
+    frame = null,
 }: {
     user?: User;
     color?: string;
     small?: boolean;
     speaking?: boolean;
-    // Previews can show a frame the member hasn't saved yet.
+    // Frames show only where a caller passes one: the user bar, member list and settings.
     frame?: AvatarFrame | null;
 }) {
     const framed = isAvatarFrame(frame) ? frame : null;

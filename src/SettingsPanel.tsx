@@ -302,7 +302,11 @@ export function SettingsPanel({
                             this app. This preference saves on this device.
                         </p>
                         <div className="profile-card">
-                            <Avatar user={state.me} color={color(state.me)} />
+                            <Avatar
+                                user={state.me}
+                                color={color(state.me)}
+                                frame={state.me.frame}
+                            />
                             <div>
                                 <h3>{displayName(state.me)}</h3>
                                 <p>
@@ -436,8 +440,8 @@ export function SettingsPanel({
                                     ))}
                                 </fieldset>
                                 <p className="muted">
-                                    Everyone sees your frame. In chat and member lists animated
-                                    frames move when someone hovers over you.
+                                    Everyone sees your frame in the member list. Animated frames
+                                    move there when someone hovers over you.
                                 </p>
                             </>
                         )}

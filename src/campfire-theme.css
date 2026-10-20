@@ -1531,12 +1531,7 @@ label,
 .user-bar,
 .profile-card,
 .frame-choice,
-.message:is(:hover, :focus-within),
-.member:is(:hover, :focus-visible),
-.direct-message:is(:hover, :focus-visible),
-.voice-member:hover,
-.call-thumbnail:is(:hover, :focus-visible),
-.reaction-popup li:hover {
+.member:is(:hover, :focus-visible) {
     --frame-play: running;
     --frame-transient: visible;
 }
