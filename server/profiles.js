@@ -9,6 +9,7 @@ export function registerProfiles({
     all,
     run,
     publicUser,
+    profileFramesEnabled,
     requirePermission,
     can,
     emitRoom,
@@ -22,6 +23,16 @@ export function registerProfiles({
                 keys.length > 0 && keys.every((key) => key === 'nickname' || key === 'frame'),
                 'Only the nickname and profile frame can be changed; account usernames are permanent',
             );
+            const frame = req.body.frame;
+            if ('frame' in req.body) {
+                check(frame === null || isAvatarFrame(frame), 'Unknown profile frame');
+                // Clearing a frame stays possible while frames are turned off.
+                check(
+                    frame === null || profileFramesEnabled(),
+                    'Profile frames are turned off on this server',
+                    403,
+                );
+            }
             if ('nickname' in req.body) {
                 const nickname =
                     typeof req.body.nickname === 'string' ? req.body.nickname.trim() : '';
@@ -38,8 +49,6 @@ export function registerProfiles({
                 );
             }
             if ('frame' in req.body) {
-                const frame = req.body.frame;
-                check(frame === null || isAvatarFrame(frame), 'Unknown profile frame');
                 run(
                     'INSERT INTO profiles(user,nickname,frame) VALUES(?,?,?) ON CONFLICT(user) DO UPDATE SET frame=excluded.frame',
                     req.user.id,

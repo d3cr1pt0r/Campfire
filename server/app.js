@@ -146,6 +146,7 @@ export function createApp({
                 reactionAuthors:
                     get("SELECT value FROM settings WHERE key='reactionAuthors'")?.value !==
                     'false',
+                profileFrames: sessions.profileFramesEnabled(),
                 removedUsers:
                     sessions.can(req.user, 'members.ban') ||
                     sessions.can(req.user, 'members.restore') ||

@@ -13,13 +13,16 @@ export function createSessions({ get, all, run, io }) {
             tokenHash(token),
             Date.now(),
         );
+    // Turning frames off hides them for everyone; saved choices return when turned back on.
+    const profileFramesEnabled = () =>
+        get("SELECT value FROM settings WHERE key='profileFrames'")?.value !== 'false';
     const publicUser = (u) => {
         const profile = get('SELECT nickname,frame FROM profiles WHERE user=?', u.id);
         return {
             id: u.id,
             username: u.username,
             nickname: profile?.nickname || u.username,
-            frame: isAvatarFrame(profile?.frame) ? profile.frame : null,
+            frame: profileFramesEnabled() && isAvatarFrame(profile?.frame) ? profile.frame : null,
             owner: !!u.owner,
             roles: all('SELECT role FROM user_roles WHERE user=?', u.id).map((entry) => entry.role),
             status:
@@ -103,6 +106,7 @@ export function createSessions({ get, all, run, io }) {
     };
     return {
         userFor,
+        profileFramesEnabled,
         publicUser,
         users,
         can,
