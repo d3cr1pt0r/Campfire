@@ -838,6 +838,63 @@ label,
 .auth-form form > label:first-child {
     margin-top: 0;
 }
+.server-address-label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+.server-address-control {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    background: var(--field);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+}
+.server-address-control:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+.server-address-control input,
+.server-address-control select {
+    min-width: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    outline: none;
+    padding: 11px 10px;
+}
+.server-address-control select {
+    flex: 0 0 88px;
+    border-right: 1px solid var(--line);
+    border-radius: 10px 0 0 10px;
+    padding-inline: 8px 2px;
+    cursor: pointer;
+}
+.server-address-control select option {
+    background: var(--field);
+    color: var(--ink);
+}
+.server-address-control input[name='host'] {
+    flex: 1;
+}
+.server-address-control input[name='port'] {
+    flex: 0 0 64px;
+    padding-left: 7px;
+    border-radius: 0 10px 10px 0;
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+.server-address-control input::-webkit-inner-spin-button,
+.server-address-control input::-webkit-outer-spin-button {
+    appearance: none;
+    margin: 0;
+}
+.server-address-colon {
+    color: var(--muted);
+}
 .auth-credentials {
     margin-top: 24px;
     padding-top: 24px;

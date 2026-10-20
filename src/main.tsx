@@ -81,6 +81,12 @@ import './style.css';
 import './campfire-theme.css';
 import { applyTheme, themePreference, watchTheme } from './theme';
 import { CampfireScene } from './CampfireScene';
+import {
+    ServerAddressInput,
+    splitServerAddress,
+    serverAddressUrl,
+    type ServerAddress,
+} from './ServerAddressInput';
 function CampfireMark() {
     return <img className="campfire-mark" src={campfireIcon} alt="" />;
 }
@@ -164,9 +170,13 @@ function App() {
         [error, setError] = useState(''),
         [busy, setBusy] = useState(false),
         [register, setRegister] = useState(false);
-    const [authUrl, setAuthUrl] = useState(
-        invitationFromLink || setupFromLink ? window.location.origin : initial.url,
+    const [serverAddress, setServerAddress] = useState(() =>
+        splitServerAddress(
+            invitationFromLink || setupFromLink ? window.location.origin : initial.url,
+        ),
     );
+    const authUrl = serverAddressUrl(serverAddress);
+    const setAuthUrl = (value: string) => setServerAddress(splitServerAddress(value));
     const [resetPassword, setResetPassword] = useState(false);
     const [inviteCode, setInviteCode] = useState(invitationFromLink);
     const [setupCode, setSetupCode] = useState(setupFromLink);
@@ -311,6 +321,29 @@ function App() {
             controller.abort();
         };
     }, [authUrl, token, linkPin, probe, requestedAddress, httpTarget, httpApproved]);
+    const changeServerAddress = (address: ServerAddress) => {
+        setRequestedAddress(null);
+        setServerInfo(null);
+        setInfoError('');
+        setInfoNote('');
+        setInfoChecking(false);
+        setRegister(false);
+        setResetPassword(false);
+        setLinkPin(null);
+        setServerAddress(address);
+    };
+    const pasteServerLink = (text: string) => {
+        try {
+            const link = parseServerLink(text, true);
+            changeServerAddress(splitServerAddress(link.origin));
+            setLinkPin(link.pin ? { origin: link.origin, pin: link.pin } : null);
+            if (link.invite) setInviteCode(link.invite);
+            if (link.setup) setSetupCode(link.setup);
+            setError('');
+        } catch (e) {
+            setError((e as Error).message);
+        }
+    };
     const [room, setRoom] = useState('general'),
         [draft, setDraft] = useState(''),
         [attachments, setAttachments] = useState<File[]>([]);
@@ -1093,52 +1126,12 @@ function App() {
                         </>
                     ) : (
                         <form onSubmit={login}>
-                            <label>
-                                Server address
-                                <input
-                                    name="url"
-                                    type="text"
-                                    inputMode="url"
-                                    autoCapitalize="none"
-                                    spellCheck={false}
-                                    value={authUrl}
-                                    onChange={(e) => {
-                                        const value = e.target.value;
-                                        setRequestedAddress(null);
-                                        setServerInfo(null);
-                                        setInfoError('');
-                                        setInfoNote('');
-                                        setInfoChecking(false);
-                                        setRegister(false);
-                                        setResetPassword(false);
-                                        if (value.includes('#')) {
-                                            try {
-                                                // A pasted server or invite link fills the form.
-                                                const link = parseServerLink(
-                                                    value,
-                                                    !!window.campfire?.insecureHttp,
-                                                );
-                                                setAuthUrl(link.origin);
-                                                setLinkPin(
-                                                    link.pin
-                                                        ? { origin: link.origin, pin: link.pin }
-                                                        : null,
-                                                );
-                                                if (link.invite) setInviteCode(link.invite);
-                                                if (link.setup) setSetupCode(link.setup);
-                                                return;
-                                            } catch {
-                                                /* Keep the text; submitting explains the problem. */
-                                            }
-                                        }
-                                        setAuthUrl(value);
-                                    }}
-                                    required
-                                    placeholder="Server address or link"
-                                    autoFocus
-                                    disabled={busy}
-                                />
-                            </label>
+                            <ServerAddressInput
+                                value={serverAddress}
+                                onChange={changeServerAddress}
+                                onPasteLink={pasteServerLink}
+                                disabled={busy}
+                            />
                             {showHttpApproval && !window.campfire?.insecureHttp && (
                                 <p className="field-help" role="alert">
                                     Use HTTPS in your browser. Remote HTTP requires an explicit
