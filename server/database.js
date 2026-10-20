@@ -3,7 +3,6 @@ import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { canonicalRoom } from '../shared/rooms.js';
-import { avatarFrames } from '../shared/frames.js';
 
 export function transaction(db, action) {
     db.exec('BEGIN IMMEDIATE');
@@ -226,8 +225,8 @@ export function migrate(db, through = Infinity) {
             );`);
         },
         () => {
-            db.exec(`ALTER TABLE profiles ADD COLUMN frame TEXT
-                CHECK(frame IS NULL OR frame IN (${avatarFrames.map((id) => `'${id}'`).join(',')}));`);
+            // The API validates frame IDs; no CHECK, so adding frames needs no table rebuild.
+            db.exec('ALTER TABLE profiles ADD COLUMN frame TEXT');
         },
     ];
     migrations.forEach((apply, index) => {

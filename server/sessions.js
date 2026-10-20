@@ -1,6 +1,7 @@
 import { tokenHash } from './security.js';
 import { permissionIds, effectiveRoleIds } from '../shared/permissions.js';
 import { check } from './policies.js';
+import { isAvatarFrame } from '../shared/frames.js';
 
 export function createSessions({ get, all, run, io }) {
     const timers = new Map();
@@ -18,7 +19,7 @@ export function createSessions({ get, all, run, io }) {
             id: u.id,
             username: u.username,
             nickname: profile?.nickname || u.username,
-            frame: profile?.frame || null,
+            frame: isAvatarFrame(profile?.frame) ? profile.frame : null,
             owner: !!u.owner,
             roles: all('SELECT role FROM user_roles WHERE user=?', u.id).map((entry) => entry.role),
             status:

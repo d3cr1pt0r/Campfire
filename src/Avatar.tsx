@@ -5,8 +5,19 @@ import { isAvatarFrame } from '../shared/frames.js';
 import { displayName, initials } from './profiles';
 export { initials } from './profiles';
 import { AuthImage } from './ChatContent';
-// Sparks, fireflies, and twinkles each animate on their own staggered timeline.
-const particles: Record<AvatarFrame, number> = { ember: 3, fireflies: 3, aurora: 2 };
+// Sparks, fireflies, bolts and other pieces each animate on their own staggered timeline.
+const particles: Record<AvatarFrame, number> = {
+    ember: 3,
+    fireflies: 3,
+    aurora: 2,
+    heartbeat: 2,
+    gilded: 1,
+    frost: 4,
+    neon: 0,
+    glitch: 3,
+    storm: 3,
+    vortex: 4,
+};
 export function Avatar({
     user,
     color,

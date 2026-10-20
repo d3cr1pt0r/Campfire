@@ -364,6 +364,13 @@ export function SettingsPanel({
                                     ['ember', 'Ember'],
                                     ['fireflies', 'Fireflies'],
                                     ['aurora', 'Aurora'],
+                                    ['heartbeat', 'Heartbeat'],
+                                    ['gilded', 'Gilded'],
+                                    ['frost', 'Frost'],
+                                    ['neon', 'Neon'],
+                                    ['glitch', 'Glitch'],
+                                    ['storm', 'Storm'],
+                                    ['vortex', 'Vortex'],
                                 ] as const
                             ).map(([frame, title]) => (
                                 <label className="frame-choice" key={title}>

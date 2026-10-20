@@ -95,13 +95,16 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
             await api(alice, '/profile', 'PATCH', { frame }, 400);
         await api(alice, '/profile', 'PATCH', {}, 400);
         await api(null, '/profile', 'PATCH', { frame: 'aurora' }, 401);
-        assert.throws(
-            () =>
-                service.db
-                    .prepare('UPDATE profiles SET frame=? WHERE user=?')
-                    .run('sparkles', alice.user.id),
-            /CHECK constraint/,
+        // A frame retired from the list must not reach clients.
+        service.db
+            .prepare('UPDATE profiles SET frame=? WHERE user=?')
+            .run('retired', alice.user.id);
+        assert.equal(
+            (await api(bob, '/state')).data.users.find((u) => u.id === alice.user.id).frame,
+            null,
         );
+        for (const frame of ['heartbeat', 'gilded', 'frost', 'neon', 'glitch', 'storm', 'vortex'])
+            assert.equal((await api(alice, '/profile', 'PATCH', { frame })).data.user.frame, frame);
         const removed = await api(alice, '/profile', 'PATCH', { frame: null });
         assert.equal(removed.data.user.frame, null);
         assert.equal((await api(bob, '/state')).data.me.frame, null);
