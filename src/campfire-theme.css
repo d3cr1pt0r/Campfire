@@ -156,29 +156,29 @@ body {
     padding-top: 26px;
 }
 .sidebar-content > .category {
-    padding-top: 12px;
-    padding-bottom: 4px;
+    padding-top: 10px;
+    padding-bottom: 3px;
 }
 .sidebar-content > .category button {
-    min-width: 28px;
-    min-height: 28px;
+    min-width: 26px;
+    min-height: 26px;
 }
 .sidebar-content .nav-item {
-    min-height: 34px;
-    padding: 5px 8px;
+    min-height: 32px;
+    padding: 4px 8px;
     margin: 1px 0;
     gap: 8px;
     border-radius: 7px;
 }
 .sidebar-content .direct-message {
-    padding-block: 4px;
+    padding-block: 3px;
 }
 .sidebar-content .direct-message .avatar-status {
     display: flex;
 }
 .sidebar-content .direct-message .avatar {
-    width: 26px;
-    height: 26px;
+    width: 24px;
+    height: 24px;
 }
 .sidebar-content .direct-messages-empty {
     margin: 4px 8px 2px;
