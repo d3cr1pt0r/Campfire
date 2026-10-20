@@ -59,7 +59,7 @@ test('upgrading an encryption-branch version 11 database also removes friends', 
         );
         assert.equal(
             db.prepare('SELECT MAX(version) AS version FROM migrations').get().version,
-            15,
+            16,
         );
         migrate(db);
         assert.equal(db.prepare('PRAGMA quick_check').get().quick_check, 'ok');
