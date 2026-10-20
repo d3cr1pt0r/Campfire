@@ -1327,3 +1327,325 @@ label,
         animation: none;
     }
 }
+
+/* Animated profile picture frames. Busy lists animate on hover, like a resting
+   decoration; your own user bar, profile card and frame previews always animate. */
+.avatar.framed {
+    --frame-out: 4px;
+    --frame-width: 2.5px;
+    position: relative;
+    overflow: visible;
+}
+.avatar.small.framed {
+    --frame-out: 3px;
+    --frame-width: 2px;
+}
+.profile-card .avatar.framed,
+.frame-choice .avatar.framed {
+    --frame-out: 6px;
+    --frame-width: 3.5px;
+}
+.avatar.framed > .auth-image,
+.avatar.framed img {
+    border-radius: inherit;
+    overflow: hidden;
+}
+.avatar.framed.speaking {
+    outline-offset: calc(var(--frame-out) + 1px);
+}
+.user-bar,
+.profile-card,
+.frame-choice,
+.message:is(:hover, :focus-within),
+.member:is(:hover, :focus-visible),
+.direct-message:is(:hover, :focus-visible),
+.voice-member:hover,
+.call-thumbnail:is(:hover, :focus-visible),
+.reaction-popup li:hover {
+    --frame-play: running;
+    --frame-sparks: visible;
+}
+.avatar-frame {
+    position: absolute;
+    inset: calc(var(--frame-out) * -1);
+    border-radius: calc(var(--avatar-radius) + var(--frame-out));
+    pointer-events: none;
+}
+.avatar-frame > span {
+    position: absolute;
+}
+.avatar-frame-ring,
+.avatar-frame-glow {
+    inset: 0;
+    border-radius: inherit;
+}
+.avatar-frame-ring {
+    overflow: hidden;
+    padding: var(--frame-width);
+    mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+    mask-composite: exclude;
+}
+.avatar-frame-ring::before {
+    content: '';
+    position: absolute;
+    inset: -50%;
+    background: var(--frame-sweep);
+    animation: avatar-frame-spin var(--frame-speed) linear infinite var(--frame-play, paused);
+}
+@keyframes avatar-frame-spin {
+    to {
+        transform: rotate(1turn);
+    }
+}
+
+/* Ember: two flame tongues chase each other while sparks drift off the top. */
+.frame-ember {
+    --frame-speed: 2.6s;
+    --frame-sweep: conic-gradient(
+        #4a140b,
+        #b3261e 14%,
+        #ff6a2a 30%,
+        #ffb347 42%,
+        #fff1b8 48%,
+        #4a140b 50%,
+        #b3261e 64%,
+        #ff6a2a 80%,
+        #ffb347 92%,
+        #fff1b8 98%,
+        #4a140b
+    );
+}
+.frame-ember .avatar-frame-glow {
+    box-shadow:
+        0 0 6px 1px #ff7a2fb0,
+        0 0 14px 2px #ff4a1a50;
+    animation: avatar-frame-flicker 1.7s steps(1, end) infinite var(--frame-play, paused);
+}
+.frame-ember .avatar-frame-particle {
+    top: 0;
+    left: calc(26% + var(--particle) * 22%);
+    width: calc(var(--frame-width) + 1px);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: #ffe2a0;
+    box-shadow: 0 0 3px 1px #ff8a3d;
+    opacity: 0;
+    visibility: var(--frame-sparks, hidden);
+    animation: avatar-frame-spark calc(1.5s + var(--particle) * 0.35s) ease-out
+        calc(var(--particle) * -0.55s) infinite var(--frame-play, paused);
+}
+:root[data-theme='canvas'] .frame-ember .avatar-frame-particle {
+    background: #ffb347;
+    box-shadow: 0 0 3px 1px #d9481a;
+}
+@keyframes avatar-frame-flicker {
+    0%,
+    100% {
+        opacity: 0.75;
+    }
+    18% {
+        opacity: 1;
+    }
+    31% {
+        opacity: 0.6;
+    }
+    47% {
+        opacity: 0.95;
+    }
+    64% {
+        opacity: 0.7;
+    }
+    82% {
+        opacity: 1;
+    }
+}
+@keyframes avatar-frame-spark {
+    0% {
+        opacity: 0;
+        transform: translate(0, 0) scale(1);
+    }
+    15% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+        transform: translate(calc(var(--frame-out) * 0.6), calc(var(--frame-out) * -2.6)) scale(0.3);
+    }
+}
+
+/* Fireflies: a faint shimmering ring with three blinking lights in orbit. */
+.frame-fireflies {
+    --frame-speed: 9s;
+    --frame-sweep: conic-gradient(
+        #e7f59a66,
+        #9fbf3a1f 25%,
+        #e7f59a66 50%,
+        #9fbf3a1f 75%,
+        #e7f59a66
+    );
+    --firefly: #f4ffa6;
+    --firefly-glow: #d4f25a;
+}
+:root[data-theme='canvas'] .frame-fireflies {
+    --frame-sweep: conic-gradient(
+        #8fae2a88,
+        #8fae2a26 25%,
+        #8fae2a88 50%,
+        #8fae2a26 75%,
+        #8fae2a88
+    );
+    --firefly-glow: #8fb51c;
+}
+.frame-fireflies .avatar-frame-glow {
+    box-shadow: 0 0 8px 1px #d4f25a33;
+}
+.frame-fireflies .avatar-frame-particle {
+    --start: calc(var(--particle) * 125deg + 20deg);
+    inset: 0;
+    transform: rotate(var(--start));
+    animation: avatar-frame-orbit calc(6s + var(--particle) * 1.9s) linear infinite
+        var(--frame-play, paused);
+}
+.frame-fireflies .avatar-frame-particle:nth-child(4) {
+    animation-direction: reverse;
+}
+.frame-fireflies .avatar-frame-particle::before {
+    content: '';
+    position: absolute;
+    --size: calc(var(--frame-width) + 2px);
+    top: calc((var(--frame-width) - var(--size)) / 2);
+    left: calc(50% - var(--size) / 2);
+    width: var(--size);
+    height: var(--size);
+    border-radius: 50%;
+    background: var(--firefly);
+    box-shadow:
+        0 0 3px 1px var(--firefly-glow),
+        0 0 8px 3px color-mix(in srgb, var(--firefly-glow) 60%, transparent);
+    animation: avatar-frame-blink calc(1.8s + var(--particle) * 0.7s) ease-in-out
+        calc(var(--particle) * -0.9s) infinite var(--frame-play, paused);
+}
+@keyframes avatar-frame-orbit {
+    from {
+        transform: rotate(var(--start));
+    }
+    to {
+        transform: rotate(calc(var(--start) + 1turn));
+    }
+}
+@keyframes avatar-frame-blink {
+    0%,
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1.1);
+    }
+    50% {
+        opacity: 0.2;
+        transform: translateY(1.5px) scale(0.6);
+    }
+}
+
+/* Aurora: northern lights sweep around the frame while two stars twinkle. */
+.frame-aurora {
+    --frame-speed: 6s;
+    --frame-sweep: conic-gradient(#5ef2c4, #4fb8ff, #9b7bff, #ff7ad9, #ffd36e, #5ef2c4);
+}
+.frame-aurora .avatar-frame-glow {
+    box-shadow:
+        -2px -1px 8px 1px #5ef2c480,
+        2px 1px 10px 1px #9b7bff70;
+    animation: avatar-frame-hue 8s linear infinite var(--frame-play, paused);
+}
+.frame-aurora .avatar-frame-particle {
+    width: calc(var(--frame-out) * 2.6);
+    aspect-ratio: 1;
+    background: #f4fffd;
+    clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
+    transform: scale(0.7);
+    animation: avatar-frame-twinkle 3s ease-in-out calc(var(--particle) * -1.5s) infinite
+        var(--frame-play, paused);
+}
+:root[data-theme='canvas'] .frame-aurora .avatar-frame-particle {
+    background: #8c6cf0;
+}
+.frame-aurora .avatar-frame-particle:nth-child(3) {
+    top: calc(var(--frame-out) * -0.6);
+    right: calc(var(--frame-out) * -0.6);
+}
+.frame-aurora .avatar-frame-particle:nth-child(4) {
+    bottom: calc(var(--frame-out) * -0.6);
+    left: calc(var(--frame-out) * -0.6);
+}
+@keyframes avatar-frame-hue {
+    to {
+        filter: hue-rotate(1turn);
+    }
+}
+@keyframes avatar-frame-twinkle {
+    0%,
+    100% {
+        opacity: 0;
+        transform: scale(0.2) rotate(0deg);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1) rotate(90deg);
+    }
+}
+
+.frame-options {
+    border: 0;
+    padding: 0;
+    margin: 12px 0 24px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+.frame-options legend {
+    margin-bottom: 10px;
+    padding: 0;
+    font-weight: 700;
+}
+.frame-options .frame-choice {
+    position: relative;
+    margin: 0;
+    padding: 20px 10px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--panel);
+    cursor: pointer;
+    text-align: center;
+}
+.frame-choice:has(input:checked) {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+.frame-choice:has(input:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+}
+.frame-choice:has(input:disabled) {
+    cursor: default;
+}
+.frame-choice .avatar {
+    width: 56px;
+    height: 56px;
+    --avatar-radius: 18px;
+    font-size: 19px;
+}
+.frame-choice input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+@media (max-width: 1100px) {
+    .frame-options {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}

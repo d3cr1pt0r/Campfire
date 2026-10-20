@@ -180,7 +180,8 @@ small {
     width: 37px;
     height: 37px;
     flex-shrink: 0;
-    border-radius: 13px;
+    --avatar-radius: 13px;
+    border-radius: var(--avatar-radius);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -192,7 +193,7 @@ small {
 .avatar.small {
     width: 25px;
     height: 25px;
-    border-radius: 9px;
+    --avatar-radius: 9px;
     font-size: 11px;
 }
 .auth-shell {
@@ -576,7 +577,7 @@ small {
 .user-bar .avatar {
     width: 32px;
     height: 32px;
-    border-radius: 11px;
+    --avatar-radius: 11px;
     font-size: 11px;
 }
 .user-bar > button:not(.user-name) {
@@ -872,7 +873,7 @@ small {
 .message .avatar {
     width: 28px;
     height: 28px;
-    border-radius: 9px;
+    --avatar-radius: 9px;
     font-size: 11px;
 }
 .message-body {
@@ -1098,7 +1099,7 @@ small {
 .member .avatar-status .avatar {
     width: 33px;
     height: 33px;
-    border-radius: 11px;
+    --avatar-radius: 11px;
     font-size: 11px;
 }
 .avatar-status i {
@@ -1359,7 +1360,7 @@ small {
     width: 56px;
     height: 56px;
     font-size: 19px;
-    border-radius: 18px;
+    --avatar-radius: 18px;
 }
 .profile-card h3 {
     margin: 0;

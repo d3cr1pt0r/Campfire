@@ -356,6 +356,38 @@ export function SettingsPanel({
                                 Remove profile picture
                             </button>
                         )}
+                        <fieldset className="frame-options">
+                            <legend>Profile frame</legend>
+                            {(
+                                [
+                                    [null, 'None'],
+                                    ['ember', 'Ember'],
+                                    ['fireflies', 'Fireflies'],
+                                    ['aurora', 'Aurora'],
+                                ] as const
+                            ).map(([frame, title]) => (
+                                <label className="frame-choice" key={title}>
+                                    <Avatar user={state.me} color={color(state.me)} frame={frame} />
+                                    <strong>{title}</strong>
+                                    <input
+                                        type="radio"
+                                        name="frame"
+                                        checked={(state.me.frame ?? null) === frame}
+                                        disabled={busy}
+                                        onChange={() =>
+                                            void act(async () => {
+                                                await api('/profile', 'PATCH', { frame });
+                                                await refresh();
+                                            })
+                                        }
+                                    />
+                                </label>
+                            ))}
+                        </fieldset>
+                        <p className="muted">
+                            Everyone sees your frame. In chat and member lists it animates when
+                            someone hovers over you.
+                        </p>
                         <form
                             onSubmit={(event) => {
                                 event.preventDefault();

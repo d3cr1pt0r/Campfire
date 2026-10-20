@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { canonicalRoom } from '../shared/rooms.js';
+import { avatarFrames } from '../shared/frames.js';
 
 export function transaction(db, action) {
     db.exec('BEGIN IMMEDIATE');
@@ -223,6 +224,10 @@ export function migrate(db, through = Infinity) {
                 user TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
                 tokenHash TEXT UNIQUE NOT NULL, expires INTEGER NOT NULL
             );`);
+        },
+        () => {
+            db.exec(`ALTER TABLE profiles ADD COLUMN frame TEXT
+                CHECK(frame IS NULL OR frame IN (${avatarFrames.map((id) => `'${id}'`).join(',')}));`);
         },
     ];
     migrations.forEach((apply, index) => {
