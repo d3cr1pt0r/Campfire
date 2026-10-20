@@ -172,6 +172,12 @@ body {
 }
 .sidebar-content .direct-message {
     padding-block: 3px;
+    font-size: 13px;
+}
+.sidebar-content .direct-message .presence-dot {
+    width: 8px;
+    height: 8px;
+    border-width: 2px;
 }
 .sidebar-content .direct-message .avatar-status {
     display: flex;

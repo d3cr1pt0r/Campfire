@@ -3709,7 +3709,7 @@ h2,
     font-weight: 800;
     color: var(--ink);
 }
-.direct-message-pin {
+.direct-message-action {
     flex: 0 0 24px;
     width: 24px;
     height: 28px;
@@ -3718,14 +3718,20 @@ h2,
     opacity: 0;
     pointer-events: none;
 }
-.direct-message-row:hover .direct-message-pin,
-.direct-message-row:has(:focus-visible) .direct-message-pin,
+.direct-message-row:hover .direct-message-action,
+.direct-message-row:has(:focus-visible) .direct-message-action,
 .direct-message-pin[aria-pressed='true'] {
     opacity: 1;
     pointer-events: auto;
 }
 .direct-message-pin[aria-pressed='true'] {
     color: var(--accent);
+}
+@media (hover: none) {
+    .direct-message-action {
+        opacity: 1;
+        pointer-events: auto;
+    }
 }
 .nav-item {
     border-radius: 10px;

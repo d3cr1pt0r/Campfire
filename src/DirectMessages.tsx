@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronDown, Pin } from 'lucide-react';
+import { ChevronDown, Pin, Trash2 } from 'lucide-react';
 import { canonicalRoom } from '../shared/rooms.js';
 import { Avatar } from './Avatar';
 import { PresenceDot } from './PresenceDot';
@@ -7,7 +7,20 @@ import { displayName } from './profiles';
 import { userStatus } from './presence';
 import type { AppSocket, Message, State, User } from './types';
 
-type Saved = { opened: Record<string, number>; pinned: string[]; collapsed: boolean };
+type Saved = {
+    opened: Record<string, number>;
+    received: Record<string, number>;
+    hidden: Record<string, number>;
+    pinned: string[];
+    collapsed: boolean;
+};
+const savedTimes = (value: unknown): Record<string, number> =>
+    Object.fromEntries(
+        Object.entries(value && typeof value === 'object' ? value : {}).filter(
+            ([key, time]) =>
+                key.startsWith('dm:') && typeof time === 'number' && Number.isFinite(time),
+        ),
+    );
 
 export function DirectMessages({
     state,
@@ -16,6 +29,7 @@ export function DirectMessages({
     unread,
     color,
     dm,
+    close,
     storage,
     storageKey,
 }: {
@@ -25,6 +39,7 @@ export function DirectMessages({
     unread: Record<string, number>;
     color: (user?: User) => string | undefined;
     dm: (id: string) => void;
+    close: (destination: string) => void;
     storage: Pick<Storage, 'getItem' | 'setItem'>;
     storageKey: string;
 }) {
@@ -32,21 +47,16 @@ export function DirectMessages({
         try {
             const value = JSON.parse(storage.getItem(storageKey) || 'null');
             return {
-                opened: Object.fromEntries(
-                    Object.entries(value?.opened || {}).filter(
-                        ([key, time]) =>
-                            key.startsWith('dm:') &&
-                            typeof time === 'number' &&
-                            Number.isFinite(time),
-                    ),
-                ) as Record<string, number>,
+                opened: savedTimes(value?.opened),
+                received: savedTimes(value?.received),
+                hidden: savedTimes(value?.hidden),
                 pinned: Array.isArray(value?.pinned)
                     ? value.pinned.filter((key: unknown) => typeof key === 'string')
                     : [],
                 collapsed: value?.collapsed === true,
             };
         } catch {
-            return { opened: {}, pinned: [], collapsed: false };
+            return { opened: {}, received: {}, hidden: {}, pinned: [], collapsed: false };
         }
     });
     useEffect(() => {
@@ -55,10 +65,13 @@ export function DirectMessages({
     useEffect(() => {
         if (!room.startsWith('dm:')) return;
         setSaved((previous) =>
-            room in previous.opened
+            room in previous.opened && !(room in previous.hidden)
                 ? previous
                 : {
                       ...previous,
+                      hidden: Object.fromEntries(
+                          Object.entries(previous.hidden).filter(([key]) => key !== room),
+                      ),
                       opened: {
                           ...previous.opened,
                           [room]:
@@ -69,10 +82,42 @@ export function DirectMessages({
         );
     }, [room]);
     useEffect(() => {
+        setSaved((previous) => {
+            let next = previous;
+            for (const entry of state.directMessages || []) {
+                const received = entry.received || 0;
+                if (received <= (next.received[entry.room] || 0)) continue;
+                next = { ...next, received: { ...next.received, [entry.room]: received } };
+                if (entry.room in next.hidden && received > next.hidden[entry.room])
+                    next.hidden = Object.fromEntries(
+                        Object.entries(next.hidden).filter(([key]) => key !== entry.room),
+                    );
+            }
+            return next;
+        });
+    }, [state.directMessages]);
+    useEffect(() => {
         const receive = (message: Message) => {
             if (!message.room.startsWith('dm:')) return;
+            const incoming = message.author !== state.me.id;
             setSaved((previous) => ({
                 ...previous,
+                ...(incoming
+                    ? {
+                          received: {
+                              ...previous.received,
+                              [message.room]: Math.max(
+                                  previous.received[message.room] || 0,
+                                  message.created,
+                              ),
+                          },
+                          hidden: Object.fromEntries(
+                              Object.entries(previous.hidden).filter(
+                                  ([key]) => key !== message.room,
+                              ),
+                          ),
+                      }
+                    : {}),
                 opened: {
                     ...previous.opened,
                     [message.room]: Math.max(previous.opened[message.room] || 0, message.created),
@@ -83,7 +128,7 @@ export function DirectMessages({
         return () => {
             socket?.off('message', receive);
         };
-    }, [socket]);
+    }, [socket, state.me.id]);
     const activity = { ...saved.opened };
     for (const entry of state.directMessages || [])
         activity[entry.room] = Math.max(activity[entry.room] || 0, entry.updated);
@@ -95,7 +140,8 @@ export function DirectMessages({
         }))
         .filter(
             ({ destination }) =>
-                destination in activity || unread[destination] > 0 || destination === room,
+                !(destination in saved.hidden) &&
+                (destination in activity || unread[destination] > 0 || destination === room),
         )
         .sort(
             (a, b) =>
@@ -155,7 +201,7 @@ export function DirectMessages({
                                 )}
                             </button>
                             <button
-                                className="direct-message-pin"
+                                className="direct-message-action direct-message-pin"
                                 aria-label={`${pinned ? 'Unpin' : 'Pin'} conversation with ${displayName(user)}`}
                                 aria-pressed={pinned}
                                 onClick={() =>
@@ -168,6 +214,31 @@ export function DirectMessages({
                                 }
                             >
                                 <Pin size={13} />
+                            </button>
+                            <button
+                                className="direct-message-action direct-message-delete"
+                                aria-label={`Remove conversation with ${displayName(user)} from Messages`}
+                                title="Remove from Messages"
+                                onClick={() => {
+                                    setSaved((previous) => ({
+                                        ...previous,
+                                        hidden: {
+                                            ...previous.hidden,
+                                            [destination]: Math.max(
+                                                previous.received[destination] || 0,
+                                                state.directMessages?.find(
+                                                    (entry) => entry.room === destination,
+                                                )?.received || 0,
+                                            ),
+                                        },
+                                        pinned: previous.pinned.filter(
+                                            (key) => key !== destination,
+                                        ),
+                                    }));
+                                    close(destination);
+                                }}
+                            >
+                                <Trash2 size={13} />
                             </button>
                         </div>
                     );

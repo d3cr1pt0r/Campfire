@@ -124,7 +124,7 @@ const send = async (win, text) => {
 };
 app.whenReady()
     .then(async () => {
-        const a = await client(alice, 'member-alice');
+        let a = await client(alice, 'member-alice');
         let b = await client(bob, 'member-bob');
         for (const width of [1440, 960, 1800]) {
             a.setSize(width, 940);
@@ -271,6 +271,103 @@ app.whenReady()
         );
         assert.equal(await js(a, 'document.querySelectorAll(".direct-message").length'), 3);
         console.log('PASS collapse, pinning and conversation persistence');
+        const removeBob = () =>
+            js(
+                a,
+                `document.querySelector('button[aria-label="Remove conversation with Bob from Messages"]').click()`,
+            );
+        const bobVisible = () =>
+            js(a, '!!document.querySelector(\'button.direct-message[aria-label^="Message Bob"]\')');
+        await js(
+            a,
+            'document.querySelector(\'button.direct-message[aria-label^="Message Bob"]\').click()',
+        );
+        await wait(
+            () => js(a, '!!document.querySelector(".direct-message.selected")'),
+            'Bob conversation opens before removal',
+        );
+        const rowBounds = await js(
+            a,
+            `(() => {const r=document.querySelector('.direct-message.selected').closest('.direct-message-row').getBoundingClientRect();return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)};})()`,
+        );
+        a.webContents.sendInputEvent({ type: 'mouseMove', ...rowBounds });
+        const documentNode = await a.webContents.debugger.sendCommand('DOM.getDocument');
+        const hoveredRow = await a.webContents.debugger.sendCommand('DOM.querySelector', {
+            nodeId: documentNode.root.nodeId,
+            selector: '.direct-message-row:has(.selected)',
+        });
+        await a.webContents.debugger.sendCommand('CSS.enable');
+        await a.webContents.debugger.sendCommand('CSS.forcePseudoState', {
+            nodeId: hoveredRow.nodeId,
+            forcedPseudoClasses: ['hover'],
+        });
+        assert.equal(
+            await js(
+                a,
+                `getComputedStyle(document.querySelector('.direct-message.selected').closest('.direct-message-row').querySelector('.direct-message-delete')).opacity`,
+            ),
+            '1',
+        );
+        const compact = await js(
+            a,
+            `(() => { const row=document.querySelector('.direct-message.selected'); const dot=getComputedStyle(row.querySelector('.presence-dot')); return {font:getComputedStyle(row).fontSize,dot:dot.width,border:dot.borderWidth}; })()`,
+        );
+        assert.deepEqual(compact, { font: '13px', dot: '8px', border: '2px' });
+        await fs.writeFile(
+            path.join(output, 'dm-compact-actions.png'),
+            (await a.capturePage()).toPNG(),
+        );
+        await removeBob();
+        await wait(async () => !(await bobVisible()), 'remove hides the selected conversation');
+        assert.equal(await js(a, '!!document.querySelector(".direct-message.selected")'), false);
+        await a.reload();
+        await wait(
+            () => js(a, '!!document.querySelector(".server-heading")'),
+            'reload after conversation removal',
+        );
+        assert.equal(await bobVisible(), false);
+        const bobRoom = 'dm:' + [alice.user.id, bob.user.id].sort().join(':');
+        await api(alice, '/messages', 'POST', {
+            room: bobRoom,
+            body: 'Outgoing from another device stays hidden',
+        });
+        await pause(100);
+        assert.equal(await bobVisible(), false);
+        await a.reload();
+        await wait(
+            () => js(a, '!!document.querySelector(".server-heading")'),
+            'outgoing activity survives reload',
+        );
+        assert.equal(await bobVisible(), false);
+        await api(bob, '/messages', 'POST', {
+            room: bobRoom,
+            body: 'New incoming restores the conversation',
+        });
+        await wait(bobVisible, 'new incoming message restores removed conversation');
+        assert.equal(
+            await js(
+                a,
+                'document.querySelector(\'button[aria-label="Pin conversation with Bob"]\').getAttribute("aria-pressed")',
+            ),
+            'false',
+        );
+        await removeBob();
+        await wait(async () => !(await bobVisible()), 'second removal hides the conversation');
+        a.destroy();
+        await api(bob, '/messages', 'POST', {
+            room: bobRoom,
+            body: 'Incoming while Alice is offline',
+        });
+        a = await client(alice, 'member-alice');
+        await wait(bobVisible, 'offline incoming message restores conversation on reconnect');
+        const history = await api(alice, '/messages?' + new URLSearchParams({ room: bobRoom }));
+        assert.ok(
+            history.some((message) => message.body === 'Hello from Bob without a relationship'),
+        );
+        console.log(
+            'PASS compact DM styling, remove, persistence, incoming-only restoration and retained history',
+        );
+
         a.setSize(960, 640);
         await pause(100);
         assert.equal(await js(a, 'document.documentElement.scrollWidth <= innerWidth'), true);

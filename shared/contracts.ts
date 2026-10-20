@@ -56,7 +56,7 @@ export type State = {
     presence: Record<string, PresenceStatus>;
     calls: CallMember[];
     directCalls: { id: string; creator: string; invited: string[]; members: string[] }[];
-    directMessages?: { room: string; updated: number }[];
+    directMessages?: { room: string; updated: number; received?: number }[];
     emojis: { id: string; name: string; author: string | null }[];
     iceServers: RTCIceServer[];
     // Present when the server terminates TLS itself; fingerprint only for its own identity.

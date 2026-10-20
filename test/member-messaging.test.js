@@ -6,6 +6,7 @@ import path from 'node:path';
 import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
 import { canonicalRoom } from '../shared/rooms.js';
+import { roleFixture } from '../test-support/role-fixture.js';
 
 test('upgrade removes relationships and endpoints while preserving member DMs, attachments and sessions', async () => {
     const dataDir = mkdtempSync(path.join(tmpdir(), 'campfire-member-upgrade-'));
@@ -53,13 +54,15 @@ test('upgrade removes relationships and endpoints while preserving member DMs, a
         assert.equal(state.status, 200);
         assert.equal('friends' in state.data, false);
         assert.equal(state.data.users.length, 3);
-        assert.deepEqual(state.data.directMessages, [{ room, updated: sent.data.created }]);
+        assert.deepEqual(state.data.directMessages, [
+            { room, updated: sent.data.created, received: 0 },
+        ]);
         assert.deepEqual(
             (await request(service.app, '/state', other.token)).data.directMessages,
             [],
         );
         assert.deepEqual((await request(service.app, '/state', bob.token)).data.directMessages, [
-            { room, updated: sent.data.created },
+            { room, updated: sent.data.created, received: sent.data.created },
         ]);
         const history = await request(
             service.app,
@@ -104,4 +107,19 @@ test('upgrade removes relationships and endpoints while preserving member DMs, a
         await service.close();
         rmSync(dataDir, { recursive: true, force: true });
     }
+});
+
+test('DM activity distinguishes incoming messages from outgoing messages after reconnect', async (t) => {
+    const f = await roleFixture(t);
+    const room = canonicalRoom(`dm:${f.owner.user.id}:${f.member.user.id}`);
+    const incoming = await f.api(f.member, '/messages', 'POST', { room, body: 'Incoming' });
+    const outgoing = await f.api(f.owner, '/messages', 'POST', { room, body: 'Outgoing' });
+    assert.deepEqual((await f.api(f.owner, '/state')).directMessages, [
+        { room, updated: outgoing.created, received: incoming.created },
+    ]);
+    assert.deepEqual((await f.api(f.other, '/state')).directMessages, []);
+    await f.restart();
+    assert.equal((await f.api(f.owner, '/state')).directMessages[0].received, incoming.created);
+    const next = await f.api(f.member, '/messages', 'POST', { room, body: 'New incoming' });
+    assert.equal((await f.api(f.owner, '/state')).directMessages[0].received, next.created);
 });

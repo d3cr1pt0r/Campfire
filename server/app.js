@@ -161,7 +161,13 @@ export function createApp({
                             'SELECT created AS updated FROM messages WHERE room=? ORDER BY created DESC,id DESC LIMIT 1',
                             room,
                         );
-                        return latest ? [{ room, updated: latest.updated }] : [];
+                        if (!latest) return [];
+                        const received = get(
+                            'SELECT COALESCE(MAX(created),0) received FROM messages WHERE room=? AND author=?',
+                            room,
+                            user.id,
+                        ).received;
+                        return [{ room, updated: latest.updated, received }];
                     }),
                 presence: presence.snapshot(),
                 roles: all("SELECT * FROM roles WHERE id<>'owner' ORDER BY position DESC,id").map(

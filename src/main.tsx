@@ -1433,6 +1433,15 @@ function App() {
                                 unread={unread}
                                 color={color}
                                 dm={dm}
+                                close={(destination) => {
+                                    setUnread((previous) => ({ ...previous, [destination]: 0 }));
+                                    if (room === destination)
+                                        selectRoom(
+                                            state.channels.find(
+                                                (channel) => channel.kind === 'text',
+                                            )?.id || '',
+                                        );
+                                }}
                             />
                             <div className="category">
                                 <span>TEXT CHANNELS</span>
