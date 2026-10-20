@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { createRateLimit, originPolicy } from '../server/policies.js';
 import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
+import { currentMigrationVersions } from '../test-support/migrations.js';
 
 test('overlapping and repeated shutdown calls close SQLite only once', async (t) => {
     const dir = mkdtempSync(path.join(tmpdir(), 'campfire-shutdown-'));
@@ -49,7 +50,13 @@ test('legacy migration merges DM histories and accounts for attachment bytes onc
         db.exec("INSERT INTO attachments VALUES('unpadded','first','hi','text/plain','aGk')");
         migrate(db);
         migrate(db);
-        assert.equal(db.prepare('SELECT COUNT(*) n FROM migrations').get().n, 17);
+        assert.deepEqual(
+            db
+                .prepare('SELECT version FROM migrations ORDER BY version')
+                .all()
+                .map((row) => row.version),
+            currentMigrationVersions(),
+        );
         assert.equal(db.prepare("SELECT COUNT(*) n FROM messages WHERE room='dm:a:b'").get().n, 2);
         assert.equal(db.prepare('SELECT bytes FROM storage_usage').get().bytes, 7);
         assert.equal(db.prepare('SELECT COUNT(*) n FROM reactions').get().n, 1);
@@ -75,7 +82,13 @@ test('failed migrations roll back schema changes and can resume after the cause 
         assert.equal(db.prepare('SELECT MAX(version) version FROM migrations').get().version, 1);
         db.exec('DROP TABLE storage_usage');
         migrate(db);
-        assert.equal(db.prepare('SELECT MAX(version) version FROM migrations').get().version, 17);
+        assert.deepEqual(
+            db
+                .prepare('SELECT version FROM migrations ORDER BY version')
+                .all()
+                .map((row) => row.version),
+            currentMigrationVersions(),
+        );
     } finally {
         db.close();
     }

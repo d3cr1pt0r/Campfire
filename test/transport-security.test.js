@@ -9,6 +9,7 @@ import { io as client } from 'socket.io-client';
 import { migrate } from '../server/database.js';
 import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
+import { currentMigrationVersions } from '../test-support/migrations.js';
 
 test('upgrading signs everyone out and revokes unused invitations exactly once', () => {
     const db = new DatabaseSync(':memory:');
@@ -57,11 +58,15 @@ test('upgrading an encryption-branch version 11 database also removes friends', 
             db.prepare("SELECT name FROM sqlite_master WHERE name='friends'").get(),
             undefined,
         );
-        assert.equal(
-            db.prepare('SELECT MAX(version) AS version FROM migrations').get().version,
-            16,
-        );
+        const expectedVersions = currentMigrationVersions();
+        const versions = () =>
+            db
+                .prepare('SELECT version FROM migrations ORDER BY version')
+                .all()
+                .map((row) => row.version);
+        assert.deepEqual(versions(), expectedVersions);
         migrate(db);
+        assert.deepEqual(versions(), expectedVersions);
         assert.equal(db.prepare('PRAGMA quick_check').get().quick_check, 'ok');
     } finally {
         db.close();
