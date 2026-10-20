@@ -1,5 +1,5 @@
 import { RolesSettings } from './RolesSettings';
-import { highestPosition } from '../shared/permissions.js';
+import { MemberManagement } from './MemberManagement';
 import { RegistrationSettings } from './RegistrationSettings';
 import { notificationKey, channelNotificationMode } from './notifications';
 import { ChannelNotificationSelect } from './ChannelNotificationSelect';
@@ -68,12 +68,6 @@ export function SettingsPanel({
 }) {
     const [serverIconFile, setServerIconFile] = useState<File | null>(null);
     const [avatarFile, setAvatarFile] = useState<File | null>(null);
-    const [removeUser, setRemoveUser] = useState<string | null>(null);
-    const [passwordReset, setPasswordReset] = useState<{
-        user: string;
-        token: string;
-        expires: number;
-    } | null>(null);
     const [deleteEmoji, setDeleteEmoji] = useState<string | null>(null);
     // The fingerprint this desktop app verified; links built from it protect new members.
     const [pin, setPin] = useState<string | null>(null);
@@ -934,146 +928,21 @@ export function SettingsPanel({
                                 canManage={permission('invitations.manage')}
                             />
                         )}
-                        {(permission('members.ban') ||
-                            permission('members.restore') ||
-                            permission('members.resetPassword')) && (
-                            <section className="server-members">
-                                <h3>Manage members</h3>
-                                {passwordReset && (
-                                    <div className="password-reset-result" role="status">
-                                        <strong>
-                                            Password reset token for {passwordReset.user}
-                                        </strong>
-                                        <input
-                                            aria-label="Generated password reset token"
-                                            readOnly
-                                            value={passwordReset.token}
-                                            onFocus={(event) => event.target.select()}
-                                        />
-                                        <p className="field-help">
-                                            Share this token privately with the member. It works
-                                            once and expires at{' '}
-                                            {new Date(passwordReset.expires).toLocaleTimeString()}.
-                                            Generating another token replaces it.
-                                        </p>
-                                        <button
-                                            disabled={busy}
-                                            onClick={() =>
-                                                void act(async () => {
-                                                    await navigator.clipboard.writeText(
-                                                        passwordReset.token,
-                                                    );
-                                                    notify('Password reset token copied.');
-                                                })
-                                            }
-                                        >
-                                            Copy token
-                                        </button>
-                                        <button onClick={() => setPasswordReset(null)}>
-                                            Dismiss
-                                        </button>
-                                    </div>
-                                )}
-                                {state.users
-                                    .filter(
-                                        (u) =>
-                                            !u.owner &&
-                                            u.id !== state.me.id &&
-                                            highestPosition(state.me, state.roles) >
-                                                highestPosition(u, state.roles),
-                                    )
-                                    .map((u) => (
-                                        <div key={u.id} className="server-member-row">
-                                            <span>{displayName(u)}</span>
-                                            {permission('members.resetPassword') && (
-                                                <button
-                                                    disabled={busy}
-                                                    onClick={() =>
-                                                        void act(async () => {
-                                                            const result = await api<{
-                                                                token: string;
-                                                                expires: number;
-                                                            }>(
-                                                                `/users/${u.id}/password-reset`,
-                                                                'POST',
-                                                            );
-                                                            setPasswordReset({
-                                                                user: u.username,
-                                                                ...result,
-                                                            });
-                                                        })
-                                                    }
-                                                >
-                                                    Generate password reset token
-                                                </button>
-                                            )}
-                                            {removeUser !== u.id ? (
-                                                <button
-                                                    className="danger-text"
-                                                    disabled={busy || !permission('members.ban')}
-                                                    onClick={() => setRemoveUser(u.id)}
-                                                >
-                                                    Remove member
-                                                </button>
-                                            ) : (
-                                                <div role="alert">
-                                                    <p>
-                                                        Remove {displayName(u)} from this server?
-                                                        Their messages remain, all sessions end, and
-                                                        access is blocked until you restore it.
-                                                    </p>
-                                                    <button
-                                                        disabled={busy}
-                                                        onClick={() => setRemoveUser(null)}
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                    <button
-                                                        className="danger-bg"
-                                                        disabled={busy}
-                                                        onClick={() =>
-                                                            void act(async () => {
-                                                                await api(
-                                                                    `/users/${u.id}/access`,
-                                                                    'POST',
-                                                                    { enabled: false },
-                                                                );
-                                                                setRemoveUser(null);
-                                                                await refresh();
-                                                            })
-                                                        }
-                                                    >
-                                                        Confirm removal
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ))}
-                                {state.removedUsers
-                                    ?.filter(
-                                        (u) =>
-                                            highestPosition(state.me, state.roles) >
-                                            highestPosition(u, state.roles),
-                                    )
-                                    .map((u) => (
-                                        <div key={u.id} className="server-member-row">
-                                            <span>{displayName(u)} · Removed</span>
-                                            <button
-                                                disabled={busy || !permission('members.restore')}
-                                                onClick={() =>
-                                                    void act(async () => {
-                                                        await api(`/users/${u.id}/access`, 'POST', {
-                                                            enabled: true,
-                                                        });
-                                                        await refresh();
-                                                    })
-                                                }
-                                            >
-                                                Restore access
-                                            </button>
-                                        </div>
-                                    ))}
-                            </section>
+                        {[
+                            'members.ban',
+                            'members.restore',
+                            'members.resetPassword',
+                            'members.delete',
+                        ].some(permission) && (
+                            <MemberManagement
+                                state={state}
+                                permission={permission}
+                                busy={busy}
+                                act={act}
+                                api={api}
+                                refresh={refresh}
+                                notify={notify}
+                            />
                         )}
                         <label>
                             Server address

@@ -384,7 +384,7 @@ export function ChatMessage({
     | 'onReply'
     | 'thread'
 > & { message: Message }) {
-    const u = user(m.author);
+    const u = m.author ? user(m.author) : undefined;
     return (
         <article className="message">
             <time className="message-time" dateTime={new Date(m.created).toISOString()}>

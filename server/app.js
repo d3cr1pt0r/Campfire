@@ -148,7 +148,8 @@ export function createApp({
                     'false',
                 removedUsers:
                     sessions.can(req.user, 'members.ban') ||
-                    sessions.can(req.user, 'members.restore')
+                    sessions.can(req.user, 'members.restore') ||
+                    sessions.can(req.user, 'members.delete')
                         ? all('SELECT * FROM users WHERE banned=1').map(sessions.publicUser)
                         : [],
                 users,

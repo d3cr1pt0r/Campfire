@@ -55,7 +55,7 @@ export type State = {
     calls: CallMember[];
     directCalls: { id: string; creator: string; invited: string[]; members: string[] }[];
     directMessages?: { room: string; updated: number }[];
-    emojis: { id: string; name: string; author: string }[];
+    emojis: { id: string; name: string; author: string | null }[];
     iceServers: RTCIceServer[];
     // Present when the server terminates TLS itself; fingerprint only for its own identity.
     identity?: { fingerprint?: string; certificateSha256: string };
@@ -65,7 +65,7 @@ export type Message = {
     replyCount?: number;
     id: string;
     room: string;
-    author: string;
+    author: string | null;
     body: string;
     created: number;
     edited: number | null;
@@ -120,6 +120,7 @@ export interface ServerEvents {
     message: (message: Message) => void;
     'message:update': (message: Message) => void;
     'message:delete': (event: { id: string; room: string }) => void;
+    'member:deleted': (event: { id: string }) => void;
     typing: (event: { room: string; user: string; thread?: string | null }) => void;
     calls: (members: CallMember[]) => void;
     'call:invite': (event: { id: string; from: string }) => void;

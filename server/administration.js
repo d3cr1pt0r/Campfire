@@ -537,6 +537,35 @@ export function registerAdministration({
             res.json({ ok: true });
         }),
     );
+    app.delete(
+        '/api/users/:id',
+        route((req, res) => {
+            requirePermission(req.user, 'members.delete');
+            const target = get('SELECT * FROM users WHERE id=?', req.params.id);
+            check(target, 'Member not found', 404);
+            check(mayManageMember(req.user, target), 'You can only delete lower members', 403);
+            check(
+                req.body?.username === target.username,
+                'Enter the account username to confirm deletion',
+            );
+            transaction(db, () => {
+                run('DELETE FROM sessions WHERE user=?', target.id);
+                run('DELETE FROM reactions WHERE user=?', target.id);
+                // Keep conversation history and replies without retaining the account identity.
+                run('UPDATE messages SET author=NULL WHERE author=?', target.id);
+                run('UPDATE emojis SET author=NULL WHERE author=?', target.id);
+                // Clearing usedBy alone would make a redeemed invitation usable again.
+                run('UPDATE invitations SET usedBy=NULL,revoked=1 WHERE usedBy=?', target.id);
+                run('DELETE FROM users WHERE id=?', target.id);
+            });
+            for (const socket of io.sockets.sockets.values())
+                if (socket.data.user.id === target.id) socket.disconnect(true);
+            enforceCalls();
+            io.emit('member:deleted', { id: target.id });
+            publishChannels();
+            res.json({ ok: true });
+        }),
+    );
     app.patch(
         '/api/settings',
         route((req, res) => {

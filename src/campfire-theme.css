@@ -1228,14 +1228,122 @@ label,
 .channel-settings-item.is-dragging {
     opacity: 0.45;
 }
-.server-member-row {
+.server-member-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 14px;
+}
+.server-member-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+}
+.server-member-card > summary {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
-    justify-content: space-between;
     gap: 12px;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--border);
+    padding: 12px;
+    cursor: pointer;
+    list-style: none;
+}
+.server-member-card > summary::-webkit-details-marker {
+    display: none;
+}
+.server-member-card > summary:hover {
+    background: var(--soft-accent);
+}
+.server-member-identity {
+    display: grid;
+    gap: 3px;
+    flex: 1;
+    min-width: 0;
+}
+.server-member-identity > * {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.server-member-identity small,
+.server-member-status {
+    color: var(--muted);
+    font-size: 11px;
+}
+.server-member-status {
+    padding: 4px 7px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+.server-member-status.is-disabled {
+    color: #ef929f;
+}
+.server-member-chevron {
+    flex-shrink: 0;
+    color: var(--muted);
+}
+.server-member-card[open] .server-member-chevron {
+    transform: rotate(180deg);
+}
+.server-member-actions {
+    padding: 0 14px;
+    border-top: 1px solid var(--border);
+}
+.server-member-action {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 20px;
+    padding: 14px 0;
+}
+.server-member-action + .server-member-action {
+    border-top: 1px solid var(--border);
+}
+.server-member-action > div {
+    flex: 1 1 220px;
+    min-width: 0;
+}
+.server-member-action p,
+.server-member-confirmation p {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+    margin: 5px 0 0;
+}
+.server-member-action > button {
+    flex: 0 0 auto;
+}
+.server-member-action > button,
+.server-member-buttons > button {
+    min-height: var(--control-size);
+    padding: 7px 12px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--raised);
+    font-size: 12px;
+}
+.server-member-action > button:hover,
+.server-member-buttons > button:hover {
+    background: var(--soft-accent);
+}
+:root[data-theme='canvas'] .server-member-status.is-disabled {
+    color: #a03b4b;
+}
+.server-member-confirmation,
+.password-reset-result {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+    margin: 0 0 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+.server-member-confirmation {
+    border-color: #be5365;
+}
+.server-member-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
 }
 .voice-member > span[aria-label] {
     flex: 0 0 auto;

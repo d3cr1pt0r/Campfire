@@ -42,10 +42,14 @@ export function useConversation(
         const remove = (event: { room: string; id: string }) => {
             if (event.room === room) conversation.receive({ type: 'delete', id: event.id });
         };
+        const deletedMember = ({ id }: { id: string }) => {
+            conversation.receive({ type: 'member-deleted', id });
+        };
         socket?.on('connect', reload);
         socket?.on('message', upsert);
         socket?.on('message:update', upsert);
         socket?.on('message:delete', remove);
+        socket?.on('member:deleted', deletedMember);
         reload();
         return () => {
             conversation.cancel();
@@ -53,6 +57,7 @@ export function useConversation(
             socket?.off('message', upsert);
             socket?.off('message:update', upsert);
             socket?.off('message:delete', remove);
+            socket?.off('member:deleted', deletedMember);
         };
     }, [conversation, socket, room, enabled]);
     // Abort on replacement without permanently closing an object during React's

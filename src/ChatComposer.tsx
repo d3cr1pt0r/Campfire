@@ -28,7 +28,7 @@ type Props = {
     label?: string;
     focusRequest?: number;
     users: User[];
-    emojis?: { id: string; name: string; author: string }[];
+    emojis?: { id: string; name: string; author: string | null }[];
 };
 export function ChatComposer({
     attachments,

@@ -42,6 +42,42 @@ test('late history cannot overwrite live arrivals, edits or deletions', async ()
     );
 });
 
+test('member deletion anonymizes loaded and arriving history without reviving reactions', async () => {
+    const result = deferred();
+    const authored = {
+        ...message('authored'),
+        reactions: [
+            { user: 'alice', emoji: '👍' },
+            { user: 'bob', emoji: '🔥' },
+        ],
+    };
+    const other = {
+        ...message('other'),
+        author: 'bob',
+        reactions: [{ user: 'alice', emoji: '👍' }],
+    };
+    let calls = 0;
+    const store = createConversation('general', () =>
+        ++calls === 1
+            ? Promise.resolve({ messages: [authored, other], next: 'cursor' })
+            : result.promise,
+    );
+    await store.reload();
+    const loading = store.loadOlder();
+    store.receive({ type: 'member-deleted', id: 'alice' });
+    assert.equal(store.getSnapshot().messages.find((m) => m.id === 'authored').author, null);
+    assert.equal(store.getSnapshot().messages.find((m) => m.id === 'other').author, 'bob');
+    result.resolve({ messages: [authored, { ...authored, id: 'older' }], next: null });
+    await loading;
+    assert.equal(store.getSnapshot().messages.find((m) => m.id === 'older').author, null);
+    assert.ok(
+        store.getSnapshot().messages.every((m) => m.reactions.every((r) => r.user !== 'alice')),
+    );
+    assert.deepEqual(store.getSnapshot().messages.find((m) => m.id === 'authored').reactions, [
+        { user: 'bob', emoji: '🔥' },
+    ]);
+});
+
 test('a superseded request is aborted and its eventual result is ignored', async () => {
     const old = deferred(),
         current = deferred(),

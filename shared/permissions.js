@@ -44,6 +44,7 @@ export const permissionGroups = [
             ['roles.manage', 'Create, edit and order lower roles'],
             ['members.ban', 'Ban lower members'],
             ['members.restore', 'Restore lower members’ access'],
+            ['members.delete', 'Permanently delete lower members’ accounts'],
             ['members.resetPassword', 'Generate password reset tokens for lower members'],
         ],
     },

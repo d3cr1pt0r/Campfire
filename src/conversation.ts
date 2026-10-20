@@ -3,6 +3,7 @@ import type { Message } from './types';
 export type MessagePage = { messages: Message[]; next: string | null };
 export type ConversationEvent =
     | { type: 'upsert'; message: Message }
+    | { type: 'member-deleted'; id: string }
     | { type: 'delete'; id: string };
 type Snapshot = {
     messages: Message[];
@@ -28,6 +29,12 @@ export function createConversation(
     const sorted = (messages: Message[]) =>
         messages.sort((a, b) => a.created - b.created || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     const apply = (messages: Message[], event: ConversationEvent) => {
+        if (event.type === 'member-deleted')
+            return messages.map((message) => ({
+                ...message,
+                author: message.author === event.id ? null : message.author,
+                reactions: message.reactions.filter((reaction) => reaction.user !== event.id),
+            }));
         const id = event.type === 'delete' ? event.id : event.message.id;
         const next = messages.filter((message) => message.id !== id);
         if (event.type === 'upsert' && matches(event.message)) next.push(event.message);
