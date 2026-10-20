@@ -1486,6 +1486,25 @@ label,
 /* Animated profile picture frames. Busy lists animate on hover, like a resting
    decoration; your own user bar, profile card and frame previews always animate. */
 .avatar.framed {
+    /* The avatar footprint (an octagon hugging the rounded corners) cut out of a
+       full-frame layer, so soft pieces can pass behind the face. */
+    --frame-hole: polygon(
+        evenodd,
+        -100% -100%,
+        200% -100%,
+        200% 200%,
+        -100% 200%,
+        -100% -100%,
+        calc(var(--frame-out) + var(--avatar-radius) * 0.586) var(--frame-out),
+        calc(100% - var(--frame-out) - var(--avatar-radius) * 0.586) var(--frame-out),
+        calc(100% - var(--frame-out)) calc(var(--frame-out) + var(--avatar-radius) * 0.586),
+        calc(100% - var(--frame-out)) calc(100% - var(--frame-out) - var(--avatar-radius) * 0.586),
+        calc(100% - var(--frame-out) - var(--avatar-radius) * 0.586) calc(100% - var(--frame-out)),
+        calc(var(--frame-out) + var(--avatar-radius) * 0.586) calc(100% - var(--frame-out)),
+        var(--frame-out) calc(100% - var(--frame-out) - var(--avatar-radius) * 0.586),
+        var(--frame-out) calc(var(--frame-out) + var(--avatar-radius) * 0.586),
+        calc(var(--frame-out) + var(--avatar-radius) * 0.586) var(--frame-out)
+    );
     --frame-star: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
     --frame-out: 4px;
     --frame-width: 2.5px;
@@ -1558,7 +1577,7 @@ label,
 
 /* Ember: two flame tongues chase each other while sparks drift off the top. */
 .frame-ember {
-    --frame-speed: 2.6s;
+    --frame-speed: 7s;
     --frame-sweep: conic-gradient(
         #4a140b,
         #b3261e 14%,
@@ -1577,7 +1596,7 @@ label,
     box-shadow:
         0 0 6px 1px #ff7a2fb0,
         0 0 14px 2px #ff4a1a50;
-    animation: avatar-frame-flicker 1.7s steps(1, end) infinite var(--frame-play, paused);
+    animation: avatar-frame-flicker 6s ease-in-out infinite var(--frame-play, paused);
 }
 .frame-ember .avatar-frame-particle {
     top: 0;
@@ -1589,8 +1608,8 @@ label,
     box-shadow: 0 0 3px 1px #ff8a3d;
     opacity: 0;
     visibility: var(--frame-transient, hidden);
-    animation: avatar-frame-spark calc(1.5s + var(--particle) * 0.35s) ease-out
-        calc(var(--particle) * -0.55s) infinite var(--frame-play, paused);
+    animation: avatar-frame-spark calc(3.4s + var(--particle) * 0.8s) ease-out
+        calc(var(--particle) * -1.3s) infinite var(--frame-play, paused);
 }
 :root[data-theme='canvas'] .frame-ember .avatar-frame-particle {
     background: #ffb347;
@@ -1633,7 +1652,7 @@ label,
 
 /* Fireflies: a faint shimmering ring with three blinking lights in orbit. */
 .frame-fireflies {
-    --frame-speed: 9s;
+    --frame-speed: 16s;
     --frame-sweep: conic-gradient(
         #e7f59a66,
         #9fbf3a1f 25%,
@@ -1661,7 +1680,7 @@ label,
     --start: calc(var(--particle) * 125deg + 20deg);
     inset: 0;
     transform: rotate(var(--start));
-    animation: avatar-frame-orbit calc(6s + var(--particle) * 1.9s) linear infinite
+    animation: avatar-frame-orbit calc(15s + var(--particle) * 4s) linear infinite
         var(--frame-play, paused);
 }
 .frame-fireflies .avatar-frame-particle:nth-child(4) {
@@ -1680,8 +1699,8 @@ label,
     box-shadow:
         0 0 3px 1px var(--firefly-glow),
         0 0 8px 3px color-mix(in srgb, var(--firefly-glow) 60%, transparent);
-    animation: avatar-frame-blink calc(1.8s + var(--particle) * 0.7s) ease-in-out
-        calc(var(--particle) * -0.9s) infinite var(--frame-play, paused);
+    animation: avatar-frame-blink calc(3.8s + var(--particle) * 1.3s) ease-in-out
+        calc(var(--particle) * -1.7s) infinite var(--frame-play, paused);
 }
 @keyframes avatar-frame-orbit {
     from {
@@ -1698,8 +1717,8 @@ label,
         transform: translateY(0) scale(1.1);
     }
     50% {
-        opacity: 0.2;
-        transform: translateY(1.5px) scale(0.6);
+        opacity: 0.35;
+        transform: translateY(1.5px) scale(0.75);
     }
 }
 
@@ -1758,56 +1777,6 @@ label,
     }
     50% {
         opacity: 1;
-    }
-}
-
-/* Heartbeat: the ring thumps twice and sends a ripple outward with each beat. */
-.frame-heartbeat {
-    --frame-sweep: linear-gradient(135deg, #ffa3b5, #ff3b5c 55%, #c9184a);
-}
-.frame-heartbeat .avatar-frame-ring,
-.frame-heartbeat .avatar-frame-glow {
-    animation: avatar-frame-beat 1.3s ease-out infinite var(--frame-play, paused);
-}
-.frame-heartbeat .avatar-frame-glow {
-    box-shadow: 0 0 8px 2px #ff3b5c80;
-}
-.frame-heartbeat .avatar-frame-particle {
-    inset: 0;
-    border-radius: inherit;
-    border: calc(var(--frame-width) * 0.6) solid #ff5c7a;
-    opacity: 0;
-    animation: avatar-frame-ripple 1.3s ease-out calc(var(--particle) * 0.26s) infinite
-        var(--frame-play, paused);
-}
-@keyframes avatar-frame-beat {
-    0%,
-    45%,
-    100% {
-        transform: scale(1);
-    }
-    10% {
-        transform: scale(1.07);
-    }
-    20% {
-        transform: scale(1.01);
-    }
-    30% {
-        transform: scale(1.05);
-    }
-}
-@keyframes avatar-frame-ripple {
-    0% {
-        opacity: 0;
-        transform: scale(1);
-    }
-    8% {
-        opacity: 0.9;
-    }
-    60%,
-    100% {
-        opacity: 0;
-        transform: scale(1.32);
     }
 }
 
@@ -1942,169 +1911,9 @@ label,
     }
 }
 
-/* Neon: a flickering tube sign that switches between pink and cyan. */
-.frame-neon {
-    --frame-sweep: linear-gradient(#ffd6f6, #ffd6f6);
-}
-:root[data-theme='canvas'] .frame-neon {
-    --frame-sweep: linear-gradient(#ff5fd9, #ff5fd9);
-}
-.frame-neon .avatar-frame {
-    animation: avatar-frame-neon 5s steps(1, end) infinite var(--frame-play, paused);
-}
-.frame-neon .avatar-frame-glow {
-    box-shadow:
-        0 0 3px 1px #ff4fd8,
-        0 0 10px 3px #ff4fd899,
-        0 0 18px 4px #ff4fd840;
-}
-@keyframes avatar-frame-neon {
-    0% {
-        opacity: 1;
-        filter: none;
-    }
-    40% {
-        opacity: 0.25;
-    }
-    41% {
-        opacity: 1;
-    }
-    44% {
-        opacity: 0.1;
-    }
-    46% {
-        opacity: 0.6;
-    }
-    47% {
-        opacity: 0.1;
-    }
-    49% {
-        opacity: 1;
-        filter: hue-rotate(-125deg);
-    }
-    78% {
-        opacity: 0.3;
-    }
-    79% {
-        opacity: 1;
-    }
-    93% {
-        opacity: 0.1;
-        filter: hue-rotate(-125deg);
-    }
-    95% {
-        opacity: 0.6;
-        filter: none;
-    }
-    96% {
-        opacity: 0.1;
-    }
-    98% {
-        opacity: 1;
-    }
-}
-
-/* Glitch: RGB-split copies jitter out of sync while scanlines tear across. */
-.frame-glitch {
-    --frame-sweep: linear-gradient(#f4f7ff, #f4f7ff);
-}
-:root[data-theme='canvas'] .frame-glitch {
-    --frame-sweep: linear-gradient(#262a33, #262a33);
-}
-.frame-glitch .avatar-frame-glow {
-    box-shadow: 0 0 6px 1px #05d9e855;
-}
-.frame-glitch .avatar-frame-particle:nth-child(-n + 4) {
-    inset: 0;
-    border-radius: inherit;
-    border: calc(var(--frame-width) * 0.8) solid var(--split);
-    opacity: 0.85;
-    transform: translate(var(--shift), 0);
-    animation: avatar-frame-glitch 1.8s steps(1, end) infinite var(--frame-play, paused);
-}
-.frame-glitch .avatar-frame-particle:nth-child(3) {
-    --split: #ff2a6d;
-    --shift: -1px;
-}
-.frame-glitch .avatar-frame-particle:nth-child(4) {
-    --split: #05d9e8;
-    --shift: 1px;
-    animation-direction: reverse;
-}
-.frame-glitch .avatar-frame-particle:nth-child(5) {
-    top: 30%;
-    left: -8%;
-    width: 116%;
-    height: calc(var(--frame-width) + 1px);
-    background: linear-gradient(
-        90deg,
-        transparent,
-        #05d9e8 20%,
-        #f4f7ff 50%,
-        #ff2a6d 80%,
-        transparent
-    );
-    opacity: 0;
-    visibility: var(--frame-transient, hidden);
-    animation: avatar-frame-tear 1.8s steps(1, end) infinite var(--frame-play, paused);
-}
-@keyframes avatar-frame-glitch {
-    0% {
-        transform: translate(var(--shift), 0);
-    }
-    12% {
-        transform: translate(calc(var(--shift) * 3), -1px);
-    }
-    16% {
-        transform: translate(calc(var(--shift) * -2), 1px);
-    }
-    20% {
-        transform: translate(var(--shift), 0);
-    }
-    52% {
-        transform: translate(calc(var(--shift) * -3), 0) skewX(8deg);
-    }
-    56% {
-        transform: translate(calc(var(--shift) * 2), -2px);
-    }
-    60% {
-        transform: translate(var(--shift), 0);
-    }
-    78% {
-        transform: translate(calc(var(--shift) * 4), 1px);
-    }
-    80% {
-        transform: translate(var(--shift), 0);
-    }
-}
-@keyframes avatar-frame-tear {
-    0%,
-    16%,
-    58%,
-    80%,
-    100% {
-        opacity: 0;
-    }
-    12% {
-        top: 22%;
-        opacity: 0.9;
-        transform: translateX(-2px);
-    }
-    52% {
-        top: 64%;
-        opacity: 0.9;
-        transform: translateX(3px);
-    }
-    78% {
-        top: 42%;
-        opacity: 0.7;
-        transform: translateX(0);
-    }
-}
-
-/* Storm: a crackling electric ring with lightning striking around the edge. */
+/* Storm: a distant storm. The charged ring turns slowly and lightning glows in and out. */
 .frame-storm {
-    --frame-speed: 1.4s;
+    --frame-speed: 5s;
     --frame-sweep: conic-gradient(
         #16226b,
         #4d7cff 10%,
@@ -2121,7 +1930,7 @@ label,
 }
 .frame-storm .avatar-frame-glow {
     box-shadow: 0 0 9px 2px #4d7cffaa;
-    animation: avatar-frame-strike 2.4s linear infinite var(--frame-play, paused);
+    animation: avatar-frame-strike 6s ease-in-out infinite var(--frame-play, paused);
 }
 .frame-storm .avatar-frame-particle {
     width: calc(var(--frame-out) * 2.2);
@@ -2130,7 +1939,7 @@ label,
     clip-path: polygon(45% 0, 85% 0, 58% 40%, 88% 40%, 25% 100%, 42% 56%, 12% 56%);
     opacity: 0;
     visibility: var(--frame-transient, hidden);
-    animation: avatar-frame-bolt 2.4s steps(1, end) calc(var(--particle) * -0.8s) infinite
+    animation: avatar-frame-bolt 6s ease-in-out calc(var(--particle) * -2s) infinite
         var(--frame-play, paused);
 }
 :root[data-theme='canvas'] .frame-storm .avatar-frame-particle {
@@ -2151,90 +1960,888 @@ label,
     left: 55%;
     transform: rotate(190deg);
 }
+/* Each bolt peaks 2s apart; the glow brightens with it. */
 @keyframes avatar-frame-strike {
     0%,
-    33.4%,
-    66.7%,
+    22%,
+    55%,
+    88%,
     100% {
-        opacity: 1;
-    }
-    5%,
-    33.3%,
-    38%,
-    66.6%,
-    71%,
-    99.9% {
         opacity: 0.5;
+    }
+    6%,
+    39%,
+    72% {
+        opacity: 1;
     }
 }
 @keyframes avatar-frame-bolt {
-    0% {
-        opacity: 1;
-    }
-    5% {
+    0%,
+    30%,
+    100% {
         opacity: 0;
     }
-    8% {
+    6% {
         opacity: 1;
     }
-    14%,
+    12% {
+        opacity: 0.35;
+    }
+    17% {
+        opacity: 0.8;
+    }
+}
+
+/* Tide: water sloshes slowly inside the frame while bubbles rise to the surface. */
+.frame-tide {
+    --frame-width: calc(var(--frame-out) * 0.8);
+}
+.frame-tide .avatar-frame-ring {
+    background: #0b2a4a70;
+}
+:root[data-theme='canvas'] .frame-tide .avatar-frame-ring {
+    background: #0b2a4a26;
+}
+.frame-tide .avatar-frame-ring::before,
+.frame-tide .avatar-frame-ring::after {
+    inset: auto;
+    left: -45%;
+    width: 190%;
+    height: 190%;
+    border-radius: 36%;
+    background: linear-gradient(#63ccff, #1f6fd1 40%);
+    animation:
+        avatar-frame-spin 12s linear infinite var(--frame-play, paused),
+        avatar-frame-slosh 5.5s ease-in-out infinite alternate var(--frame-play, paused);
+}
+.frame-tide .avatar-frame-ring::before {
+    top: 46%;
+}
+.frame-tide .avatar-frame-ring::after {
+    content: '';
+    position: absolute;
+    top: 42%;
+    border-radius: 33%;
+    background: #a6e6ff;
+    opacity: 0.4;
+    animation-duration: 17s, 7s;
+    animation-direction: reverse, alternate;
+}
+.frame-tide .avatar-frame-particle {
+    top: 78%;
+    left: calc(var(--frame-width) * 0.15);
+    width: calc(var(--frame-width) * 0.7);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #ffffff, #bfeaff 55%, #bfeaff00 72%);
+    opacity: 0;
+    animation: avatar-frame-bubble 4.8s ease-in calc(var(--particle) * -2.6s) infinite
+        var(--frame-play, paused);
+}
+.frame-tide .avatar-frame-particle:nth-child(4) {
+    left: auto;
+    right: calc(var(--frame-width) * 0.15);
+    animation-duration: 6.4s;
+}
+@keyframes avatar-frame-slosh {
+    from {
+        translate: 0 -4%;
+    }
+    to {
+        translate: 0 4%;
+    }
+}
+@keyframes avatar-frame-bubble {
+    0% {
+        opacity: 0;
+        transform: translateY(0);
+    }
+    20% {
+        opacity: 0.9;
+    }
     100% {
+        opacity: 0;
+        transform: translateY(calc(var(--frame-out) * -3.6));
+    }
+}
+
+/* Lanterns: warm paper lanterns drift up past the avatar on a slow evening breeze. */
+.frame-lanterns {
+    --frame-sweep: linear-gradient(#ffc27a88, #ff8a3d4d);
+}
+.frame-lanterns .avatar-frame-glow {
+    box-shadow: 0 0 9px 1px #ff9a4a3a;
+    animation: avatar-frame-breathe 6s ease-in-out infinite var(--frame-play, paused);
+}
+.frame-lanterns .avatar-frame-particle {
+    top: 80%;
+    width: calc(var(--frame-out) * 1.1);
+    height: calc(var(--frame-out) * 1.4);
+    border-radius: 35% 35% 42% 42%;
+    background: radial-gradient(ellipse at 50% 62%, #fff4c8, #ffb347 55%, #e0612a);
+    box-shadow: 0 0 calc(var(--frame-out) * 1.2) calc(var(--frame-out) * 0.25) #ff9a3c99;
+    opacity: 0;
+    animation: avatar-frame-lantern calc(8s + var(--particle) * 1.3s) ease-in-out
+        calc(var(--particle) * -2.7s) infinite var(--frame-play, paused);
+}
+.frame-lanterns .avatar-frame-particle:nth-child(3) {
+    left: calc(var(--frame-out) * -1.4);
+}
+.frame-lanterns .avatar-frame-particle:nth-child(4) {
+    right: calc(var(--frame-out) * -1.3);
+}
+.frame-lanterns .avatar-frame-particle:nth-child(5) {
+    top: 92%;
+    left: calc(var(--frame-out) * -0.4);
+}
+.frame-lanterns .avatar-frame-particle:nth-child(6) {
+    top: 90%;
+    right: calc(var(--frame-out) * -0.5);
+}
+@keyframes avatar-frame-lantern {
+    0% {
+        opacity: 0;
+        transform: translate(0, 0) rotate(-6deg);
+    }
+    15% {
+        opacity: 1;
+    }
+    50% {
+        transform: translate(calc(var(--frame-out) * 0.5), calc(var(--frame-out) * -6)) rotate(5deg);
+    }
+    82% {
+        opacity: 0.9;
+    }
+    100% {
+        opacity: 0;
+        transform: translate(calc(var(--frame-out) * -0.3), calc(var(--frame-out) * -12))
+            rotate(-4deg);
+    }
+}
+
+/* Breath: a soft ring slowly inhales and exhales, drifting from teal to lavender. */
+.frame-breath {
+    --frame-sweep: conic-gradient(from 200deg, #7ef0d6, #8fb8ff, #c6a8ff, #8fb8ff, #7ef0d6);
+}
+.frame-breath .avatar-frame-ring {
+    animation: avatar-frame-inhale 7s ease-in-out infinite var(--frame-play, paused);
+}
+.frame-breath .avatar-frame-glow {
+    box-shadow:
+        0 0 10px 2px #9fc4ff55,
+        0 0 22px 4px #c6a8ff22;
+    animation: avatar-frame-inhale-glow 7s ease-in-out infinite var(--frame-play, paused);
+}
+@keyframes avatar-frame-inhale {
+    0%,
+    100% {
+        transform: scale(0.97);
+        filter: hue-rotate(0deg);
+    }
+    45% {
+        transform: scale(1.04);
+        filter: hue-rotate(40deg);
+    }
+}
+@keyframes avatar-frame-inhale-glow {
+    0%,
+    100% {
+        opacity: 0.3;
+        transform: scale(0.96);
+    }
+    45% {
+        opacity: 1;
+        transform: scale(1.08);
+    }
+}
+
+/* Stardust: three layers of tiny stars turn at different speeds and twinkle softly. */
+.frame-stardust {
+    --frame-sweep: linear-gradient(#c9d6ff30, #c9d6ff30);
+    --star: #f4f6ff;
+    --star-glow: #cfd9ff;
+}
+:root[data-theme='canvas'] .frame-stardust {
+    --frame-sweep: linear-gradient(#3d4a8a30, #3d4a8a30);
+    --star: #34407e;
+    --star-glow: #5161b8;
+}
+.frame-stardust .avatar-frame-glow,
+.frame-stardust .avatar-frame-particle {
+    inset: 0;
+    clip-path: var(--frame-hole);
+}
+.frame-stardust .avatar-frame-glow::before,
+.frame-stardust .avatar-frame-particle::before {
+    content: '';
+    position: absolute;
+    inset: -22%;
+}
+.frame-stardust .avatar-frame-glow::before {
+    background:
+        radial-gradient(circle at 95.2% 50%, var(--star) 0 0.7px, transparent 1.4px),
+        radial-gradient(circle at 78.8% 75%, var(--star) 0 0.7px, transparent 1.4px),
+        radial-gradient(circle at 52.6% 91.2%, var(--star) 0 0.7px, transparent 1.4px),
+        radial-gradient(circle at 36.8% 91.5%, var(--star) 0 0.7px, transparent 1.4px),
+        radial-gradient(circle at 13.2% 69.1%, var(--star) 0 0.7px, transparent 1.4px),
+        radial-gradient(circle at 7.7% 47.6%, var(--star) 0 0.7px, transparent 1.4px),
+        radial-gradient(circle at 20.5% 25.4%, var(--star) 0 0.7px, transparent 1.4px),
+        radial-gradient(circle at 28.3% 12.8%, var(--star) 0 0.7px, transparent 1.4px),
+        radial-gradient(circle at 57.5% 14.2%, var(--star) 0 0.7px, transparent 1.4px),
+        radial-gradient(circle at 78.3% 20.8%, var(--star) 0 0.7px, transparent 1.4px);
+    animation:
+        avatar-frame-spin 48s linear infinite var(--frame-play, paused),
+        avatar-frame-breathe 5s ease-in-out infinite var(--frame-play, paused);
+}
+.frame-stardust .avatar-frame-particle:nth-child(3)::before {
+    background:
+        radial-gradient(circle at 91.6% 52.6%, var(--star) 0 0.5px, transparent 1.2px),
+        radial-gradient(circle at 67.6% 90.3%, var(--star) 0 0.5px, transparent 1.2px),
+        radial-gradient(circle at 43.8% 92%, var(--star) 0 0.5px, transparent 1.2px),
+        radial-gradient(circle at 11.1% 76.1%, var(--star) 0 0.5px, transparent 1.2px),
+        radial-gradient(circle at 11.2% 56.4%, var(--star) 0 0.5px, transparent 1.2px),
+        radial-gradient(circle at 21.7% 22.7%, var(--star) 0 0.5px, transparent 1.2px),
+        radial-gradient(circle at 33.2% 15%, var(--star) 0 0.5px, transparent 1.2px),
+        radial-gradient(circle at 64.7% 14.1%, var(--star) 0 0.5px, transparent 1.2px),
+        radial-gradient(circle at 91.1% 40.4%, var(--star) 0 0.5px, transparent 1.2px);
+    animation:
+        avatar-frame-spin 80s linear infinite reverse var(--frame-play, paused),
+        avatar-frame-breathe 7s ease-in-out -2s infinite var(--frame-play, paused);
+}
+.frame-stardust .avatar-frame-particle:nth-child(4)::before {
+    background:
+        radial-gradient(circle at 90.3% 65.4%, var(--star-glow) 0 1.1px, transparent 1.8px),
+        radial-gradient(circle at 68.5% 84.3%, var(--star-glow) 0 1.1px, transparent 1.8px),
+        radial-gradient(circle at 20.8% 78.1%, var(--star-glow) 0 1.1px, transparent 1.8px),
+        radial-gradient(circle at 12.5% 42%, var(--star-glow) 0 1.1px, transparent 1.8px),
+        radial-gradient(circle at 47.4% 12.7%, var(--star-glow) 0 1.1px, transparent 1.8px),
+        radial-gradient(circle at 75.6% 20%, var(--star-glow) 0 1.1px, transparent 1.8px);
+    animation:
+        avatar-frame-spin 120s linear infinite var(--frame-play, paused),
+        avatar-frame-breathe 9s ease-in-out -5s infinite var(--frame-play, paused);
+}
+
+/* Bubbles: soap bubbles rise past the avatar, wobbling, each with an iridescent rim. */
+.frame-bubbles {
+    --frame-speed: 18s;
+    --frame-sweep: conic-gradient(#ffc8e8aa, #c8f3ffaa, #e3d1ffaa, #d1ffe6aa, #ffc8e8aa);
+    --rim: radial-gradient(
+        circle closest-side,
+        transparent 0 70%,
+        #ffd6f2aa 79%,
+        #c6f1ffcc 87%,
+        #e6dcff99 94%,
+        transparent 100%
+    );
+}
+:root[data-theme='canvas'] .frame-bubbles {
+    --frame-sweep: conic-gradient(#e08fc4aa, #5fb8e0aa, #9b8ae0aa, #5fc79aaa, #e08fc4aa);
+    --rim: radial-gradient(
+        circle closest-side,
+        transparent 0 70%,
+        #e08fc4bb 79%,
+        #5fb8e0dd 87%,
+        #9b8ae0bb 94%,
+        transparent 100%
+    );
+}
+.frame-bubbles .avatar-frame-glow {
+    box-shadow: 0 0 9px 1px #d6e8ff33;
+}
+.frame-bubbles .avatar-frame-particle {
+    --size: calc(var(--frame-out) * 1.6);
+    top: 84%;
+    width: var(--size);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: radial-gradient(circle at 32% 30%, #ffffffee 0 12%, transparent 24%), var(--rim);
+    opacity: 0;
+    animation:
+        avatar-frame-rise calc(7s + var(--particle) * 1.4s) ease-in-out
+            calc(var(--particle) * -2.3s) infinite var(--frame-play, paused),
+        avatar-frame-wobble 2.2s ease-in-out calc(var(--particle) * -0.8s) infinite alternate
+            var(--frame-play, paused);
+}
+.frame-bubbles .avatar-frame-particle:nth-child(3) {
+    left: calc(var(--frame-out) * -1.6);
+}
+.frame-bubbles .avatar-frame-particle:nth-child(4) {
+    --size: calc(var(--frame-out) * 2.1);
+    right: calc(var(--frame-out) * -1.5);
+}
+.frame-bubbles .avatar-frame-particle:nth-child(5) {
+    --size: calc(var(--frame-out) * 1.1);
+    top: 95%;
+    left: calc(var(--frame-out) * -0.3);
+}
+.frame-bubbles .avatar-frame-particle:nth-child(6) {
+    --size: calc(var(--frame-out) * 1.3);
+    top: 92%;
+    right: calc(var(--frame-out) * -0.2);
+}
+@keyframes avatar-frame-rise {
+    0% {
+        opacity: 0;
+        transform: translateY(0);
+    }
+    15% {
+        opacity: 1;
+    }
+    85% {
+        opacity: 0.9;
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(calc(var(--frame-out) * -13));
+    }
+}
+@keyframes avatar-frame-wobble {
+    from {
+        translate: calc(var(--frame-out) * -0.35) 0;
+        scale: 1.04 0.96;
+    }
+    to {
+        translate: calc(var(--frame-out) * 0.35) 0;
+        scale: 0.96 1.04;
+    }
+}
+
+/* Wisps: two pale spirit lights circle the avatar, trailing soft light behind them. */
+.frame-wisps {
+    --frame-sweep: linear-gradient(#7fffe024, #7fffe024);
+    --wisp: #c6fff3;
+    --wisp-glow: #3fe0c0;
+}
+:root[data-theme='canvas'] .frame-wisps {
+    --frame-sweep: linear-gradient(#12866f24, #12866f24);
+    --wisp: #2bc4a6;
+    --wisp-glow: #0f8a72;
+}
+.frame-wisps .avatar-frame-particle {
+    --start: calc(var(--particle) * 180deg);
+    inset: calc(var(--frame-out) * -0.9);
+    transform: rotate(var(--start));
+    animation: avatar-frame-orbit 11s linear infinite var(--frame-play, paused);
+}
+.frame-wisps .avatar-frame-particle:nth-child(4) {
+    inset: calc(var(--frame-out) * -0.3);
+    animation-duration: 15s;
+}
+/* The trail is a fading arc on a soft round band, so it follows its light. */
+.frame-wisps .avatar-frame-particle::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: conic-gradient(
+        from 230deg,
+        transparent,
+        color-mix(in srgb, var(--wisp-glow) 70%, transparent) 125deg,
+        transparent 130deg
+    );
+    mask: radial-gradient(closest-side, transparent 84%, #000 90%, #000 94%, transparent 99%);
+}
+.frame-wisps .avatar-frame-particle::after {
+    --size: calc(var(--frame-width) + 2.5px);
+    content: '';
+    position: absolute;
+    top: calc(4% - var(--size) / 2);
+    left: calc(50% - var(--size) / 2);
+    width: var(--size);
+    height: var(--size);
+    border-radius: 50%;
+    background: radial-gradient(circle, #ffffff, var(--wisp) 45%, transparent 72%);
+    box-shadow: 0 0 6px 2px color-mix(in srgb, var(--wisp-glow) 60%, transparent);
+    animation: avatar-frame-breathe 2.8s ease-in-out calc(var(--particle) * -1.1s) infinite
+        var(--frame-play, paused);
+}
+
+/* Dandelion: seeds float across the top on a slow breeze, turning as they go. */
+.frame-dandelion {
+    --frame-sweep: linear-gradient(135deg, #ece7d2, #b9c79a 60%, #8fa376);
+    --seed: #ffffff;
+}
+:root[data-theme='canvas'] .frame-dandelion {
+    --frame-sweep: linear-gradient(135deg, #c9c0a0, #8fa376 60%, #66784f);
+    --seed: #8a8168;
+}
+.frame-dandelion .avatar-frame-particle {
+    inset: 0;
+    clip-path: var(--frame-hole);
+}
+.frame-dandelion .avatar-frame-particle::before {
+    --size: calc(var(--frame-out) * 1.8);
+    content: '';
+    position: absolute;
+    top: var(--y);
+    left: calc(var(--size) * -1.1);
+    width: var(--size);
+    height: var(--size);
+    background:
+        radial-gradient(circle, #d8cfb0 0 11%, transparent 14%),
+        repeating-conic-gradient(var(--seed) 0 5deg, transparent 5deg 22deg);
+    mask: radial-gradient(circle closest-side, #000 0 50%, transparent 100%);
+    opacity: 0;
+    animation: avatar-frame-seed calc(10s + var(--particle) * 2.5s) ease-in-out
+        calc(var(--particle) * -4s) infinite var(--frame-play, paused);
+}
+.frame-dandelion .avatar-frame-particle:nth-child(3)::before {
+    --y: calc(var(--frame-out) * 1.5);
+}
+.frame-dandelion .avatar-frame-particle:nth-child(4)::before {
+    --y: calc(var(--frame-out) * 3.5);
+}
+.frame-dandelion .avatar-frame-particle:nth-child(5)::before {
+    --y: calc(var(--frame-out) * 0.2);
+}
+@keyframes avatar-frame-seed {
+    0% {
+        opacity: 0;
+        transform: translate(0, 0) rotate(0deg);
+    }
+    12% {
+        opacity: 0.95;
+    }
+    50% {
+        transform: translate(calc(var(--frame-out) * 7), calc(var(--frame-out) * -3.2))
+            rotate(140deg);
+    }
+    85% {
+        opacity: 0.9;
+    }
+    100% {
+        opacity: 0;
+        transform: translate(calc(var(--frame-out) * 14), calc(var(--frame-out) * -1.2))
+            rotate(260deg);
+    }
+}
+
+/* Smoke: soft campfire smoke curls up from the top of the frame and thins away. */
+.frame-smoke {
+    --frame-sweep: linear-gradient(#8a7f74, #4f4741 55%, #c26a2e);
+    --smoke: #d8d2ca;
+}
+:root[data-theme='canvas'] .frame-smoke {
+    --smoke: #6f665c;
+}
+.frame-smoke .avatar-frame-glow {
+    box-shadow: 0 4px 10px -2px #ff8a3d40;
+}
+.frame-smoke .avatar-frame-particle {
+    --size: calc(var(--frame-out) * 2);
+    top: calc(var(--size) * -0.3);
+    left: calc(30% + var(--particle) * 13%);
+    width: var(--size);
+    aspect-ratio: 1;
+    margin-left: calc(var(--size) / -2);
+    border-radius: 50%;
+    background: radial-gradient(
+        circle closest-side,
+        color-mix(in srgb, var(--smoke) 55%, transparent),
+        transparent
+    );
+    filter: blur(1.5px);
+    opacity: 0;
+    animation: avatar-frame-smoke calc(6.5s + var(--particle) * 0.9s) ease-out
+        calc(var(--particle) * -1.8s) infinite var(--frame-play, paused);
+}
+@keyframes avatar-frame-smoke {
+    0% {
+        opacity: 0;
+        transform: translate(0, 0) scale(0.5);
+    }
+    20% {
+        opacity: 0.9;
+    }
+    55% {
+        transform: translate(calc(var(--frame-out) * 0.9), calc(var(--frame-out) * -2.6)) scale(1.1);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(calc(var(--frame-out) * -0.6), calc(var(--frame-out) * -5.5))
+            scale(1.9);
+    }
+}
+
+/* Magma: molten veins churn slowly through a dark crust while heat swells up and settles. */
+.frame-magma {
+    --frame-speed: 22s;
+    --frame-width: calc(var(--frame-out) * 0.8);
+    --frame-sweep: conic-gradient(
+        #2a0d06,
+        #ff7a1a 8%,
+        #2a0d06 16%,
+        #4a1408 30%,
+        #ffb02e 38%,
+        #3a1007 46%,
+        #2a0d06 60%,
+        #ff5a1f 70%,
+        #2a0d06 80%,
+        #ffcf5a 88%,
+        #2a0d06
+    );
+}
+.frame-magma .avatar-frame-ring::after {
+    content: '';
+    position: absolute;
+    inset: -50%;
+    background: conic-gradient(
+        from 60deg,
+        transparent,
+        #ff8a2a99 10%,
+        transparent 22%,
+        transparent 45%,
+        #ffd05a88 55%,
+        transparent 66%
+    );
+    animation: avatar-frame-spin 31s linear infinite reverse var(--frame-play, paused);
+}
+.frame-magma .avatar-frame-glow {
+    box-shadow: 0 0 9px 2px #ff6a1a55;
+    animation: avatar-frame-breathe 5s ease-in-out infinite var(--frame-play, paused);
+}
+.frame-magma .avatar-frame-particle {
+    inset: 0;
+}
+.frame-magma .avatar-frame-particle:nth-child(3) {
+    transform: rotate(12deg);
+}
+.frame-magma .avatar-frame-particle:nth-child(4) {
+    transform: rotate(172deg);
+}
+.frame-magma .avatar-frame-particle:nth-child(5) {
+    transform: rotate(264deg);
+}
+.frame-magma .avatar-frame-particle::before {
+    --size: calc(var(--frame-width) + 2px);
+    content: '';
+    position: absolute;
+    top: calc((var(--frame-width) - var(--size)) / 2);
+    left: calc(50% - var(--size) / 2);
+    width: var(--size);
+    height: var(--size);
+    border-radius: 50%;
+    background: radial-gradient(circle, #fff3c0, #ffb02e 50%, #ff5a1f00 75%);
+    opacity: 0;
+    animation: avatar-frame-swell calc(3.6s + var(--particle) * 0.8s) ease-in-out
+        calc(var(--particle) * -1.4s) infinite var(--frame-play, paused);
+}
+@keyframes avatar-frame-swell {
+    0%,
+    100% {
+        opacity: 0;
+        transform: scale(0.3);
+    }
+    45% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    70% {
+        opacity: 0;
+        transform: scale(1.5);
+    }
+}
+
+/* Autumn: a few leaves drift down past the avatar, rocking as they fall. */
+.frame-autumn {
+    --frame-speed: 16s;
+    --frame-sweep: conic-gradient(#9a3b12, #e07a2a, #f2b441, #c4521c, #7a2e10, #e07a2a, #9a3b12);
+}
+.frame-autumn .avatar-frame-glow {
+    box-shadow: 0 0 8px 1px #e07a2a33;
+}
+.frame-autumn .avatar-frame-particle {
+    inset: 0;
+    clip-path: var(--frame-hole);
+}
+.frame-autumn .avatar-frame-particle::before {
+    --size: calc(var(--frame-out) * 1.5);
+    content: '';
+    position: absolute;
+    top: calc(var(--size) * -1.6);
+    left: var(--x);
+    width: var(--size);
+    height: var(--size);
+    border-radius: 0 100% 0 100%;
+    background: linear-gradient(135deg, var(--leaf-light), var(--leaf));
+    opacity: 0;
+    animation:
+        avatar-frame-leaf-fall calc(8s + var(--particle) * 1.7s) linear
+            calc(var(--particle) * -2.6s) infinite var(--frame-play, paused),
+        avatar-frame-leaf-swing 2.4s ease-in-out calc(var(--particle) * -0.7s) infinite alternate
+            var(--frame-play, paused);
+}
+.frame-autumn .avatar-frame-particle:nth-child(3)::before {
+    --x: -6%;
+    --leaf: #d9541c;
+    --leaf-light: #f6a04a;
+}
+.frame-autumn .avatar-frame-particle:nth-child(4)::before {
+    --x: 92%;
+    --leaf: #e8a020;
+    --leaf-light: #ffd36a;
+}
+.frame-autumn .avatar-frame-particle:nth-child(5)::before {
+    --x: 8%;
+    --leaf: #b8341a;
+    --leaf-light: #ef7a3a;
+}
+.frame-autumn .avatar-frame-particle:nth-child(6)::before {
+    --x: 80%;
+    --leaf: #c96a1c;
+    --leaf-light: #f2b441;
+}
+@keyframes avatar-frame-leaf-fall {
+    0% {
+        opacity: 0;
+        translate: 0 0;
+    }
+    12%,
+    85% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+        translate: 0 calc(var(--frame-out) * 15);
+    }
+}
+@keyframes avatar-frame-leaf-swing {
+    from {
+        transform: translateX(calc(var(--frame-out) * -0.8)) rotate(-35deg);
+    }
+    to {
+        transform: translateX(calc(var(--frame-out) * 0.8)) rotate(30deg);
+    }
+}
+
+/* Meteors: now and then a meteor glides past behind the avatar against a night rim. */
+.frame-meteors {
+    --frame-sweep: conic-gradient(#1c2350, #34407e 30%, #1c2350 55%, #283166 80%, #1c2350);
+    --meteor: #e6eeff;
+}
+:root[data-theme='canvas'] .frame-meteors {
+    --meteor: #34407e;
+}
+.frame-meteors .avatar-frame-glow {
+    box-shadow: 0 0 8px 1px #8fa6ff26;
+}
+.frame-meteors .avatar-frame-particle {
+    inset: 0;
+    clip-path: var(--frame-hole);
+}
+.frame-meteors .avatar-frame-particle::before {
+    content: '';
+    position: absolute;
+    top: var(--y);
+    left: 40%;
+    width: calc(var(--frame-out) * 4);
+    height: 1.5px;
+    border-radius: 2px;
+    background: linear-gradient(
+        90deg,
+        var(--meteor),
+        color-mix(in srgb, var(--meteor) 40%, transparent) 30%,
+        transparent
+    );
+    rotate: -32deg;
+    opacity: 0;
+    animation: avatar-frame-meteor calc(6s + var(--particle) * 1.8s) ease-in
+        calc(var(--particle) * -2.4s) infinite var(--frame-play, paused);
+}
+.frame-meteors .avatar-frame-particle:nth-child(3)::before {
+    --y: -10%;
+}
+.frame-meteors .avatar-frame-particle:nth-child(4)::before {
+    --y: 20%;
+}
+.frame-meteors .avatar-frame-particle:nth-child(5)::before {
+    --y: 55%;
+}
+@keyframes avatar-frame-meteor {
+    0% {
+        opacity: 0;
+        translate: calc(var(--frame-out) * 5) calc(var(--frame-out) * -3);
+    }
+    4% {
+        opacity: 1;
+    }
+    16%,
+    100% {
+        opacity: 0;
+        translate: calc(var(--frame-out) * -6) calc(var(--frame-out) * 4);
+    }
+}
+
+/* Honey: golden honey slowly gathers into drops along the bottom and lets them fall. */
+.frame-honey {
+    --frame-speed: 18s;
+    --frame-width: calc(var(--frame-out) * 0.8);
+    --frame-sweep: conic-gradient(
+        from 20deg,
+        #b86b0a,
+        #ffc94a,
+        #ffe9a8,
+        #e8a21c,
+        #b86b0a,
+        #ffc94a,
+        #e8a21c,
+        #b86b0a
+    );
+}
+.frame-honey .avatar-frame-glow {
+    box-shadow: 0 2px 8px 1px #ffb32a40;
+}
+.frame-honey .avatar-frame-particle {
+    top: calc(100% - var(--frame-width) * 0.6);
+    left: calc(28% + var(--particle) * 22%);
+    width: calc(var(--frame-width) * 1.1);
+    height: calc(var(--frame-out) * 1.6);
+    margin-left: calc(var(--frame-width) * -0.55);
+    border-radius: 45% 45% 50% 50% / 30% 30% 70% 70%;
+    background: linear-gradient(#e8a21c, #ffc94a 60%, #ffe9a8);
+    transform-origin: 50% 0;
+    transform: scaleY(0.2);
+    animation: avatar-frame-drip calc(5.5s + var(--particle) * 1.3s) cubic-bezier(0.5, 0, 0.5, 1)
+        calc(var(--particle) * -2.1s) infinite var(--frame-play, paused);
+}
+@keyframes avatar-frame-drip {
+    0% {
+        transform: translateY(0) scaleY(0.15);
+        opacity: 1;
+    }
+    55% {
+        transform: translateY(0) scaleY(1);
+        opacity: 1;
+    }
+    62% {
+        transform: translateY(0) scaleY(1.15);
+    }
+    80% {
+        transform: translateY(calc(var(--frame-out) * 1.8)) scaleY(0.8);
+        opacity: 0.9;
+    }
+    92%,
+    100% {
+        transform: translateY(calc(var(--frame-out) * 2.6)) scaleY(0.6);
         opacity: 0;
     }
 }
 
-/* Vortex: a fast counter-spinning swirl that pulls particles into the avatar. */
-.frame-vortex {
-    --frame-speed: 1.3s;
+/* Static frames: crafted rims with no motion at all. */
+.frame-gold {
     --frame-sweep: conic-gradient(
-        #ffa3f0,
-        #d61fb4 12%,
-        #5b0fd6 30%,
-        #14002e 48%,
-        #ffa3f0 50%,
-        #d61fb4 62%,
-        #5b0fd6 80%,
-        #14002e 98%,
-        #ffa3f0
+        from 35deg,
+        #7a4e0e,
+        #e9c46a,
+        #fff4c9,
+        #c99a3a,
+        #6b4310,
+        #d9ae52,
+        #fff0bd,
+        #b8862c,
+        #7a4e0e
     );
 }
-.frame-vortex .avatar-frame-ring::before {
-    animation-direction: reverse;
+.frame-gold .avatar-frame-glow {
+    box-shadow:
+        0 0 0 1px #5c3b0a66,
+        0 0 6px #f5c45a33;
 }
-.frame-vortex .avatar-frame-glow {
-    box-shadow: 0 0 10px 2px #9b30ff88;
-    animation: avatar-frame-breathe 1.3s ease-in-out infinite var(--frame-play, paused);
+.frame-silver {
+    --frame-sweep: conic-gradient(
+        from 35deg,
+        #5f656b,
+        #d9dee2,
+        #ffffff,
+        #a3abb2,
+        #50565c,
+        #c6cdd2,
+        #f4f7f9,
+        #8f979e,
+        #5f656b
+    );
 }
-.frame-vortex .avatar-frame-particle {
-    --start: calc(var(--particle) * 90deg);
-    inset: calc(var(--frame-out) * -1.6);
-    transform: rotate(var(--start)) scale(0.85);
-    animation: avatar-frame-spiral 1.6s ease-in calc(var(--particle) * -0.4s) infinite
-        var(--frame-play, paused);
+.frame-silver .avatar-frame-glow {
+    box-shadow: 0 0 0 1px #3a3f4466;
 }
-.frame-vortex .avatar-frame-particle::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: calc(50% - var(--frame-width) / 2 - 0.5px);
-    width: calc(var(--frame-width) + 1px);
-    aspect-ratio: 1;
-    border-radius: 50%;
-    background: #ffd6fa;
-    box-shadow: 0 0 4px 1px #e040fb;
+.frame-rosegold {
+    --frame-sweep: conic-gradient(
+        from 35deg,
+        #8a4b45,
+        #e9a99a,
+        #ffe3d9,
+        #c98576,
+        #7a3f3a,
+        #dc9a8b,
+        #ffd9cc,
+        #b8746a,
+        #8a4b45
+    );
 }
-@keyframes avatar-frame-spiral {
-    0% {
-        opacity: 0;
-        transform: rotate(var(--start)) scale(1);
-    }
-    20% {
-        opacity: 1;
-    }
-    100% {
-        opacity: 0;
-        transform: rotate(calc(var(--start) - 1.25turn)) scale(0.62);
-    }
+.frame-rosegold .avatar-frame-glow {
+    box-shadow: 0 0 0 1px #6b343066;
+}
+.frame-obsidian {
+    --frame-sweep: conic-gradient(
+        from 300deg,
+        #0b0b0e,
+        #24242c 18%,
+        #7a7a8a 24%,
+        #24242c 30%,
+        #0b0b0e 55%,
+        #1a1a20 75%,
+        #4a4a58 82%,
+        #0b0b0e
+    );
+}
+.frame-obsidian .avatar-frame-glow {
+    box-shadow: 0 0 0 1px #ffffff1f;
+}
+.frame-pearl {
+    --frame-sweep: conic-gradient(
+        from 20deg,
+        #fbf3ec,
+        #efe2f6,
+        #e0f2f5,
+        #fff8e6,
+        #f4e3ec,
+        #e6eefa,
+        #fbf3ec
+    );
+}
+.frame-pearl .avatar-frame-glow {
+    box-shadow:
+        0 0 0 1px #c9bfc955,
+        0 0 6px 1px #ffffff26;
+}
+.frame-jade {
+    --frame-sweep:
+        radial-gradient(circle at 30% 25%, #b5f0cc 0 6%, transparent 18%),
+        radial-gradient(circle at 72% 70%, #1f6b45 0 8%, transparent 22%),
+        radial-gradient(circle at 60% 30%, #2c8a5a 0 5%, transparent 15%),
+        radial-gradient(circle at 25% 75%, #8fdcae 0 7%, transparent 20%),
+        linear-gradient(135deg, #3fa36e, #7fd4a0 45%, #2a7a50);
+}
+.frame-jade .avatar-frame-glow {
+    box-shadow: 0 0 0 1px #1f5c3d55;
+}
+.frame-sunset {
+    --frame-sweep: linear-gradient(160deg, #ffd27a, #ff8a5c 38%, #e0507a 68%, #6b4fa0);
+}
+.frame-sunset .avatar-frame-glow {
+    box-shadow: 0 0 8px 1px #ff8a5c26;
+}
+.frame-spectrum {
+    --frame-sweep: conic-gradient(
+        #ff5e5e,
+        #ffb35e,
+        #ffe95e,
+        #5eff8e,
+        #5ec8ff,
+        #8a5eff,
+        #ff5ed1,
+        #ff5e5e
+    );
 }
 
 .frame-options {
@@ -2242,18 +2849,32 @@ label,
     padding: 0;
     margin: 12px 0 24px;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
+    gap: 18px;
 }
 .frame-options legend {
     margin-bottom: 10px;
     padding: 0;
     font-weight: 700;
 }
+.frame-group h4 {
+    margin: 0 0 8px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+.frame-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 12px;
+}
+/* Rising pieces such as lanterns and smoke stay inside their own tile. */
 .frame-options .frame-choice {
     position: relative;
+    overflow: hidden;
     margin: 0;
-    padding: 20px 10px 12px;
+    padding: 22px 10px 12px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -2285,9 +2906,4 @@ label,
     position: absolute;
     opacity: 0;
     pointer-events: none;
-}
-@media (max-width: 1100px) {
-    .frame-options {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
 }

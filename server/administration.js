@@ -570,9 +570,12 @@ export function registerAdministration({
         '/api/settings',
         route((req, res) => {
             requirePermission(req.user, 'server.edit');
-            const { name, icon, reactionAuthors } = req.body;
+            const { name, icon, reactionAuthors, profileFrames } = req.body;
             check(
-                name !== undefined || icon !== undefined || reactionAuthors !== undefined,
+                name !== undefined ||
+                    icon !== undefined ||
+                    reactionAuthors !== undefined ||
+                    profileFrames !== undefined,
                 'No settings provided',
             );
             if (name !== undefined)
@@ -582,6 +585,8 @@ export function registerAdministration({
                 );
             if (reactionAuthors !== undefined)
                 check(typeof reactionAuthors === 'boolean', 'Invalid reaction setting');
+            if (profileFrames !== undefined)
+                check(typeof profileFrames === 'boolean', 'Invalid profile frame setting');
             let image;
             if (icon !== undefined && icon !== null) {
                 try {
@@ -600,6 +605,7 @@ export function registerAdministration({
                 if (name !== undefined) save('name', name.trim());
                 if (icon !== undefined) save('icon', image || '');
                 if (reactionAuthors !== undefined) save('reactionAuthors', String(reactionAuthors));
+                if (profileFrames !== undefined) save('profileFrames', String(profileFrames));
             });
             publishChannels();
             res.json({ ok: true });

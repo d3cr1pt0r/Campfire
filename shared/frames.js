@@ -1,15 +1,31 @@
-// Animated profile picture frames; everyone sees the frame a member picks.
+// Profile picture frames; everyone sees the frame a member picks. The last eight are static.
 export const avatarFrames = [
     'ember',
     'fireflies',
     'aurora',
-    'heartbeat',
     'gilded',
     'frost',
-    'neon',
-    'glitch',
     'storm',
-    'vortex',
+    'tide',
+    'lanterns',
+    'breath',
+    'stardust',
+    'bubbles',
+    'wisps',
+    'dandelion',
+    'smoke',
+    'magma',
+    'autumn',
+    'meteors',
+    'honey',
+    'gold',
+    'silver',
+    'rosegold',
+    'obsidian',
+    'pearl',
+    'jade',
+    'sunset',
+    'spectrum',
 ];
 
 export function isAvatarFrame(value) {

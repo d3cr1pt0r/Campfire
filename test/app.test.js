@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createApp } from '../test-support/open-server.js';
+import { avatarFrames } from '../shared/frames.js';
 
 // Run the real Express middleware/routes without a listening socket. Socket.IO
 // transport/NAT are covered separately by the existing live integration suite.
@@ -95,20 +96,44 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
             await api(alice, '/profile', 'PATCH', { frame }, 400);
         await api(alice, '/profile', 'PATCH', {}, 400);
         await api(null, '/profile', 'PATCH', { frame: 'aurora' }, 401);
-        // A frame retired from the list must not reach clients.
-        service.db
-            .prepare('UPDATE profiles SET frame=? WHERE user=?')
-            .run('retired', alice.user.id);
+        // Neon was retired from the list; a stored choice of it must not reach clients.
+        service.db.prepare('UPDATE profiles SET frame=? WHERE user=?').run('neon', alice.user.id);
         assert.equal(
             (await api(bob, '/state')).data.users.find((u) => u.id === alice.user.id).frame,
             null,
         );
-        for (const frame of ['heartbeat', 'gilded', 'frost', 'neon', 'glitch', 'storm', 'vortex'])
+        for (const frame of avatarFrames)
             assert.equal((await api(alice, '/profile', 'PATCH', { frame })).data.user.frame, frame);
         const removed = await api(alice, '/profile', 'PATCH', { frame: null });
         assert.equal(removed.data.user.frame, null);
         assert.equal((await api(bob, '/state')).data.me.frame, null);
     });
+    await t.test(
+        'server settings can turn profile frames off for everyone and back on',
+        async () => {
+            const aliceFrame = () =>
+                api(bob, '/state').then(
+                    (r) => r.data.users.find((u) => u.id === alice.user.id).frame,
+                );
+            assert.equal((await api(bob, '/state')).data.profileFrames, true);
+            await api(alice, '/profile', 'PATCH', { frame: 'ember' });
+            await api(bob, '/settings', 'PATCH', { profileFrames: false }, 403);
+            await api(alice, '/settings', 'PATCH', { profileFrames: 'off' }, 400);
+            await api(alice, '/settings', 'PATCH', { profileFrames: false });
+            assert.equal((await api(bob, '/state')).data.profileFrames, false);
+            assert.equal(await aliceFrame(), null);
+            // Choosing a frame is refused and leaves the rest of the request unapplied.
+            await api(alice, '/profile', 'PATCH', { nickname: 'Changed', frame: 'gilded' }, 403);
+            assert.equal((await api(alice, '/state')).data.me.nickname, 'Alice Display');
+            await api(alice, '/settings', 'PATCH', { profileFrames: true });
+            assert.equal(await aliceFrame(), 'ember');
+            // Clearing still works while frames are off.
+            await api(alice, '/settings', 'PATCH', { profileFrames: false });
+            await api(alice, '/profile', 'PATCH', { frame: null });
+            await api(alice, '/settings', 'PATCH', { profileFrames: true });
+            assert.equal(await aliceFrame(), null);
+        },
+    );
     await t.test(
         'avatars are authenticated, bounded, replaceable and visible in state',
         async () => {

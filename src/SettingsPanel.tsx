@@ -19,6 +19,47 @@ import { displayName } from './profiles';
 import { MicrophoneMeter } from './MicrophoneMeter';
 import { openMicrophone, formatMicrophoneError } from './media';
 import { Toggle } from './forms';
+import type { AvatarFrame } from '../shared/frames.js';
+// None leads the static frames so "no frame" stays the first choice.
+const frameGroups: [string, [AvatarFrame | null, string][]][] = [
+    [
+        'Static',
+        [
+            [null, 'None'],
+            ['gold', 'Gold'],
+            ['silver', 'Silver'],
+            ['rosegold', 'Rose gold'],
+            ['obsidian', 'Obsidian'],
+            ['pearl', 'Pearl'],
+            ['jade', 'Jade'],
+            ['sunset', 'Sunset'],
+            ['spectrum', 'Spectrum'],
+        ],
+    ],
+    [
+        'Animated',
+        [
+            ['ember', 'Ember'],
+            ['fireflies', 'Fireflies'],
+            ['aurora', 'Aurora'],
+            ['gilded', 'Gilded'],
+            ['frost', 'Frost'],
+            ['storm', 'Storm'],
+            ['tide', 'Tide'],
+            ['lanterns', 'Lanterns'],
+            ['breath', 'Breath'],
+            ['stardust', 'Stardust'],
+            ['bubbles', 'Bubbles'],
+            ['wisps', 'Wisps'],
+            ['dandelion', 'Dandelion'],
+            ['smoke', 'Smoke'],
+            ['magma', 'Magma'],
+            ['autumn', 'Autumn'],
+            ['meteors', 'Meteors'],
+            ['honey', 'Honey'],
+        ],
+    ],
+];
 export function SettingsPanel({
     state,
     prefs,
@@ -350,45 +391,52 @@ export function SettingsPanel({
                                 Remove profile picture
                             </button>
                         )}
-                        <fieldset className="frame-options">
-                            <legend>Profile frame</legend>
-                            {(
-                                [
-                                    [null, 'None'],
-                                    ['ember', 'Ember'],
-                                    ['fireflies', 'Fireflies'],
-                                    ['aurora', 'Aurora'],
-                                    ['heartbeat', 'Heartbeat'],
-                                    ['gilded', 'Gilded'],
-                                    ['frost', 'Frost'],
-                                    ['neon', 'Neon'],
-                                    ['glitch', 'Glitch'],
-                                    ['storm', 'Storm'],
-                                    ['vortex', 'Vortex'],
-                                ] as const
-                            ).map(([frame, title]) => (
-                                <label className="frame-choice" key={title}>
-                                    <Avatar user={state.me} color={color(state.me)} frame={frame} />
-                                    <strong>{title}</strong>
-                                    <input
-                                        type="radio"
-                                        name="frame"
-                                        checked={(state.me.frame ?? null) === frame}
-                                        disabled={busy}
-                                        onChange={() =>
-                                            void act(async () => {
-                                                await api('/profile', 'PATCH', { frame });
-                                                await refresh();
-                                            })
-                                        }
-                                    />
-                                </label>
-                            ))}
-                        </fieldset>
-                        <p className="muted">
-                            Everyone sees your frame. In chat and member lists it animates when
-                            someone hovers over you.
-                        </p>
+                        {state.profileFrames === false ? (
+                            <p className="muted">Profile frames are turned off on this server.</p>
+                        ) : (
+                            <>
+                                <fieldset className="frame-options">
+                                    <legend>Profile frame</legend>
+                                    {frameGroups.map(([group, frames]) => (
+                                        <div className="frame-group" key={group}>
+                                            <h4>{group}</h4>
+                                            <div className="frame-grid">
+                                                {frames.map(([frame, title]) => (
+                                                    <label className="frame-choice" key={title}>
+                                                        <Avatar
+                                                            user={state.me}
+                                                            color={color(state.me)}
+                                                            frame={frame}
+                                                        />
+                                                        <strong>{title}</strong>
+                                                        <input
+                                                            type="radio"
+                                                            name="frame"
+                                                            checked={
+                                                                (state.me.frame ?? null) === frame
+                                                            }
+                                                            disabled={busy}
+                                                            onChange={() =>
+                                                                void act(async () => {
+                                                                    await api('/profile', 'PATCH', {
+                                                                        frame,
+                                                                    });
+                                                                    await refresh();
+                                                                })
+                                                            }
+                                                        />
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </fieldset>
+                                <p className="muted">
+                                    Everyone sees your frame. In chat and member lists animated
+                                    frames move when someone hovers over you.
+                                </p>
+                            </>
+                        )}
                         <form
                             onSubmit={(event) => {
                                 event.preventDefault();
@@ -936,6 +984,7 @@ export function SettingsPanel({
                                         </button>
                                     </>
                                 )}
+                                <h3>Features</h3>
                                 <Toggle
                                     title="Show who reacted to messages"
                                     value={state.reactionAuthors !== false}
@@ -952,6 +1001,23 @@ export function SettingsPanel({
                                     Show who reacted in a popup on hover or keyboard focus. Each
                                     text channel can also disable names in Channels. This controls
                                     display for everyone on this server.
+                                </p>
+                                <Toggle
+                                    title="Profile frames"
+                                    value={state.profileFrames !== false}
+                                    set={(value) =>
+                                        void act(async () => {
+                                            await api('/settings', 'PATCH', {
+                                                profileFrames: value,
+                                            });
+                                            await refresh();
+                                        })
+                                    }
+                                />
+                                <p className="muted">
+                                    Let members decorate their profile picture with a frame. Turn
+                                    this off for a more formal server. Members keep their choice,
+                                    and it returns if you turn frames back on.
                                 </p>
                             </>
                         )}

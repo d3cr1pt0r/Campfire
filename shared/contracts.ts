@@ -47,6 +47,7 @@ export type State = {
     name: string;
     icon?: string | null;
     reactionAuthors?: boolean;
+    profileFrames?: boolean;
     removedUsers?: User[];
     users: User[];
     roles: Role[];
