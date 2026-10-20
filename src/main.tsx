@@ -1988,7 +1988,6 @@ function App() {
                             {members && !thread && (
                                 <MemberList
                                     state={state}
-                                    room={room}
                                     color={color}
                                     dm={dm}
                                     startCall={startDirectCall}

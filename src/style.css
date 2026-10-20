@@ -3910,9 +3910,6 @@ body.stream-popout-body {
     width: auto;
     padding-right: 4px;
 }
-.member-row .member[aria-current='page'] {
-    background: var(--soft-accent);
-}
 .member-row .member-call {
     flex: 0 0 28px;
     width: 28px;

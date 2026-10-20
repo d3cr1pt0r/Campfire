@@ -1,7 +1,6 @@
 import { Fragment } from 'react';
 import { Phone, Shield, X } from 'lucide-react';
 import { hasPermission } from '../shared/permissions.js';
-import { canonicalRoom } from '../shared/rooms.js';
 import { Avatar } from './Avatar';
 import { PresenceDot } from './PresenceDot';
 import { displayName } from './profiles';
@@ -10,7 +9,6 @@ import type { State, User } from './types';
 
 export function MemberList({
     state,
-    room,
     color,
     dm,
     startCall,
@@ -20,7 +18,6 @@ export function MemberList({
     onSettings,
 }: {
     state: State;
-    room: string;
     color: (user?: User) => string | undefined;
     dm: (id: string) => void;
     startCall: (id: string) => Promise<unknown>;
@@ -46,7 +43,6 @@ export function MemberList({
                         </div>
                         {group.map((user) => {
                             const self = user.id === state.me.id;
-                            const destination = canonicalRoom(`dm:${state.me.id}:${user.id}`);
                             const name = displayName(user);
                             const unavailable = busy
                                 ? 'Please wait'
@@ -64,9 +60,6 @@ export function MemberList({
                                 <div className="member-row" key={user.id}>
                                     <button
                                         className="member"
-                                        aria-current={
-                                            !self && room === destination ? 'page' : undefined
-                                        }
                                         aria-label={self ? 'Open your settings' : `Message ${name}`}
                                         title={`@${user.username}`}
                                         onClick={() => (self ? onSettings() : dm(user.id))}
