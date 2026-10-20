@@ -4,8 +4,8 @@ import { check, route, createRateLimit } from './policies.js';
 import { transaction } from './database.js';
 const checkPassword = (password) =>
     check(
-        typeof password === 'string' && password.length >= 10 && password.length <= 128,
-        'Password must contain 10–128 characters',
+        typeof password === 'string' && password.length >= 8 && password.length <= 128,
+        'Password must contain 8–128 characters',
     );
 export function registerAccounts({
     app,
@@ -16,6 +16,8 @@ export function registerAccounts({
     publicUser,
     sessionLifetimeMs,
     registration,
+    requirePermission,
+    highest,
 }) {
     const limit = createRateLimit();
     app.get('/api/info', (_req, res) =>
@@ -29,7 +31,7 @@ export function registerAccounts({
     app.post(
         '/api/auth/:action',
         route(async (req, res) => {
-            check(['login', 'register'].includes(req.params.action), 'Unknown action');
+            check(['login', 'register', 'reset'].includes(req.params.action), 'Unknown action');
             limit(req.ip || req.socket.remoteAddress);
             const { username, password } = req.body;
             check(
@@ -64,6 +66,31 @@ export function registerAccounts({
                     if (role === 'member') registration.authorize(req.body, true, id);
                 });
                 u = get('SELECT * FROM users WHERE id=?', id);
+            } else if (req.params.action === 'reset') {
+                const code = req.body.resetToken;
+                const invalid = 'Invalid or expired password reset token';
+                check(typeof code === 'string' && /^[a-f0-9]{64}$/.test(code), invalid, 401);
+                const hash = tokenHash(code);
+                const validReset = () =>
+                    get(
+                        `SELECT u.* FROM password_resets r JOIN users u ON u.id=r.user
+                     WHERE u.username=? AND u.banned=0 AND r.tokenHash=? AND r.expires>?`,
+                        username,
+                        hash,
+                        Date.now(),
+                    );
+                check(validReset(), invalid, 401);
+                const passwordHash = await createPassword(password);
+                transaction(db, () => {
+                    // Recheck after hashing so concurrent redemption can only succeed once.
+                    u = validReset();
+                    check(u, invalid, 401);
+                    run('UPDATE users SET password=? WHERE id=?', passwordHash, u.id);
+                    run('DELETE FROM password_resets WHERE user=?', u.id);
+                    run('DELETE FROM sessions WHERE user=?', u.id);
+                });
+                for (const socket of io.sockets.sockets.values())
+                    if (socket.data.user?.id === u.id) socket.disconnect(true);
             } else {
                 // Use a dummy hash when the user is absent to avoid a cheap username timing oracle.
                 const valid = await verifyPassword(password, u?.password);
@@ -79,12 +106,39 @@ export function registerAccounts({
                 Date.now() + sessionLifetimeMs,
             );
             io.emit('refresh');
-            res.json({ token, user: publicUser(u) });
+            res.set('Cache-Control', 'no-store').json({ token, user: publicUser(u) });
         }),
     );
     const passwordLimit = createRateLimit({ maximum: 5 });
     // Mounted after authentication by createApp.
-    const mount = () =>
+    const generationLimit = createRateLimit({ maximum: 5 });
+    const mount = () => {
+        app.post(
+            '/api/users/:id/password-reset',
+            route((req, res) => {
+                requirePermission(req.user, 'members.resetPassword');
+                const target = get('SELECT * FROM users WHERE id=? AND banned=0', req.params.id);
+                check(
+                    target &&
+                        !target.owner &&
+                        target.id !== req.user.id &&
+                        highest(req.user) > highest(target),
+                    'You can only reset passwords for lower members',
+                    403,
+                );
+                generationLimit(req.user.id);
+                const token = randomBytes(32).toString('hex');
+                const expires = Date.now() + 60 * 60 * 1000;
+                run('DELETE FROM password_resets WHERE expires<=?', Date.now());
+                run(
+                    'INSERT OR REPLACE INTO password_resets(user,tokenHash,expires) VALUES(?,?,?)',
+                    target.id,
+                    tokenHash(token),
+                    expires,
+                );
+                res.set('Cache-Control', 'no-store').json({ token, expires });
+            }),
+        );
         app.post(
             '/api/account/password',
             route(async (req, res) => {
@@ -109,6 +163,7 @@ export function registerAccounts({
                         401,
                     );
                     run('UPDATE users SET password=? WHERE id=?', passwordHash, req.user.id);
+                    run('DELETE FROM password_resets WHERE user=?', req.user.id);
                     // Other devices may hold a session captured with the old password.
                     run(
                         'DELETE FROM sessions WHERE user=? AND token<>?',
@@ -122,5 +177,6 @@ export function registerAccounts({
                 res.json({ ok: true });
             }),
         );
+    };
     return { mount };
 }

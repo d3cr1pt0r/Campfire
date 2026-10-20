@@ -528,6 +528,7 @@ export function registerAdministration({
             transaction(db, () => {
                 run('UPDATE users SET banned=? WHERE id=?', Number(!req.body.enabled), target.id);
                 run('DELETE FROM sessions WHERE user=?', target.id);
+                run('DELETE FROM password_resets WHERE user=?', target.id);
             });
             for (const socket of io.sockets.sockets.values())
                 if (socket.data.user.id === target.id) socket.disconnect(true);

@@ -69,6 +69,11 @@ export function SettingsPanel({
     const [serverIconFile, setServerIconFile] = useState<File | null>(null);
     const [avatarFile, setAvatarFile] = useState<File | null>(null);
     const [removeUser, setRemoveUser] = useState<string | null>(null);
+    const [passwordReset, setPasswordReset] = useState<{
+        user: string;
+        token: string;
+        expires: number;
+    } | null>(null);
     const [deleteEmoji, setDeleteEmoji] = useState<string | null>(null);
     // The fingerprint this desktop app verified; links built from it protect new members.
     const [pin, setPin] = useState<string | null>(null);
@@ -385,10 +390,10 @@ export function SettingsPanel({
                                     name="password"
                                     type="password"
                                     autoComplete="new-password"
-                                    minLength={10}
+                                    minLength={8}
                                     maxLength={128}
                                     required
-                                    placeholder="At least 10 characters"
+                                    placeholder="At least 8 characters"
                                 />
                             </label>
                             <label>
@@ -397,7 +402,7 @@ export function SettingsPanel({
                                     name="confirm"
                                     type="password"
                                     autoComplete="new-password"
-                                    minLength={10}
+                                    minLength={8}
                                     maxLength={128}
                                     required
                                 />
@@ -929,9 +934,46 @@ export function SettingsPanel({
                                 canManage={permission('invitations.manage')}
                             />
                         )}
-                        {(permission('members.ban') || permission('members.restore')) && (
+                        {(permission('members.ban') ||
+                            permission('members.restore') ||
+                            permission('members.resetPassword')) && (
                             <section className="server-members">
                                 <h3>Manage members</h3>
+                                {passwordReset && (
+                                    <div className="password-reset-result" role="status">
+                                        <strong>
+                                            Password reset token for {passwordReset.user}
+                                        </strong>
+                                        <input
+                                            aria-label="Generated password reset token"
+                                            readOnly
+                                            value={passwordReset.token}
+                                            onFocus={(event) => event.target.select()}
+                                        />
+                                        <p className="field-help">
+                                            Share this token privately with the member. It works
+                                            once and expires at{' '}
+                                            {new Date(passwordReset.expires).toLocaleTimeString()}.
+                                            Generating another token replaces it.
+                                        </p>
+                                        <button
+                                            disabled={busy}
+                                            onClick={() =>
+                                                void act(async () => {
+                                                    await navigator.clipboard.writeText(
+                                                        passwordReset.token,
+                                                    );
+                                                    notify('Password reset token copied.');
+                                                })
+                                            }
+                                        >
+                                            Copy token
+                                        </button>
+                                        <button onClick={() => setPasswordReset(null)}>
+                                            Dismiss
+                                        </button>
+                                    </div>
+                                )}
                                 {state.users
                                     .filter(
                                         (u) =>
@@ -943,6 +985,28 @@ export function SettingsPanel({
                                     .map((u) => (
                                         <div key={u.id} className="server-member-row">
                                             <span>{displayName(u)}</span>
+                                            {permission('members.resetPassword') && (
+                                                <button
+                                                    disabled={busy}
+                                                    onClick={() =>
+                                                        void act(async () => {
+                                                            const result = await api<{
+                                                                token: string;
+                                                                expires: number;
+                                                            }>(
+                                                                `/users/${u.id}/password-reset`,
+                                                                'POST',
+                                                            );
+                                                            setPasswordReset({
+                                                                user: u.username,
+                                                                ...result,
+                                                            });
+                                                        })
+                                                    }
+                                                >
+                                                    Generate password reset token
+                                                </button>
+                                            )}
                                             {removeUser !== u.id ? (
                                                 <button
                                                     className="danger-text"

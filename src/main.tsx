@@ -167,6 +167,7 @@ function App() {
     const [authUrl, setAuthUrl] = useState(
         invitationFromLink || setupFromLink ? window.location.origin : initial.url,
     );
+    const [resetPassword, setResetPassword] = useState(false);
     const [inviteCode, setInviteCode] = useState(invitationFromLink);
     const [setupCode, setSetupCode] = useState(setupFromLink);
     // Fingerprint carried by a pasted link, kept while the address field shows its origin.
@@ -697,11 +698,14 @@ function App() {
             let data: { token: string };
             try {
                 data = await createApiClient(link.origin, '').json<{ token: string }>(
-                    `/auth/${register ? 'register' : 'login'}`,
+                    `/auth/${resetPassword ? 'reset' : register ? 'register' : 'login'}`,
                     'POST',
                     {
                         username: f.get('username'),
                         password: f.get('password'),
+                        ...(resetPassword
+                            ? { resetToken: String(f.get('resetToken')).trim() }
+                            : {}),
                         ...(register
                             ? {
                                   inviteCode: (link.invite ?? inviteCode).trim(),
@@ -956,18 +960,22 @@ function App() {
                             ? 'Check this server.'
                             : token
                               ? 'Connecting to your server…'
-                              : register
-                                ? 'Good conversations start here.'
-                                : 'Welcome back.'}
+                              : resetPassword
+                                ? 'Reset your password.'
+                                : register
+                                  ? 'Good conversations start here.'
+                                  : 'Welcome back.'}
                     </h2>
                     <p className="muted">
                         {trustPrompt
                             ? 'Campfire remembers each server’s identity so nobody can impersonate it.'
                             : token
                               ? 'Waiting for your server to respond.'
-                              : register
-                                ? 'Create an account on your community’s server.'
-                                : 'Your people are just a sign-in away.'}
+                              : resetPassword
+                                ? 'Ask an authorized server member for a password reset token.'
+                                : register
+                                  ? 'Create an account on your community’s server.'
+                                  : 'Your people are just a sign-in away.'}
                     </p>
                     {trustPrompt ? (
                         trustPrompt.kind === 'confirm' ? (
@@ -1148,16 +1156,32 @@ function App() {
                                     later.
                                 </p>
                             )}
+                            {resetPassword && (
+                                <label>
+                                    Reset token
+                                    <input
+                                        name="resetToken"
+                                        required
+                                        autoComplete="off"
+                                        maxLength={64}
+                                        spellCheck={false}
+                                    />
+                                </label>
+                            )}
                             <label>
-                                Password
+                                {resetPassword ? 'New password' : 'Password'}
                                 <input
                                     name="password"
                                     type="password"
-                                    autoComplete={register ? 'new-password' : 'current-password'}
-                                    minLength={10}
+                                    autoComplete={
+                                        register || resetPassword
+                                            ? 'new-password'
+                                            : 'current-password'
+                                    }
+                                    minLength={8}
                                     maxLength={128}
                                     required
-                                    placeholder="At least 10 characters"
+                                    placeholder="At least 8 characters"
                                 />
                             </label>
                             {register && serverInfo?.setupRequired && (
@@ -1207,13 +1231,34 @@ function App() {
                                 className="primary"
                                 disabled={busy || httpBusy || (!!httpTarget && !httpApproved)}
                             >
-                                {busy ? 'Just a moment…' : register ? 'Create account' : 'Sign in'}
+                                {busy
+                                    ? 'Just a moment…'
+                                    : resetPassword
+                                      ? 'Reset password & sign in'
+                                      : register
+                                        ? 'Create account'
+                                        : 'Sign in'}
                                 <ArrowRight size={18} />
                             </button>
+                            {!register && !resetPassword && (
+                                <p className="auth-switch">
+                                    <button type="button" onClick={() => setResetPassword(true)}>
+                                        Reset password
+                                    </button>
+                                </p>
+                            )}
                             <p className="auth-switch">
-                                {register ? 'Already have an account?' : 'New around here?'}{' '}
-                                <button type="button" onClick={() => setRegister(!register)}>
-                                    {register ? 'Sign in' : 'Create account'}
+                                {register || resetPassword
+                                    ? 'Already have an account?'
+                                    : 'New around here?'}{' '}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setResetPassword(false);
+                                        setRegister(resetPassword ? false : !register);
+                                    }}
+                                >
+                                    {register || resetPassword ? 'Sign in' : 'Create account'}
                                 </button>
                             </p>
                         </form>

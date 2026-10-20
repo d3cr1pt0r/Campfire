@@ -218,6 +218,12 @@ export function migrate(db, through = Infinity) {
                 BEGIN SELECT RAISE(ABORT,'Default roles cannot be deleted'); END;
                 DELETE FROM roles WHERE id='member';`);
         },
+        () => {
+            db.exec(`CREATE TABLE password_resets(
+                user TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                tokenHash TEXT UNIQUE NOT NULL, expires INTEGER NOT NULL
+            );`);
+        },
     ];
     migrations.forEach((apply, index) => {
         const version = index + 1;
