@@ -3709,6 +3709,14 @@ h2,
     height: 28px;
     padding: 0;
     color: var(--muted);
+    opacity: 0;
+    pointer-events: none;
+}
+.direct-message-row:hover .direct-message-pin,
+.direct-message-row:has(:focus-visible) .direct-message-pin,
+.direct-message-pin[aria-pressed='true'] {
+    opacity: 1;
+    pointer-events: auto;
 }
 .direct-message-pin[aria-pressed='true'] {
     color: var(--accent);

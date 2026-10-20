@@ -155,6 +155,47 @@ body {
     font-size: 10px;
     padding-top: 26px;
 }
+.sidebar-content > .category {
+    padding-top: 12px;
+    padding-bottom: 4px;
+}
+.sidebar-content > .category button {
+    min-width: 28px;
+    min-height: 28px;
+}
+.sidebar-content .nav-item {
+    min-height: 34px;
+    padding: 5px 8px;
+    margin: 1px 0;
+    gap: 8px;
+    border-radius: 7px;
+}
+.sidebar-content .direct-message {
+    padding-block: 4px;
+}
+.sidebar-content .direct-message .avatar-status {
+    display: flex;
+}
+.sidebar-content .direct-message .avatar {
+    width: 26px;
+    height: 26px;
+}
+.sidebar-content .direct-messages-empty {
+    margin: 4px 8px 2px;
+}
+.sidebar-content .voice-member {
+    padding: 3px 8px 3px 34px;
+    gap: 7px;
+}
+@media (hover: none) {
+    .sidebar-content .nav-item,
+    .sidebar-content > .category button {
+        min-height: 44px;
+    }
+    .sidebar-content > .category button {
+        min-width: 44px;
+    }
+}
 .user-bar {
     background: #1e201c;
     color: #e9ddca;
