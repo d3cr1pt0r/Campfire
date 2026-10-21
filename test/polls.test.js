@@ -42,7 +42,7 @@ const post = (f, account, body, status) =>
 const vote = (f, account, message, answers, status) =>
     f.api(account, `/messages/${message.id}/vote`, 'POST', { answers }, status);
 const history = async (f, account, message) =>
-    (await f.api(account, '/messages?room=general')).find((m) => m.id === message.id);
+    (await f.api(account, '/messages?room=general')).messages.find((m) => m.id === message.id);
 
 test('polls validate their question, answers, length and options', async (t) => {
     const f = await roleFixture(t);

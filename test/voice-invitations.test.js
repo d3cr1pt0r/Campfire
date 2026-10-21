@@ -46,8 +46,10 @@ async function fixture(t) {
 test('voice invitations are persisted DM messages with searchable text, normal actions and no duplicates', async (t) => {
     const f = await fixture(t),
         { api, owner, member, other } = f;
+    const requestId = randomUUID();
     const sent = await api(owner, '/voice-channels/lounge/invite', 'POST', {
         user: member.user.id,
+        requestId,
     });
     const room = `dm:${[owner.user.id, member.user.id].sort().join(':')}`;
     assert.equal(sent.room, room);
@@ -56,9 +58,13 @@ test('voice invitations are persisted DM messages with searchable text, normal a
     assert.match(sent.body, /lounge/);
     const repeat = await api(owner, '/voice-channels/lounge/invite', 'POST', {
         user: member.user.id,
+        requestId,
     });
     assert.equal(repeat.id, sent.id);
-    assert.equal((await api(member, `/messages?room=${encodeURIComponent(room)}`)).length, 1);
+    assert.equal(
+        (await api(member, `/messages?room=${encodeURIComponent(room)}`)).messages.length,
+        1,
+    );
     assert.deepEqual((await api(member, `/messages/${sent.id}`)).voiceInvite, sent.voiceInvite);
     await api(other, `/messages/${sent.id}`, 'GET', undefined, 404);
     const candidates = await api(owner, '/voice-channels/lounge/invitees');
@@ -69,7 +75,8 @@ test('voice invitations are persisted DM messages with searchable text, normal a
     await api(member, `/messages/${sent.id}/reaction`, 'POST', { emoji: '👍' });
     await api(owner, `/messages/${sent.id}`, 'PATCH', { pinned: true });
     await f.restart();
-    const history = await api(member, `/messages?room=${encodeURIComponent(room)}&search=lounge`);
+    const history = (await api(member, `/messages?room=${encodeURIComponent(room)}&search=lounge`))
+        .messages;
     assert.equal(history.length, 1);
     assert.deepEqual(history[0].voiceInvite, sent.voiceInvite);
     assert.equal(history[0].pinned, 1);
@@ -90,7 +97,13 @@ test('invite lists and sends enforce each target channel permission without gran
         private: true,
     });
     assert.deepEqual((await api(owner, `/voice-channels/${channel.id}/invitees`)).users, []);
-    await api(owner, `/voice-channels/${channel.id}/invite`, 'POST', { user: member.user.id }, 403);
+    await api(
+        owner,
+        `/voice-channels/${channel.id}/invite`,
+        'POST',
+        { user: member.user.id, requestId: randomUUID() },
+        403,
+    );
     await api(member, `/voice-channels/${channel.id}/invitees`, 'GET', undefined, 403);
     const role = await api(owner, '/roles', 'POST', {
         name: 'Channel member',
@@ -106,19 +119,56 @@ test('invite lists and sends enforce each target channel permission without gran
     ]);
     const invite = await api(owner, `/voice-channels/${channel.id}/invite`, 'POST', {
         user: member.user.id,
+        requestId: randomUUID(),
     });
     assert.equal(invite.voiceInvite.channel, channel.id);
-    await api(other, `/voice-channels/${channel.id}/invite`, 'POST', { user: member.user.id }, 403);
-    await api(owner, '/voice-channels/general/invite', 'POST', { user: member.user.id }, 403);
-    await api(owner, '/voice-channels/lounge/invite', 'POST', { user: owner.user.id }, 403);
-    await api(owner, '/voice-channels/lounge/invite', 'POST', { user: 'missing' }, 403);
-    await api(owner, '/voice-channels/lounge/invite', 'POST', { user: 42 }, 400);
+    await api(
+        other,
+        `/voice-channels/${channel.id}/invite`,
+        'POST',
+        { user: member.user.id, requestId: randomUUID() },
+        403,
+    );
+    await api(
+        owner,
+        '/voice-channels/general/invite',
+        'POST',
+        { user: member.user.id, requestId: randomUUID() },
+        403,
+    );
+    await api(
+        owner,
+        '/voice-channels/lounge/invite',
+        'POST',
+        { user: owner.user.id, requestId: randomUUID() },
+        403,
+    );
+    await api(
+        owner,
+        '/voice-channels/lounge/invite',
+        'POST',
+        { user: 'missing', requestId: randomUUID() },
+        403,
+    );
+    await api(
+        owner,
+        '/voice-channels/lounge/invite',
+        'POST',
+        { user: 42, requestId: randomUUID() },
+        400,
+    );
     await api(owner, '/roles/everyone', 'PATCH', {
         name: 'Default',
         color: null,
         permissions: ['channels.view', 'calls.join'],
     });
-    await api(other, '/voice-channels/lounge/invite', 'POST', { user: member.user.id }, 403);
+    await api(
+        other,
+        '/voice-channels/lounge/invite',
+        'POST',
+        { user: member.user.id, requestId: randomUUID() },
+        403,
+    );
     await api(owner, `/channels/${channel.id}`, 'DELETE');
     assert.equal((await api(member, `/messages/${invite.id}`)).voiceInvite.name, 'Restricted');
     await api(owner, `/voice-channels/${channel.id}/invitees`, 'GET', undefined, 403);
@@ -142,7 +192,10 @@ test('new invitation actions can resend immediately while retries remain idempot
     });
     assert.notEqual(second.id, first.id);
     const room = `dm:${[owner.user.id, member.user.id].sort().join(':')}`;
-    assert.equal((await api(member, `/messages?room=${encodeURIComponent(room)}`)).length, 2);
+    assert.equal(
+        (await api(member, `/messages?room=${encodeURIComponent(room)}`)).messages.length,
+        2,
+    );
     await api(
         owner,
         '/voice-channels/lounge/invite',
@@ -164,4 +217,5 @@ test('new invitation actions can resend immediately while retries remain idempot
         { user: member.user.id, requestId: 'invalid' },
         400,
     );
+    await api(owner, '/voice-channels/lounge/invite', 'POST', { user: member.user.id }, 400);
 });

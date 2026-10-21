@@ -209,7 +209,7 @@ export function MemberManagement({
                                             <strong>Delete account</strong>
                                             <p>
                                                 Permanently remove the account and credentials.
-                                                Existing messages remain as Former member.
+                                                Channel messages remain as Former member.
                                             </p>
                                         </div>
                                         <button
@@ -237,7 +237,7 @@ export function MemberManagement({
                                         </strong>
                                         <p>
                                             {pending === 'delete'
-                                                ? 'This cannot be undone. Sessions, recovery tokens, profile, avatar and reactions are removed. Messages, attachments and shared emojis remain. The username becomes available for a new account.'
+                                                ? 'This cannot be undone. Sessions, recovery tokens, profile, avatar and reactions are removed, and so are their direct messages and personal notes with their files. Channel messages, their attachments and shared emojis remain. The username becomes available for a new account.'
                                                 : 'All sessions will end. This member cannot sign in until their access is restored.'}
                                         </p>
                                         {pending === 'delete' && (

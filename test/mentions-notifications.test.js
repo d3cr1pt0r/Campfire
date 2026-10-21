@@ -80,7 +80,9 @@ test('default notification policy alerts only DMs and direct mentions and respec
 
 test('conversation opt-outs are scoped to the account, server and parent room including threads', () => {
     const server = 'https://chat.example';
-    const prefs = { channelNotifications: { [notificationKey(server, me.id, 'general')]: false } };
+    const prefs = {
+        channelNotifications: { [notificationKey(server, me.id, 'general')]: 'muted' },
+    };
     assert.equal(
         notificationKey(server + '/', 'me', 'general'),
         notificationKey(server, 'me', 'general'),
@@ -100,7 +102,7 @@ test('conversation opt-outs are scoped to the account, server and parent room in
     );
     assert.equal(shouldNotify(message('@Bob', { author: me.id }), bob, prefs, server, users), true);
     const dmPrefs = {
-        channelNotifications: { [notificationKey(server, me.id, 'dm:bob:me')]: false },
+        channelNotifications: { [notificationKey(server, me.id, 'dm:bob:me')]: 'muted' },
     };
     assert.equal(
         shouldNotify(message('hi', { room: 'dm:bob:me' }), me, dmPrefs, server, users),
@@ -108,10 +110,10 @@ test('conversation opt-outs are scoped to the account, server and parent room in
     );
 });
 
-test('channel modes preserve legacy settings and choose all, mentions, or muted', () => {
-    for (const value of [undefined, true, 'mentions', 'invalid'])
+test('channel modes choose all, mentions, or muted, with mentions for anything else', () => {
+    for (const value of [undefined, true, false, 'mentions', 'invalid'])
         assert.equal(channelNotificationMode(value), 'mentions');
-    for (const value of [false, 'muted']) assert.equal(channelNotificationMode(value), 'muted');
+    assert.equal(channelNotificationMode('muted'), 'muted');
     assert.equal(channelNotificationMode('all'), 'all');
     const server = 'https://chat.example';
     const key = notificationKey(server, me.id, 'general');
@@ -119,8 +121,6 @@ test('channel modes preserve legacy settings and choose all, mentions, or muted'
         ['all', true, true],
         ['mentions', false, true],
         ['muted', false, false],
-        [true, false, true],
-        [false, false, false],
     ]) {
         const prefs = { channelNotifications: { [key]: mode } };
         assert.equal(shouldNotify(message('ordinary'), me, prefs, server, users), ordinary);

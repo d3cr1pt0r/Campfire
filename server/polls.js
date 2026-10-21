@@ -163,6 +163,8 @@ export function registerPolls({
                 clearTimeout(timers.get(message.id));
                 timers.delete(message.id);
                 announce(message.id);
+                // The thread's first message carries when its polls end, which keeps the thread.
+                if (message.thread) announce(message.thread);
             }
             res.json({ ok: true });
         }),

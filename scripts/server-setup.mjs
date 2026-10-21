@@ -14,9 +14,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createApp } from '../server/app.js';
+import { isRetentionDays } from '../shared/retention.js';
 
 const format = 'campfire-server-setup';
-const serverFields = ['name', 'icon', 'reactionAuthors', 'profileFrames', 'maxUploadBytes'];
+const serverFields = [
+    'name',
+    'icon',
+    'reactionAuthors',
+    'profileFrames',
+    'maxUploadBytes',
+    'maxStoredUploadBytes',
+];
 
 function validateSnapshot(value) {
     if (
@@ -56,7 +64,32 @@ function validateSnapshot(value) {
         )
     )
         throw new Error('Snapshot contains unsupported server settings');
+    // Snapshots from databases without retention have none; they restore the defaults.
+    if (
+        value.retention !== undefined &&
+        (!isRetentionDays(value.retention?.server) ||
+            !isRetentionDays(value.retention.dm) ||
+            typeof value.retention.keepText !== 'boolean')
+    )
+        throw new Error('Snapshot contains invalid retention settings');
     return value;
+}
+
+// The retention the owner last chose. A pending change counts as made: a reset community has
+// no messages for its notice week to protect.
+function captureRetention(get) {
+    if (!get("SELECT 1 FROM sqlite_master WHERE type='table' AND name='retention_policies'"))
+        return undefined;
+    const period = (scope) => {
+        const policy = get('SELECT * FROM retention_policies WHERE scope=?', scope);
+        return policy.retentionAt === null ? policy.retention : policy.retentionNext;
+    };
+    const mode = get('SELECT keepText,keepTextUntil FROM retention_mode WHERE id=1');
+    return {
+        server: period('server'),
+        dm: period('dm'),
+        keepText: !!mode.keepText && mode.keepTextUntil === null,
+    };
 }
 
 export function captureSetup(dataDir, snapshotFile) {
@@ -65,6 +98,7 @@ export function captureSetup(dataDir, snapshotFile) {
     try {
         db.exec('BEGIN');
         const all = (sql, ...args) => db.prepare(sql).all(...args);
+        const get = (sql, ...args) => db.prepare(sql).get(...args);
         const server = {};
         for (const { key, value } of all('SELECT * FROM settings')) {
             if (![...serverFields, 'registrationMode', 'identity'].includes(key))
@@ -72,7 +106,8 @@ export function captureSetup(dataDir, snapshotFile) {
             if (['reactionAuthors', 'profileFrames'].includes(key)) {
                 if (!['true', 'false'].includes(value)) throw new Error(`Invalid ${key} setting`);
                 server[key] = value === 'true';
-            } else if (key === 'maxUploadBytes') server[key] = Number(value);
+            } else if (['maxUploadBytes', 'maxStoredUploadBytes'].includes(key))
+                server[key] = Number(value);
             else if (key === 'icon') server.icon = value || null;
             else server[key] = value;
         }
@@ -81,6 +116,7 @@ export function captureSetup(dataDir, snapshotFile) {
             version: 1,
             created: new Date().toISOString(),
             server,
+            retention: captureRetention(get),
             roles: all('SELECT * FROM roles ORDER BY position,id').map((role) => ({
                 key: role.id,
                 name: role.name,
@@ -155,6 +191,13 @@ export async function populateSetup(snapshot, api) {
     if (registrationMode !== undefined)
         await api('PATCH', '/registration', { mode: registrationMode });
     if (identity) await api('PUT', '/setup/identity', { fingerprint: identity });
+    if (snapshot.retention) {
+        const { server, dm, keepText } = snapshot.retention;
+        // Nothing is old enough to delete yet, so every change applies at once.
+        await api('PATCH', '/retention/keep-text', { keepText, applyNow: true });
+        await api('PATCH', '/retention/server', { retention: server, applyNow: true });
+        await api('PATCH', '/retention/dm', { retention: dm, applyNow: true });
+    }
     return { accounts, roles };
 }
 

@@ -1,8 +1,9 @@
 # Save and restore the server setup
 
 The setup snapshot keeps usernames and password hashes, ownership, bans, role
-assignments, role names/colors/order/permissions, server settings, nicknames,
-profile frames, and saved presence preferences. Appearance, audio, and notification
+assignments, role names/colors/order/permissions, server settings (including the
+attachment storage limit), message retention, nicknames, profile frames, and saved
+presence preferences. Appearance, audio, and notification
 preferences saved on clients remain on those clients.
 
 The current local setup is saved in `.private/server-setup.json`. Keep a private
@@ -32,9 +33,7 @@ shares the same account creation function used by ordinary registration.
 
 Account and custom role IDs are newly generated. Snapshot role keys only connect
 the saved assignments to their new roles. Role order is preserved, with positions
-normalized by the normal role API. The unused legacy `users.role` field is reset
-to its normal account default; authorization uses role assignments and ownership.
-The Owner role retains its name and color and receives every current permission,
+normalized by the normal role API. The Owner role retains its name and color and receives every current permission,
 matching ownership behavior. Retired permission names in its old row are omitted;
 unknown permissions on other roles cause the restore to fail.
 
@@ -47,7 +46,14 @@ to the original database makes the script refuse replacement.
 
 Messages, uploads, avatars, custom emojis, GIF favorites, sessions, invitations,
 and password-reset tokens are discarded. Custom channels and their permission
-overrides are discarded; the current server's default channels are created.
+overrides are discarded, as are channels' own retention periods; the current
+server's default channels are created.
+
+Retention keeps the channel default, the direct-message period and whether only
+files are removed, as the owner last chose them. A change still waiting out its
+notice week is restored as made, since the reset community has no messages yet.
+Snapshots taken from a database without retention restore the defaults: messages
+kept forever.
 Server icons stored in settings are preserved. Users sign in again with their
 existing usernames and passwords.
 

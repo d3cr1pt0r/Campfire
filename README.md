@@ -47,7 +47,7 @@ By default, connections use HTTPS, with no domain or certificate setup. On first
 
 Set `PUBLIC_ADDRESS` to your server's public IP or hostname so the printed links are ready to share. New communities start in **Invite only** mode; manage invitations and copy invite links under **Settings → Server settings**.
 
-Keep the server running for your community to stay connected. Your community's data is stored in `data/`, including the server's identity key in `data/identity/`. Back up the whole folder and keep it: without the identity key the server refuses to start, and creating a new identity means every desktop app refuses to connect until members get a new server link. Campfire doesn't encrypt stored messages and files, so use full-disk encryption and keep backups private.
+Keep the server running for your community to stay connected. Your community's data is stored in `data/`, including the server's identity key in `data/identity/`. Back up the whole folder and keep it: without the identity key the server refuses to start, and creating a new identity means every desktop app refuses to connect until members get a new server link. Campfire doesn't encrypt stored messages and files, so use full-disk encryption and keep backups private. Messages are kept forever by default; to keep the database small, choose how long channels and direct messages keep them (or only their files), and how much space attachments may use, under **Settings → Storage**. Pinned messages are always kept.
 
 Already have a domain certificate or an HTTPS reverse proxy? See [.env.example](.env.example) for `TLS_CERT_FILE`/`TLS_KEY_FILE`, proxy mode and call connectivity settings.
 
@@ -72,7 +72,7 @@ docker compose up --build -d
 
 The fingerprint, server link and owner setup link appear in `docker compose logs campfire`. Community data and the server's identity are kept in a persistent Docker volume; back it up.
 
-This version does not upgrade databases from earlier versions. For an existing installation, read [database upgrades](REWORK.md#configuration-and-database-upgrades) before starting it.
+This version does not open databases from earlier versions; start it with a new data directory. See [database upgrades](REWORK.md#configuration-and-database-upgrades).
 
 To rebuild a clean database while retaining accounts, passwords, roles, and server settings, see [save and restore the server setup](Docs/ServerSetupReset.md).
 

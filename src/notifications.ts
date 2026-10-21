@@ -6,7 +6,7 @@ import { rememberedDevice } from './devices.ts';
 import { audioLevel } from './audioPreferences.ts';
 import { playSound, sounds, type SoundName } from './sounds.ts';
 
-// Keyed by host so notification choices survive the http:// to https:// upgrade.
+// Keyed by host, so a server keeps its choices whichever scheme reaches it.
 const serverKey = (server: string) => {
     try {
         return new URL(server).host;
@@ -19,10 +19,9 @@ export function notificationKey(server: string, user: string, room: string) {
     return JSON.stringify([serverKey(server), user, room]);
 }
 
-// Keep old on/off preferences: on meant mentions, while off muted the conversation.
+// Anything unknown means mentions, the default.
 export function channelNotificationMode(value: unknown): ChannelNotificationMode {
-    if (value === false || value === 'muted') return 'muted';
-    return value === 'all' ? 'all' : 'mentions';
+    return value === 'all' || value === 'muted' ? value : 'mentions';
 }
 
 export function shouldNotify(

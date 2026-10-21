@@ -1,4 +1,4 @@
-import { request } from '../test-support/http.js';
+import { messageForm, request } from '../test-support/http.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
@@ -176,11 +176,11 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
         async () => {
             const room = `dm:${[alice.user.id, bob.user.id].sort().join(':')}`;
             for (const [name, data, mime] of [
-                ['photo.png', pixel, 'image/png'],
-                ['fun.gif', Buffer.from('GIF89a\x01\x00\x01\x00').toString('base64'), 'image/gif'],
+                ['photo.png', Buffer.from(pixel, 'base64'), 'image/png'],
+                ['fun.gif', Buffer.from('GIF89a\x01\x00\x01\x00', 'latin1'), 'image/gif'],
             ]) {
                 const msg = (
-                    await api(alice, '/messages', 'POST', { room, attachment: { name, data } })
+                    await api(alice, '/messages', 'POST', messageForm({ room }, [{ name, data }]))
                 ).data;
                 const id = msg.attachments[0].id;
                 assert.equal(msg.attachments[0].mime, mime);
@@ -194,13 +194,14 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
                 await api(eve, `/attachments/${id}?inline=1`, 'GET', undefined, 404);
             }
             const svg = (
-                await api(alice, '/messages', 'POST', {
-                    room,
-                    attachment: {
-                        name: 'attack.svg',
-                        data: Buffer.from('<svg onload="evil()"/>').toString('base64'),
-                    },
-                })
+                await api(
+                    alice,
+                    '/messages',
+                    'POST',
+                    messageForm({ room }, [
+                        { name: 'attack.svg', data: Buffer.from('<svg onload="evil()"/>') },
+                    ]),
+                )
             ).data;
             assert.equal(
                 (await api(bob, `/attachments/${svg.attachments[0].id}?inline=1`)).headers[
@@ -214,43 +215,52 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
         'multi-file messages validate count and total size before inserting anything',
         async () => {
             const files = [
-                { name: 'one.png', data: pixel },
-                { name: 'two.txt', data: Buffer.from('Hello').toString('base64') },
+                { name: 'one.png', data: Buffer.from(pixel, 'base64') },
+                { name: 'two.txt', data: Buffer.from('Hello') },
             ];
             const message = (
-                await api(alice, '/messages', 'POST', { room: 'general', attachments: files })
+                await api(alice, '/messages', 'POST', messageForm({ room: 'general' }, files))
             ).data;
             assert.equal(message.attachments.length, 2);
             assert.equal(message.attachments[0].mime, 'image/png');
-            const before = service.db.prepare('SELECT COUNT(*) n FROM messages').get().n;
-            await api(
-                alice,
-                '/messages',
-                'POST',
-                { room: 'general', attachments: Array.from({ length: 11 }, () => files[0]) },
-                400,
-            );
-            await api(alice, '/messages', 'POST', { room: 'general', attachments: [] }, 400);
-            await api(
-                alice,
-                '/messages',
-                'POST',
-                { room: 'general', attachments: [files[0], { name: 'invalid', data: 1 }] },
-                400,
-            );
-            const tooLarge = Buffer.alloc(Math.ceil(2.6 * 1024 * 1024)).toString('base64');
-            await api(
-                alice,
-                '/messages',
-                'POST',
+            // Files are stored as their raw bytes.
+            assert.deepEqual(
                 {
-                    room: 'general',
-                    attachments: [
-                        { name: 'one', data: tooLarge },
-                        { name: 'two', data: tooLarge },
-                    ],
+                    ...service.db
+                        .prepare(
+                            "SELECT typeof(data) type,length(data) bytes FROM attachments WHERE name='two.txt'",
+                        )
+                        .get(),
                 },
-                400,
+                { type: 'blob', bytes: 5 },
+            );
+            const before = service.db.prepare('SELECT COUNT(*) n FROM messages').get().n;
+            const post = (body) => api(alice, '/messages', 'POST', body, 400);
+            await post(
+                messageForm(
+                    { room: 'general' },
+                    Array.from({ length: 11 }, () => files[0]),
+                ),
+            );
+            // JSON carries text and polls only; old base64 attachments are refused clearly.
+            assert.match(
+                (await post({ room: 'general', attachments: [] })).data.error,
+                /multipart/,
+            );
+            await post({ room: 'general', attachment: { name: 'a', data: 'aGk=' } });
+            await post(messageForm({ room: 'general' }, [{ name: 'x'.repeat(201), data: 'hi' }]));
+            const stray = messageForm({ room: 'general', body: 'hi' });
+            stray.set('file', 'not a file');
+            await post(stray);
+            const poll = messageForm({ room: 'general', body: 'hi' });
+            poll.set('poll', '{}');
+            await post(poll);
+            const tooLarge = Buffer.alloc(Math.ceil(2.5 * 1024 * 1024) + 1);
+            await post(
+                messageForm({ room: 'general' }, [
+                    { name: 'one', data: tooLarge },
+                    { name: 'two', data: tooLarge },
+                ]),
             );
             assert.equal(service.db.prepare('SELECT COUNT(*) n FROM messages').get().n, before);
             await api(alice, `/messages/${message.id}`, 'DELETE');
@@ -269,12 +279,7 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
                 user,
                 '/messages',
                 'POST',
-                {
-                    room: 'general',
-                    attachments: [
-                        { name: 'file.bin', data: Buffer.alloc(bytes).toString('base64') },
-                    ],
-                },
+                messageForm({ room: 'general' }, [{ name: 'file.bin', data: Buffer.alloc(bytes) }]),
                 status,
             );
         assert.equal((await api(bob, '/state')).data.maxUploadBytes, 5 * megabyte);
@@ -299,6 +304,31 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
         await api(alice, '/settings', 'PATCH', { maxUploadBytes: 5 * megabyte });
         await api(alice, `/messages/${raised.id}`, 'DELETE');
     });
+    await t.test('the owner sets the attachment storage quota in whole gigabytes', async () => {
+        const gigabyte = 1024 ** 3;
+        const file = () =>
+            messageForm({ room: 'general' }, [{ name: 'small.txt', data: Buffer.from('hi') }]);
+        await api(bob, '/settings', 'PATCH', { maxStoredUploadBytes: gigabyte }, 403);
+        for (const bad of [
+            -gigabyte,
+            gigabyte + 1,
+            1_000_001 * gigabyte,
+            String(gigabyte),
+            null,
+            1.5,
+        ])
+            await api(alice, '/settings', 'PATCH', { maxStoredUploadBytes: bad }, 400);
+        await api(alice, '/settings', 'PATCH', { maxStoredUploadBytes: 0 });
+        assert.match((await api(alice, '/messages', 'POST', file(), 403)).data.error, /turned off/);
+        // Text still works with attachments turned off.
+        await api(alice, '/messages', 'POST', { room: 'general', body: 'Text only' });
+        assert.equal((await api(alice, '/storage')).data.attachments.quota, 0);
+        await api(alice, '/settings', 'PATCH', { maxStoredUploadBytes: 1_000_000 * gigabyte });
+        const posted = (await api(alice, '/messages', 'POST', file())).data;
+        assert.equal((await api(alice, '/storage')).data.attachments.quota, 1_000_000 * gigabyte);
+        await api(alice, '/settings', 'PATCH', { maxStoredUploadBytes: gigabyte });
+        await api(alice, `/messages/${posted.id}`, 'DELETE');
+    });
     await t.test(
         'custom emojis and expanded reactions toggle, count users, and enforce ownership',
         async () => {
@@ -315,8 +345,9 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
                 await api(who, `/messages/${msg.id}/reaction`, 'POST', { emoji: ':party_cat:' });
             await api(bob, `/messages/${msg.id}/reaction`, 'POST', { emoji: '🚀' });
             assert.equal(
-                (await api(bob, '/messages?room=general')).data.find((m) => m.id === msg.id)
-                    .reactions.length,
+                (await api(bob, '/messages?room=general')).data.messages.find(
+                    (m) => m.id === msg.id,
+                ).reactions.length,
                 3,
             );
             await api(alice, `/messages/${msg.id}/reaction`, 'POST', { emoji: ':party_cat:' });
@@ -324,7 +355,7 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
             await api(alice, `/messages/${msg.id}/reaction`, 'POST', { emoji: '<script>' }, 400);
             await api(bob, `/emojis/${emoji.id}`, 'DELETE');
             assert.equal(
-                (await api(bob, '/messages?room=general')).data
+                (await api(bob, '/messages?room=general')).data.messages
                     .find((m) => m.id === msg.id)
                     .reactions.filter((r) => r.emoji.startsWith(':')).length,
                 0,

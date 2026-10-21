@@ -46,7 +46,12 @@ async function fixture(t) {
             name: 'Saved community',
             profileFrames: false,
             reactionAuthors: false,
+            maxStoredUploadBytes: 2 * 1024 ** 3,
         });
+        // The shorter server period still waits; the owner's choice is what gets restored.
+        await api('/retention/server', owner.token, 'PATCH', { retention: 30 });
+        await api('/retention/dm', owner.token, 'PATCH', { retention: 14, applyNow: true });
+        await api('/retention/keep-text', owner.token, 'PATCH', { keepText: true });
         await api('/messages', owner.token, 'POST', {
             room: 'general',
             body: 'discard this message',
@@ -103,6 +108,18 @@ test('reset uses real HTTP APIs, regenerates IDs, retains account setup and back
         assert.equal(state.data.name, 'Saved community');
         assert.equal(state.data.reactionAuthors, false);
         assert.equal(
+            service.db.prepare("SELECT value FROM settings WHERE key='maxStoredUploadBytes'").get()
+                .value,
+            String(2 * 1024 ** 3),
+        );
+        const settled = (retention) => ({ retention, retentionNext: null, retentionAt: null });
+        assert.deepEqual(state.data.retention, {
+            server: settled(30),
+            dm: settled(14),
+            keepText: true,
+            keepTextUntil: null,
+        });
+        assert.equal(
             state.data.roles.find((role) => role.id === login.data.user.roles[0]).name,
             'Moderator',
         );
@@ -120,6 +137,7 @@ test('reset uses real HTTP APIs, regenerates IDs, retains account setup and back
         const exported = captureSetup(f.data, path.join(f.root, 'roundtrip.json'));
         const semantics = (s) => ({
             server: s.server,
+            retention: s.retention,
             roles: s.roles.map(({ key, ...role }) => ({
                 ...role,
                 permissions: key === 'owner' ? permissionIds : role.permissions,
@@ -152,6 +170,33 @@ test('a rejected API request leaves the original database and snapshot unchanged
     writeFileSync(f.snapshot, JSON.stringify(f.baseline));
     await assert.rejects(resetSetup(f.data, f.snapshot), /Invalid role/);
     assert.deepEqual(readFileSync(path.join(f.data, 'campfire.sqlite')), before);
+    f.baseline.retention = { server: -1, dm: 0, keepText: true };
+    writeFileSync(f.snapshot, JSON.stringify(f.baseline));
+    await assert.rejects(resetSetup(f.data, f.snapshot), /invalid retention/);
+    assert.deepEqual(readFileSync(path.join(f.data, 'campfire.sqlite')), before);
+});
+
+test('a database from before retention is captured without it and restores the defaults', async (t) => {
+    const f = await fixture(t);
+    const db = new DatabaseSync(path.join(f.data, 'campfire.sqlite'));
+    db.exec('DROP TABLE retention_policies; DROP TABLE retention_mode');
+    db.close();
+    const older = path.join(f.root, 'older.json');
+    captureSetup(f.data, older);
+    assert.equal('retention' in JSON.parse(readFileSync(older, 'utf8')), false);
+    await resetSetup(f.data, older);
+    const service = createApp({ dataDir: f.data, linkPreviews: false });
+    try {
+        const login = await request(service.app, '/auth/login', null, 'POST', {
+            username: 'Alice',
+            password,
+        });
+        const state = await request(service.app, '/state', login.data.token);
+        assert.equal(state.data.retention.server.retention, 0);
+        assert.equal(state.data.retention.keepText, false);
+    } finally {
+        await service.close();
+    }
 });
 
 test('restore endpoints require explicit fresh-server mode and a private loopback token', async (t) => {

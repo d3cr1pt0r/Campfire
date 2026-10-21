@@ -38,10 +38,9 @@ client event contracts but do not replace server-side runtime validation.
   Search and pinned views query the full conversation, including Unicode
   case-insensitive substring matching. Search scans the conversation; it is not
   an indexed full-text search engine. Reconnect reloads the newest page.
-- `GET /api/messages` retains the legacy array response and a default limit of
-  500. `page=1` returns `{messages,next}`. `limit` accepts 1–500, `before` takes the
-  opaque `next` cursor, and `pinned=1` restricts results to pins. Search/pin filters
-  apply before pagination. Update the server before distributing the new client.
+- `GET /api/messages` returns `{messages,next}` with a default limit of 500.
+  `limit` accepts 1–500, `before` takes the opaque `next` cursor, and `pinned=1`
+  restricts results to pins. Search/pin filters apply before pagination.
 - Losing `send` permission now blocks editing existing messages as well as new
   messages and reactions. Own-message deletion remains allowed in DMs; text channel mutations also obey channel access.
 - Idle sockets disconnect at session expiry. Logout uses the same revocation
@@ -58,47 +57,24 @@ client event contracts but do not replace server-side runtime validation.
 
 ## Configuration and database upgrades
 
-Databases are no longer upgraded in place. `server/schema.sql` defines the
-complete schema and runs on every start, creating whatever a new data directory
-needs and leaving an existing database as it is. A database from an older
-version is refused at startup with instructions. To keep one, start it once with
-a Campfire build up to commit `e1d6373`, which still upgrades databases, and
-then start this version. New tables can be added to the schema freely; changing
-an existing table needs an upgrade step again.
+Databases are not upgraded in place. `server/schema.sql` defines the complete
+schema and runs on every start, creating whatever a new data directory needs. A
+database from an older version is refused at startup; start this version with a
+new data directory. The server opens `campfire.sqlite` in the data directory.
 
-### Campfire branding upgrade
+Back up the data directory using the SQLite backup mechanism or by stopping the
+service and copying it, including WAL files.
 
-Before starting this version on an existing installation:
-
-1. Stop the backend and back up its complete data directory. The server opens
-   only `campfire.sqlite`. If it finds a community database under another name
-   instead, it refuses to start rather than creating an empty community. Rename
-   that database to `campfire.sqlite`, with its `-wal` and `-shm` files, while
-   the server is stopped.
-2. Docker Compose now uses the `campfire` service and `campfire-data` volume.
-   Reuse the existing volume with an override declaring `campfire-data` as
-   `external: true` and setting `name` to the existing Docker volume name.
-   Rename the database inside that volume while the service is stopped.
-3. Desktop builds now use package/executable name `campfire` and app ID
-   `org.campfire.desktop`. With the app fully closed, copy the previous desktop
-   user-data directory into the new Campfire profile to retain client settings.
-   Encrypted credentials remain subject to the operating system's key storage;
-   signing in again may be required. The preload bridge is now `window.campfire`,
-   so rebuild the renderer and desktop shell together.
-
-Back up the database before upgrading, using the SQLite backup mechanism or by
-stopping the service and copying the data directory including WAL files. Restart
-the backend, then update browser/desktop clients. Existing accounts, password
-hashes, sessions, preferences and media behavior are retained.
-
-`MAX_STORED_UPLOAD_BYTES` defaults to **1073741824** (1 GiB). It limits aggregate
-decoded attachment bytes, with accounting and checks inside message transactions.
-Deleting a message releases its quota through attachment cascade triggers. If an
-existing database already exceeds the limit, uploads and downloads remain intact,
-text messages still work, and new attachments are rejected until space is freed
-or the configured limit is increased. A value of zero disables new nonempty
-attachments. This measures attachment payloads, not physical database file size;
-base64, messages, avatars, emojis and SQLite overhead consume additional space.
+The attachment storage quota limits the total bytes of stored attachments, with
+accounting and checks inside message transactions. The owner sets it under
+Settings → Storage in whole gigabytes; until then `MAX_STORED_UPLOAD_BYTES`
+(default **1073741824**, 1 GiB) applies. Deleting a message, or its expiry under
+the retention period, releases its quota through attachment cascade triggers.
+Above the limit, existing uploads and downloads remain intact, text messages
+still work, and new attachments are rejected until space is freed or the limit
+is raised. A limit of zero turns new attachments off. This measures attachment
+payloads, not physical database file size; messages, avatars, emojis and SQLite
+overhead consume additional space.
 
 `TRUST_PROXY` defaults to empty/disabled. Supply only trusted proxy IP addresses,
 CIDRs or Express address groups as a comma-separated list. For example, use

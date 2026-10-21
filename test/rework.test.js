@@ -8,7 +8,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRateLimit, originPolicy } from '../server/policies.js';
 import { createApp } from '../test-support/open-server.js';
-import { request } from '../test-support/http.js';
+import { messageForm, request } from '../test-support/http.js';
 
 test('overlapping and repeated shutdown calls close SQLite only once', async (t) => {
     const dir = mkdtempSync(path.join(tmpdir(), 'campfire-shutdown-'));
@@ -32,16 +32,22 @@ test('overlapping and repeated shutdown calls close SQLite only once', async (t)
     assert.equal(service.db.isOpen, false);
 });
 
-test('history enrichment uses five queries regardless of message count', () => {
+test('history enrichment uses six queries regardless of message count', () => {
     let queries = 0;
     const rows = Array.from({ length: 500 }, (_, i) => ({ id: String(i) }));
     const result = messageViews(() => {
         queries++;
         return [];
     }, rows);
-    assert.equal(queries, 5);
+    assert.equal(queries, 6);
     assert.equal(result.length, 500);
-    assert.deepEqual(result[0], { id: '0', replyCount: 0, attachments: [], reactions: [] });
+    assert.deepEqual(result[0], {
+        id: '0',
+        replyCount: 0,
+        attachments: [],
+        reactions: [],
+        retention: { since: undefined, kept: false, pollEnds: null },
+    });
 });
 
 test('authentication limiter expires entries and fails closed at capacity', () => {
@@ -153,11 +159,11 @@ test('canonical conversations, stable pagination, full search, permissions and s
     const direct = await api('/messages', 'POST', { room: reversed, body: 'one history' });
     assert.equal(direct.room, canonical);
     assert.equal(
-        (await api(`/messages?room=${canonical}`, 'GET', undefined, bob.token))[0].id,
+        (await api(`/messages?room=${canonical}`, 'GET', undefined, bob.token)).messages[0].id,
         direct.id,
     );
     const insert = service.db.prepare(
-        'INSERT INTO messages(id,room,author,body,created,pinned) VALUES(?,?,?,?,?,?)',
+        'INSERT INTO messages(id,room,author,body,created,pinned,since) VALUES(?,?,?,?,?,?,1)',
     );
     for (let i = 0; i < 505; i++)
         insert.run(
@@ -172,15 +178,15 @@ test('canonical conversations, stable pagination, full search, permissions and s
         seen = [];
     do {
         const page = await api(
-            `/messages?room=general&page=1&limit=100${before ? `&before=${before}` : ''}`,
+            `/messages?room=general&limit=100${before ? `&before=${before}` : ''}`,
         );
         seen.push(...page.messages.map((m) => m.id));
         before = page.next;
     } while (before);
     assert.equal(seen.length, 505);
     assert.equal(new Set(seen).size, 505);
-    assert.equal((await api('/messages?room=general&search=ältest'))[0].id, 'page0000');
-    assert.equal((await api('/messages?room=general&pinned=1'))[0].id, 'page0000');
+    assert.equal((await api('/messages?room=general&search=ältest')).messages[0].id, 'page0000');
+    assert.equal((await api('/messages?room=general&pinned=1')).messages[0].id, 'page0000');
     await api('/messages?room=general&before=invalid', 'GET', undefined, alice.token, 400);
     const role = await api('/roles', 'POST', {
         name: 'Read only',
@@ -189,12 +195,16 @@ test('canonical conversations, stable pagination, full search, permissions and s
     });
     await api(`/users/${bob.user.id}/roles`, 'PATCH', { roles: [role.id] });
     await api('/messages/page0000', 'PATCH', { body: 'Author can still edit' }, bob.token);
-    const file = { name: 'hello', data: Buffer.from('hello').toString('base64') };
-    const uploaded = await api('/messages', 'POST', { room: 'general', attachment: file });
-    await api('/messages', 'POST', { room: 'general', attachment: file }, alice.token, 413);
+    const file = () =>
+        messageForm({ room: 'general' }, [{ name: 'hello', data: Buffer.from('hello') }]);
+    const uploaded = await api('/messages', 'POST', file());
+    await api('/messages', 'POST', file(), alice.token, 413);
     await api('/messages', 'POST', { room: 'general', body: 'text still works' });
     await api(`/messages/${uploaded.id}`, 'DELETE');
-    await api('/messages', 'POST', { room: 'general', attachment: file });
+    await api('/messages', 'POST', file());
+    // A quota the owner saves replaces the one the server was started with.
+    await api('/settings', 'PATCH', { maxStoredUploadBytes: 1024 ** 3 });
+    await api('/messages', 'POST', file());
 });
 
 test('concurrent first registrations produce one owner and duplicate registration returns conflict', async (t) => {

@@ -11,11 +11,11 @@ import {
 } from '../src/audioPreferences.ts';
 import { microphoneConstraints, openMicrophone } from '../src/media.ts';
 
-test('legacy audio processing migrates without coupling newly saved options', async () => {
+test('each audio processing option is independent, and unsaved ones default to on', async () => {
     assert.deepEqual(microphoneConstraints({ noise: false }), {
         noiseSuppression: false,
-        echoCancellation: false,
-        autoGainControl: false,
+        echoCancellation: true,
+        autoGainControl: true,
     });
     const prefs = { noise: false, echoCancellation: true, autoGainControl: false, input: '' };
     let actual;

@@ -11,6 +11,7 @@ import { formatFingerprint, serverLink } from './serverLink';
 import { pinsFor } from './serverTrust';
 import { AvatarCropper } from './AvatarCropper';
 import { ChannelSettings } from './ChannelSettings';
+import { StorageSettings } from './StorageSettings';
 import { ArrowRight, Bell, LogOut, Trash2, X } from 'lucide-react';
 import type { State, Preferences, User } from './types';
 import type { ApiClient } from './api';
@@ -135,6 +136,7 @@ export function SettingsPanel({
         ['audio', 'Audio & Video'],
         ['notifications', 'Notifications'],
         ['server', 'Server settings'],
+        ...(permission('server.edit') ? [['storage', 'Storage']] : []),
         ['roles', 'Roles & permissions'],
         ...([
             'channels.edit',
@@ -822,7 +824,7 @@ export function SettingsPanel({
                                                     ...previous,
                                                     channelNotifications: {
                                                         ...previous.channelNotifications,
-                                                        [key]: value,
+                                                        [key]: value ? 'all' : 'muted',
                                                     },
                                                 }))
                                             }
@@ -845,15 +847,8 @@ export function SettingsPanel({
                                 void act(async () => {
                                     await api('/settings', 'PATCH', {
                                         name: f.get('name'),
-                                        // Servers from before the setting do not report a limit.
-                                        ...(state.maxUploadBytes === undefined
-                                            ? {}
-                                            : {
-                                                  maxUploadBytes:
-                                                      Number(f.get('maxUploadMegabytes')) *
-                                                      1024 *
-                                                      1024,
-                                              }),
+                                        maxUploadBytes:
+                                            Number(f.get('maxUploadMegabytes')) * 1024 * 1024,
                                     });
                                     notify('Server settings saved.');
                                 });
@@ -869,27 +864,25 @@ export function SettingsPanel({
                                     disabled={!permission('server.edit')}
                                 />
                             </label>
-                            {state.maxUploadBytes !== undefined && (
-                                <label>
-                                    Maximum upload size (MB)
-                                    <input
-                                        key={state.maxUploadBytes}
-                                        name="maxUploadMegabytes"
-                                        type="number"
-                                        min={1}
-                                        max={uploadLimitCeiling / (1024 * 1024)}
-                                        step={1}
-                                        required
-                                        defaultValue={state.maxUploadBytes / (1024 * 1024)}
-                                        disabled={!permission('server.edit')}
-                                    />
-                                    <small className="field-help">
-                                        Combined size of the files in one message, up to{' '}
-                                        {formatUploadLimit(uploadLimitCeiling)}. Larger uploads use
-                                        more server memory and storage.
-                                    </small>
-                                </label>
-                            )}
+                            <label>
+                                Maximum upload size (MB)
+                                <input
+                                    key={state.maxUploadBytes}
+                                    name="maxUploadMegabytes"
+                                    type="number"
+                                    min={1}
+                                    max={uploadLimitCeiling / (1024 * 1024)}
+                                    step={1}
+                                    required
+                                    defaultValue={state.maxUploadBytes / (1024 * 1024)}
+                                    disabled={!permission('server.edit')}
+                                />
+                                <small className="field-help">
+                                    Combined size of the files in one message, up to{' '}
+                                    {formatUploadLimit(uploadLimitCeiling)}. Larger uploads use more
+                                    server memory and storage.
+                                </small>
+                            </label>
                             <button
                                 className="primary"
                                 disabled={!permission('server.edit') || busy}
@@ -1052,6 +1045,16 @@ export function SettingsPanel({
                             the hosting guide.
                         </p>
                     </>
+                )}
+                {settingsTab === 'storage' && permission('server.edit') && (
+                    <StorageSettings
+                        state={state}
+                        api={api}
+                        act={act}
+                        busy={busy}
+                        refresh={refresh}
+                        notify={notify}
+                    />
                 )}
                 {settingsTab === 'channels' &&
                     [

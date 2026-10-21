@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createApp } from '../test-support/open-server.js';
-import { request } from '../test-support/http.js';
+import { messageForm, request } from '../test-support/http.js';
 
 async function fixture(t) {
     const directory = mkdtempSync(path.join(tmpdir(), 'campfire-channels-'));
@@ -77,11 +77,14 @@ test('protected channels can be renamed; additional channel deletion cascades an
     );
     const text = await api(owner, '/channels', 'POST', { name: 'Temporary', kind: 'text' });
     const voice = await api(owner, '/channels', 'POST', { name: 'Temporary Voice', kind: 'voice' });
-    const msg = await api(member, '/messages', 'POST', {
-        room: text.id,
-        body: 'temporary',
-        attachment: { name: 'file', data: 'aGVsbG8=' },
-    });
+    const msg = await api(
+        member,
+        '/messages',
+        'POST',
+        messageForm({ room: text.id, body: 'temporary' }, [
+            { name: 'file', data: Buffer.from('hello') },
+        ]),
+    );
     await api(member, `/messages/${msg.id}/reaction`, 'POST', { emoji: '👍' });
     await api(member, `/channels/${voice.id}`, 'DELETE', undefined, 403);
     await api(owner, `/channels/${text.id}`, 'DELETE');

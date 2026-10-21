@@ -65,8 +65,9 @@ export function serverLink(origin: string, { pin, invite }: { pin?: string; invi
     return `${origin.replace(/\/$/, '')}/${params.length ? `#${params.join('&')}` : ''}`;
 }
 
-// Upgrade legacy remote HTTP sessions to HTTPS unless the desktop app has explicitly
-// approved that exact HTTP origin. Browsers never supply an approval callback.
+// A saved remote HTTP session is used only while the desktop app approves that exact origin
+// (an approval can be withdrawn); otherwise it moves to HTTPS and signs in again. Browsers
+// never supply an approval callback.
 export function restoreConnection(
     saved: unknown,
     fallback: string,

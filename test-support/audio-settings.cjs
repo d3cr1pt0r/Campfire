@@ -111,7 +111,7 @@ async function client(account, name) {
     await win.loadURL(renderer);
     await js(
         win,
-        `localStorage.setItem('connection',JSON.stringify(${JSON.stringify({ url: origin, token: account.token })}));localStorage.setItem('preferences',JSON.stringify({theme:'ember',noise:false,sounds:false,messageSounds:false,autoIdle:false}));`,
+        `localStorage.setItem('connection',JSON.stringify(${JSON.stringify({ url: origin, token: account.token })}));localStorage.setItem('preferences',JSON.stringify({theme:'ember',noise:false,echoCancellation:false,autoGainControl:false,sounds:false,messageSounds:false,autoIdle:false}));`,
     );
     await win.reload();
     await wait(
@@ -207,7 +207,7 @@ app.whenReady()
         assert.equal(saved.noise, true);
         assert.equal(saved.echoCancellation, false);
         assert.equal(saved.autoGainControl, false);
-        console.log('PASS legacy grouped settings migrate independently');
+        console.log('PASS processing switches save independently');
         await slider(alice, 'Microphone volume', 1.5);
         await slider(alice, 'Output volume', 0.6);
         await slider(alice, 'Sound-effects volume', 0.25);

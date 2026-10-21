@@ -1,20 +1,31 @@
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { PassThrough } from 'node:stream';
-export function request(app, endpoint, token, method = 'GET', body, headers = {}) {
+// A message with files, as the apps send it: text fields plus one "file" part per file.
+export function messageForm(fields, files = []) {
+    const form = new FormData();
+    for (const [key, value] of Object.entries(fields)) if (value != null) form.set(key, value);
+    for (const { name, data } of files) form.append('file', new Blob([data]), name);
+    return form;
+}
+export async function request(app, endpoint, token, method = 'GET', body, headers = {}) {
+    let raw = null,
+        type = 'application/json';
+    if (body instanceof FormData) {
+        const encoded = new Response(body);
+        type = encoded.headers.get('content-type');
+        raw = Buffer.from(await encoded.arrayBuffer());
+    } else if (body !== undefined) raw = Buffer.from(JSON.stringify(body));
     return new Promise((resolve, reject) => {
         const socket = new PassThrough();
         socket.remoteAddress = '127.0.0.1';
         const req = new IncomingMessage(socket);
         req.method = method;
         req.url = '/api' + endpoint;
-        const raw = body === undefined ? null : Buffer.from(JSON.stringify(body));
         req.headers = {
             host: 'localhost',
             ...headers,
             ...(token ? { authorization: `Bearer ${token}` } : {}),
-            ...(raw
-                ? { 'content-type': 'application/json', 'content-length': String(raw.length) }
-                : {}),
+            ...(raw ? { 'content-type': type, 'content-length': String(raw.length) } : {}),
         };
         const res = new ServerResponse(req);
         const chunks = [];

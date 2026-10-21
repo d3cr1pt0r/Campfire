@@ -177,23 +177,16 @@ export function AudioVideoSettings({
                     <Toggle
                         title="Noise suppression"
                         value={prefs.noise}
-                        set={(value) =>
-                            setPrefs((previous) => ({
-                                ...previous,
-                                echoCancellation: previous.echoCancellation ?? previous.noise,
-                                autoGainControl: previous.autoGainControl ?? previous.noise,
-                                noise: value,
-                            }))
-                        }
+                        set={(value) => change('noise', value)}
                     />
                     <Toggle
                         title="Echo cancellation"
-                        value={prefs.echoCancellation ?? prefs.noise}
+                        value={prefs.echoCancellation ?? true}
                         set={(value) => change('echoCancellation', value)}
                     />
                     <Toggle
                         title="Automatic microphone gain"
-                        value={prefs.autoGainControl ?? prefs.noise}
+                        value={prefs.autoGainControl ?? true}
                         set={(value) => change('autoGainControl', value)}
                     />
                 </div>

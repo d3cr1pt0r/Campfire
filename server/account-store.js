@@ -24,11 +24,10 @@ export function createAccount({ get, run }, { username, passwordHash, owner }) {
     );
     const id = randomUUID();
     run(
-        'INSERT INTO users(id,username,password,role,owner) VALUES(?,?,?,?,?)',
+        'INSERT INTO users(id,username,password,owner) VALUES(?,?,?,?)',
         id,
         username,
         passwordHash,
-        'everyone',
         Number(owner),
     );
     run('INSERT INTO profiles(user,nickname) VALUES(?,?)', id, username);

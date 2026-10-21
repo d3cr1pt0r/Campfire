@@ -3,6 +3,8 @@ import { useRef, useState } from 'react';
 import { GripVertical, ChevronDown, Hash, Plus, Volume2 } from 'lucide-react';
 import type { State, Channel } from './types';
 import type { ApiClient } from './api';
+import { RetentionField } from './RetentionSettings';
+import { settlePolicy } from '../shared/retention.js';
 
 type Props = {
     state: State;
@@ -208,6 +210,7 @@ export function ChannelSettings(props: Props) {
 
 function ChannelEditor({
     channel,
+    state,
     api,
     refresh,
     busy,
@@ -283,6 +286,42 @@ function ChannelEditor({
                         Grant View channels explicitly in Roles & permissions.
                     </p>
                 </div>
+            )}
+            {channel.kind === 'text' && (
+                <RetentionField
+                    key={JSON.stringify([
+                        channel.retention,
+                        channel.retentionNext,
+                        channel.retentionAt,
+                        state.retention.server,
+                        state.retention.keepText,
+                        state.retention.keepTextUntil,
+                    ])}
+                    label="Keep messages"
+                    help={
+                        permission('server.edit')
+                            ? 'How long messages here are kept. The server default is set in Storage.'
+                            : 'How long messages here are kept. Only members who can edit server settings change this.'
+                    }
+                    policy={channel}
+                    inherited={settlePolicy(state.retention.server, Date.now()).retention ?? 0}
+                    keepText={{
+                        keepText: state.retention.keepText,
+                        keepTextUntil: state.retention.keepTextUntil,
+                    }}
+                    canEdit={permission('server.edit')}
+                    previewQuery={`scope=channel&channel=${encodeURIComponent(channel.id)}`}
+                    save={async (value, applyNow) => {
+                        await api(`/retention/channels/${channel.id}`, 'PATCH', {
+                            retention: value,
+                            applyNow,
+                        });
+                        await refresh();
+                    }}
+                    api={api}
+                    act={act}
+                    busy={busy}
+                />
             )}
             {channel.kind === 'text' && permission('channels.edit') && (
                 <Toggle

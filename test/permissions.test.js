@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { roleFixture } from '../test-support/role-fixture.js';
+import { messageForm } from '../test-support/http.js';
 import { memberPermissions, permissionIds } from '../shared/permissions.js';
 
 test('assigned grants combine without Default, and role allows win over role denies regardless of order', async (t) => {
@@ -54,12 +55,14 @@ test('announcement channels allow reactions, threads and moderation independentl
     await f.api(f.member, '/messages', 'POST', { room: 'general', body: 'Cannot post' }, 403);
     await f.api(f.member, `/messages/${message.id}/reaction`, 'POST', { emoji: '👍' });
     await f.api(f.member, `/messages/${message.id}`, 'PATCH', { pinned: true });
-    const reply = await f.api(f.member, '/messages', 'POST', {
-        room: 'general',
-        thread: message.id,
-        body: 'Reply',
-        attachments: [{ name: 'note.txt', data: 'aGk=' }],
-    });
+    const reply = await f.api(
+        f.member,
+        '/messages',
+        'POST',
+        messageForm({ room: 'general', thread: message.id, body: 'Reply' }, [
+            { name: 'note.txt', data: 'hi' },
+        ]),
+    );
     await f.api(f.member, `/messages/${reply.id}`, 'PATCH', { body: 'Edit my reply' });
     await f.api(f.member, `/messages/${message.id}`, 'DELETE');
 });
@@ -93,11 +96,12 @@ test('private channels require explicit visibility and new roles do not gain acc
         kind: 'text',
         private: true,
     });
-    const msg = await f.api(f.owner, '/messages', 'POST', {
-        room: channel.id,
-        body: 'Secret',
-        attachments: [{ name: 'private.txt', data: 'aGk=' }],
-    });
+    const msg = await f.api(
+        f.owner,
+        '/messages',
+        'POST',
+        messageForm({ room: channel.id, body: 'Secret' }, [{ name: 'private.txt', data: 'hi' }]),
+    );
     const role = await f.role('New role', memberPermissions);
     await f.assign(f.member, [role.id]);
     assert.equal(

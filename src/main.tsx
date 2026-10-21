@@ -15,7 +15,9 @@ import {
     callsRing,
     callRinging,
     callDeclined,
+    notificationKey,
 } from './notifications';
+import { conversationSchedule, retentionChip, retentionNotice } from './retention';
 import {
     formatFingerprint,
     isLoopbackHost,
@@ -41,7 +43,7 @@ import { Avatar, initials } from './Avatar';
 import { createStateRefresh } from './stateRefresh';
 import { useDialog } from './useDialog';
 import { useModalNavigation } from './modalNavigation';
-import { createApiClient } from './api';
+import { createApiClient, messagePayload } from './api';
 import { useConversation } from './useConversation';
 import { canonicalRoom, dmParticipant } from '../shared/rooms.js';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -75,6 +77,7 @@ import {
     MonitorPlay,
     Video,
     Maximize2,
+    Hourglass,
 } from 'lucide-react';
 import type { State, Message, Preferences, User, GifFavorite } from './types';
 import { publishGifFavorites, type FavoriteGif } from './GifPicker';
@@ -89,7 +92,7 @@ import { Emoji } from './ChatContent';
 import { resizeImage } from './images';
 import { rememberedDevice } from './devices';
 import { useSpeaking } from './useSpeaking';
-import { defaultUploadBytes, formatUploadLimit, validateFileSelection } from '../shared/uploads.js';
+import { formatUploadLimit, validateFileSelection } from '../shared/uploads.js';
 import { emojis as standardEmojis } from '../shared/emojis.js';
 import campfireIcon from './assets/campfire-icon.png';
 import './style.css';
@@ -122,6 +125,8 @@ const defaultPrefs: Preferences = {
     input: '',
     output: '',
     quality: '720',
+    echoCancellation: true,
+    autoGainControl: true,
     microphoneVolume: 1,
     outputVolume: 1,
     soundEffectsVolume: 1,
@@ -443,7 +448,6 @@ function App() {
     const gifFavoritesRef = useRef(gifFavorites);
     gifFavoritesRef.current = gifFavorites;
     const klipyKey = state?.klipyKey || null;
-    const uploadLimit = state?.maxUploadBytes ?? defaultUploadBytes;
     useEffect(() => {
         setGifFavorites([]);
         if (!klipyKey) return;
@@ -1027,18 +1031,7 @@ function App() {
             targetRoom = room;
         await act(async () => {
             validateFileSelection(files, stateRef.current?.maxUploadBytes);
-            const payload = await Promise.all(
-                files.map(async (file) => {
-                    const data = await new Promise<string>((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = () => resolve(String(reader.result).split(',')[1]);
-                        reader.onerror = () => reject(new Error('Could not read file'));
-                        reader.readAsDataURL(file);
-                    });
-                    return { name: file.name, data };
-                }),
-            );
-            await api('/messages', 'POST', { room: targetRoom, body: text, attachments: payload });
+            await api('/messages', 'POST', messagePayload({ room: targetRoom, body: text }, files));
             if (roomRef.current !== targetRoom) return;
             setDraft((previous) => (previous === text ? '' : previous));
             setAttachments([]);
@@ -1124,6 +1117,37 @@ function App() {
     const currentChannel = state?.channels.find((c) => c.id === room),
         dmUser = room.startsWith('dm:') ? user(dmParticipant(room, state?.me.id) || '') : undefined;
     const selfDm = !!dmUser && dmUser.id === state?.me.id;
+    // How long this conversation keeps messages, and any coming shorter period.
+    const retentionNow = Date.now(),
+        direct = room.startsWith('dm:');
+    const roomSchedule = state && roomVisible ? conversationSchedule(state, room) : null;
+    const retentionBadge = retentionChip(roomSchedule, retentionNow, direct);
+    const notice = retentionNotice(
+        roomSchedule,
+        retentionNow,
+        direct,
+        conversationPermission('messages.pin'),
+    );
+    // A server-wide or DM-wide change is dismissed once for every conversation it affects.
+    const noticeKey =
+        notice && state
+            ? notificationKey(url, state.me.id, notice.source === 'channel' ? room : notice.source)
+            : '';
+    const retentionBanner = notice && prefs.retentionNotices?.[noticeKey] !== notice.at && notice;
+    const dismissRetentionBanner = () => {
+        if (!notice) return;
+        setPrefs((previous) => ({
+            ...previous,
+            retentionNotices: {
+                ...Object.fromEntries(
+                    Object.entries(previous.retentionNotices || {}).filter(
+                        ([, at]) => at > Date.now(),
+                    ),
+                ),
+                [noticeKey]: notice.at,
+            },
+        }));
+    };
     const openSettings = (tab = 'account') => {
         setSettingsTab(tab);
         setModal('settings');
@@ -1931,6 +1955,18 @@ function App() {
                                                 : 'A space for the two of you.'
                                             : currentChannel?.description}
                                     </span>
+                                    {retentionBadge && (
+                                        <span
+                                            className="retention-chip"
+                                            title={retentionBadge.title}
+                                        >
+                                            <Hourglass size={13} aria-hidden />
+                                            <span>{retentionBadge.label}</span>
+                                            <span className="sr-only">
+                                                . {retentionBadge.title}
+                                            </span>
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="top-actions">
                                     <>
@@ -2016,6 +2052,19 @@ function App() {
                                 server returns.
                             </div>
                         )}
+                        {retentionBanner && (
+                            <div className="connection-banner retention-banner" role="status">
+                                <Hourglass size={15} aria-hidden />
+                                <span>{retentionBanner.text}</span>
+                                <button
+                                    title="Dismiss"
+                                    aria-label="Dismiss retention notice"
+                                    onClick={dismissRetentionBanner}
+                                >
+                                    <X size={15} />
+                                </button>
+                            </div>
+                        )}
                         <div className="call-invitations">
                             {(state.directCalls || [])
                                 .filter((c) => c.invited.includes(state.me.id))
@@ -2083,8 +2132,9 @@ function App() {
                                                 : 'This conversation is read-only'}
                                         </strong>
                                         <span>
-                                            Up to 10 files · {formatUploadLimit(uploadLimit)} total
-                                            · Review before sending
+                                            Up to 10 files ·{' '}
+                                            {formatUploadLimit(state.maxUploadBytes)} total · Review
+                                            before sending
                                         </span>
                                     </div>
                                 )}
@@ -2121,6 +2171,7 @@ function App() {
                                     api={api}
                                     setModal={setModal}
                                     setEdit={setEdit}
+                                    notify={notify}
                                     clearFilters={() => {
                                         setSearch('');
                                         setPins(false);
@@ -2129,7 +2180,7 @@ function App() {
                                 <ChatComposer
                                     focusRequest={composerFocus}
                                     canAttach={canPost && conversationPermission('files.attach')}
-                                    uploadLimit={uploadLimit}
+                                    uploadLimit={state.maxUploadBytes}
                                     users={state.users}
                                     emojis={state.emojis}
                                     attachments={attachments}
@@ -2181,6 +2232,7 @@ function App() {
                                     setEdit={setEdit}
                                     openPoll={openPoll}
                                     connected={connected}
+                                    notify={notify}
                                     onClose={() => setThread(null)}
                                     formattingToolbar={formattingToolbar}
                                     setFormattingToolbar={setFormattingToolbar}

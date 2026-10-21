@@ -362,7 +362,9 @@ app.whenReady()
         await wait(bobVisible, 'offline incoming message restores conversation on reconnect');
         const history = await api(alice, '/messages?' + new URLSearchParams({ room: bobRoom }));
         assert.ok(
-            history.some((message) => message.body === 'Hello from Bob without a relationship'),
+            history.messages.some(
+                (message) => message.body === 'Hello from Bob without a relationship',
+            ),
         );
         console.log(
             'PASS compact DM styling, remove, persistence, incoming-only restoration and retained history',

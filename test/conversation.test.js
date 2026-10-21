@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createConversation } from '../src/conversation.ts';
 import { createStateRefresh } from '../src/stateRefresh.ts';
-import { createApiClient } from '../src/api.ts';
+import { createApiClient, messagePayload } from '../src/api.ts';
 
 const deferred = () => {
     let resolve, reject;
@@ -40,6 +40,49 @@ test('late history cannot overwrite live arrivals, edits or deletions', async ()
             ['new', 'new'],
         ],
     );
+});
+
+test('expired threads leave loaded and late history, replies included', async () => {
+    const result = deferred();
+    const store = createConversation('general', () => result.promise);
+    const loading = store.reload();
+    store.receive({ type: 'upsert', message: message('kept') });
+    store.receive({ type: 'expire', ids: ['old'] });
+    result.resolve({
+        messages: [message('old'), { ...message('reply'), thread: 'old' }, message('kept')],
+        next: null,
+    });
+    await loading;
+    assert.deepEqual(
+        store.getSnapshot().messages.map((m) => m.id),
+        ['kept'],
+    );
+    store.receive({ type: 'expire', ids: ['kept'] });
+    assert.deepEqual(store.getSnapshot().messages, []);
+});
+
+test('removed files become placeholders in loaded and late history', async () => {
+    const result = deferred();
+    const store = createConversation('general', () => result.promise);
+    const loading = store.reload();
+    const file = { id: 'f', name: 'photo.png', mime: 'image/png', width: 4, height: 3 };
+    store.receive({ type: 'strip', ids: ['old'] });
+    result.resolve({
+        messages: [
+            { ...message('old'), attachments: [file], previews: [{ id: 'card' }] },
+            { ...message('reply'), thread: 'old', attachments: [{ ...file, id: 'g' }] },
+            { ...message('other'), attachments: [{ ...file, id: 'h' }] },
+        ],
+        next: null,
+    });
+    await loading;
+    const byId = Object.fromEntries(store.getSnapshot().messages.map((m) => [m.id, m]));
+    assert.deepEqual(byId.old.attachments, [
+        { id: 'f', name: 'photo.png', mime: 'image/png', removed: true },
+    ]);
+    assert.equal(byId.old.previews, undefined);
+    assert.equal(byId.reply.attachments[0].removed, true);
+    assert.equal(byId.other.attachments[0].removed, undefined);
 });
 
 test('member deletion anonymizes loaded and arriving history without reviving reactions', async () => {
@@ -194,6 +237,20 @@ test('shared API handles JSON/blob responses, cancellation and non-JSON failures
     assert.equal(calls[0].options.signal, controller.signal);
     assert.equal(calls[0].options.headers.Authorization, 'Bearer token');
     assert.equal((await api.blob('/asset')).type, 'application/json');
+    // Files travel as a form, whose content type the browser sets with its boundary.
+    const file = new File(['hi'], 'note.txt');
+    const form = messagePayload({ room: 'general', body: 'With a file' }, [file]);
+    await api.json('/messages', 'POST', form);
+    assert.equal(calls.at(-1).options.body, form);
+    assert.equal(calls.at(-1).options.headers['Content-Type'], undefined);
+    assert.equal(form.get('file').name, 'note.txt');
+    assert.equal(form.get('thread'), null);
+    assert.deepEqual(messagePayload({ room: 'general', body: 'Text' }, []), {
+        room: 'general',
+        body: 'Text',
+    });
+    await api.json('/messages', 'POST', { room: 'general', body: 'Text' });
+    assert.equal(calls.at(-1).options.headers['Content-Type'], 'application/json');
     await assert.rejects(
         api.json('/failure'),
         (error) => error.status === 502 && error.message.includes('502'),

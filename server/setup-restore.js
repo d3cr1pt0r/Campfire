@@ -28,6 +28,9 @@ export function mountSetupRestore({ app, db, get, run }, token) {
                 'POST /roles',
                 'PATCH /profile',
                 'PATCH /presence',
+                'PATCH /retention/server',
+                'PATCH /retention/dm',
+                'PATCH /retention/keep-text',
             ].includes(endpoint) &&
             !/^PATCH \/(?:roles\/[^/]+|users\/[^/]+\/roles)$/.test(endpoint) &&
             !/^POST \/users\/[^/]+\/access$/.test(endpoint)

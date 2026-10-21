@@ -22,12 +22,17 @@ import {
     Trash2,
     Reply,
     TimerOff,
+    Hourglass,
+    ImageOff,
+    FileX,
 } from 'lucide-react';
 import { PollCard } from './PollCard';
 import { ChatContent } from './ChatContent';
 import { ImageAttachment } from './ImageAttachment';
 import { LinkPreviews } from './LinkPreviews';
 import { needsScrollHistory, restoredScrollOffset, type ChatScrollPosition } from './chatScroll';
+import { conversationSchedule, hasFiles, messageRetention, pinKeeps, unpinText } from './retention';
+import type { RetentionUnit } from '../shared/retention.js';
 
 export function ChatMessages(
     props: Omit<React.ComponentProps<typeof ChatMessageList>, 'saved' | 'save'> & {
@@ -93,10 +98,15 @@ function ChatMessageList({
     currentVoiceChannel,
     onJoinVoice,
     thread = false,
+    notify,
+    retentionUnit,
     saved,
     save,
 }: {
     messageAvatars?: MessageAvatarMode;
+    notify?: (text: string) => void;
+    // Thread replies share the clock of the thread they belong to.
+    retentionUnit?: RetentionUnit;
     saved?: ChatScrollPosition;
     save: (position: ChatScrollPosition) => void;
     currentVoiceChannel?: string | null;
@@ -349,6 +359,8 @@ function ChatMessageList({
                                         setEdit={setEdit}
                                         onReply={onReply}
                                         thread={thread}
+                                        notify={notify}
+                                        retentionUnit={retentionUnit}
                                         messageAvatars={messageAvatars}
                                         currentVoiceChannel={currentVoiceChannel}
                                         onJoinVoice={onJoinVoice}
@@ -394,6 +406,8 @@ export function ChatMessage({
     currentVoiceChannel,
     onJoinVoice,
     thread = false,
+    notify,
+    retentionUnit,
 }: Pick<
     React.ComponentProps<typeof ChatMessageList>,
     | 'messageAvatars'
@@ -411,12 +425,26 @@ export function ChatMessage({
     | 'setEdit'
     | 'onReply'
     | 'thread'
+    | 'notify'
+    | 'retentionUnit'
 > & { message: Message }) {
     const u = m.author ? user(m.author) : undefined;
     const avatars = messageAvatarMode(messageAvatars);
+    const now = Date.now();
+    const schedule = conversationSchedule(state, m.room),
+        unit = retentionUnit ?? m.retention,
+        files = hasFiles(m);
+    const retention = messageRetention(schedule, unit, m.created, Boolean(m.pinned), now, files);
     return (
         <article className={`message message-avatars-${avatars}`}>
-            <time className="message-time" dateTime={new Date(m.created).toISOString()}>
+            <time
+                className="message-time"
+                dateTime={new Date(m.created).toISOString()}
+                title={retention?.title}
+            >
+                {retention?.ending && (
+                    <Hourglass className="retention-ending" size={10} aria-hidden />
+                )}
                 <span>
                     {new Date(m.created).toLocaleTimeString('en-US', {
                         hour: 'numeric',
@@ -480,6 +508,18 @@ export function ChatMessage({
                     />
                 )}
                 {m.attachments.map((a) => {
+                    const image = /^image\/(png|jpeg|gif|webp)$/.test(a.mime);
+                    // Retention removed the file but kept the message; its name stays.
+                    if (a.removed)
+                        return (
+                            <div className="attachment attachment-removed" key={a.id}>
+                                {image ? <ImageOff size={21} /> : <FileX size={21} />}
+                                <span>
+                                    {a.name}
+                                    <small>Removed after the retention period</small>
+                                </span>
+                            </div>
+                        );
                     // Files without a preview keep the download card; images download from it.
                     const card = (
                         <button
@@ -495,7 +535,7 @@ export function ChatMessage({
                             <Download size={18} />
                         </button>
                     );
-                    return /^image\/(png|jpeg|gif|webp)$/.test(a.mime) ? (
+                    return image ? (
                         <ImageAttachment
                             key={a.id}
                             attachment={a}
@@ -588,13 +628,23 @@ export function ChatMessage({
                 )}
                 {permission('messages.pin') && (
                     <button
-                        title={m.pinned ? 'Unpin' : 'Pin'}
+                        title={
+                            m.pinned
+                                ? 'Unpin'
+                                : pinKeeps(schedule, unit, now, files)
+                                  ? 'Pin — keeps it permanently'
+                                  : 'Pin'
+                        }
                         onClick={() =>
-                            void act(() =>
-                                api(`/messages/${m.id}`, 'PATCH', {
+                            void act(async () => {
+                                const view = await api<Message>(`/messages/${m.id}`, 'PATCH', {
                                     pinned: !m.pinned,
-                                }),
-                            )
+                                });
+                                const text =
+                                    m.pinned &&
+                                    unpinText(schedule, view.retention, Date.now(), hasFiles(view));
+                                if (text) notify?.(text);
+                            })
                         }
                     >
                         <Pin size={16} />

@@ -3708,3 +3708,112 @@ label,
         transition: none;
     }
 }
+
+/* Retention: the header chip, the notice banner and a message's last days. */
+.retention-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+    padding: 2px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 16px;
+    color: var(--muted);
+    cursor: default;
+}
+.conversation-section.compact .retention-chip > span:not(.sr-only) {
+    display: none;
+}
+.retention-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.retention-banner > span {
+    flex: 1;
+    min-width: 0;
+}
+.retention-banner > button {
+    display: inline-flex;
+    flex-shrink: 0;
+    padding: 4px;
+    color: inherit;
+}
+.message-time .retention-ending {
+    flex-shrink: 0;
+    margin-right: 3px;
+    color: var(--accent);
+}
+.retention-field {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 18px;
+}
+.retention-field > button {
+    justify-self: start;
+}
+.retention-pending {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--soft-accent);
+}
+.retention-pending > p {
+    flex-basis: 100%;
+    margin: 0;
+}
+.storage-overview {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+}
+.storage-overview > p {
+    margin: 0;
+}
+.storage-overview > meter {
+    width: 100%;
+    height: 10px;
+}
+.storage-overview > button {
+    justify-self: start;
+}
+.storage-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.storage-table th,
+.storage-table td {
+    padding: 7px 8px;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+.storage-table thead th {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+}
+.storage-table tbody th {
+    font-weight: 600;
+}
+/* A file retention removed: its name stays, faded, with nothing to open. */
+.attachment.attachment-removed {
+    display: flex;
+    align-items: center;
+    width: fit-content;
+    background: transparent;
+    border-style: dashed;
+    color: var(--muted);
+}
+.attachment.attachment-removed > svg {
+    flex-shrink: 0;
+    margin-left: 0;
+    color: var(--muted);
+}

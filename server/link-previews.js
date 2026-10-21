@@ -226,7 +226,8 @@ export const previewId = (url) => createHash('sha256').update(url).digest('hex')
 
 const day = 86400000;
 export function createLinkPreviews({ get, run, enabled = true, fetcher = safeFetch }) {
-    const pending = new Map();
+    const pending = new Map(),
+        unfurls = new Set();
     let active = 0;
     let closed = false;
     const queue = [];
@@ -326,8 +327,9 @@ export function createLinkPreviews({ get, run, enabled = true, fetcher = safeFet
             /* Unreachable, blocked or unsupported pages simply get no preview. */
         }
         if (closed) return false;
+        // Not REPLACE: replacing the row would cascade away every message's link to it.
         run(
-            'INSERT OR REPLACE INTO link_previews(id,url,title,description,site,image,image_width,image_height,large,video,fetched,failed) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+            'INSERT INTO link_previews(id,url,title,description,site,image,image_width,image_height,large,video,fetched,failed) VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,description=excluded.description,site=excluded.site,image=excluded.image,image_width=excluded.image_width,image_height=excluded.image_height,large=excluded.large,video=excluded.video,fetched=excluded.fetched,failed=excluded.failed',
             previewId(url),
             url,
             row.title,
@@ -341,9 +343,10 @@ export function createLinkPreviews({ get, run, enabled = true, fetcher = safeFet
             Date.now(),
             row.failed,
         );
-        // Keep the cache bounded; the oldest previews are fetched again if linked again.
+        // Keep the cache bounded, dropping unlinked cards first; the oldest previews are
+        // fetched again if linked again.
         run(
-            'DELETE FROM link_previews WHERE id IN (SELECT id FROM link_previews ORDER BY fetched DESC LIMIT -1 OFFSET 5000)',
+            'DELETE FROM link_previews WHERE id IN (SELECT p.id FROM link_previews p ORDER BY EXISTS(SELECT 1 FROM message_link_previews l WHERE l.preview=p.id) DESC,p.fetched DESC LIMIT -1 OFFSET 5000)',
         );
         return !row.failed;
     };
@@ -360,24 +363,57 @@ export function createLinkPreviews({ get, run, enabled = true, fetcher = safeFet
         pump();
         return result;
     };
+    // Points a message at the stored cards of the links in its current text.
+    const link = (id) => {
+        run('DELETE FROM message_link_previews WHERE message=?', id);
+        const message = get('SELECT body FROM messages WHERE id=?', id);
+        if (!message || get('SELECT 1 FROM hidden_link_previews WHERE message=?', id)) return;
+        previewLinks(message.body).forEach((url, position) =>
+            run(
+                'INSERT INTO message_link_previews(message,position,preview) SELECT ?,?,id FROM link_previews WHERE id=?',
+                id,
+                position,
+                previewId(url),
+            ),
+        );
+    };
+    const unfurl = async (id) => {
+        if (!enabled) return false;
+        const message = get('SELECT body FROM messages WHERE id=?', id);
+        if (!message || get('SELECT 1 FROM hidden_link_previews WHERE message=?', id)) return false;
+        const work = previewLinks(message.body).map(refresh).filter(Boolean);
+        if (!work.length) return false;
+        const changed = (await Promise.all(work)).some(Boolean);
+        if (closed) return false;
+        link(id);
+        return changed;
+    };
+    const settled = () => Promise.allSettled([...pending.values(), ...unfurls]);
     return {
         enabled,
+        link,
+        // Cards no message shows go a day after their fetch, so the refetch cache still applies.
+        prune: () =>
+            run(
+                'DELETE FROM link_previews WHERE fetched<? AND NOT EXISTS(SELECT 1 FROM message_link_previews WHERE preview=link_previews.id)',
+                Date.now() - day,
+            ),
         // Fetches previews for a message's links, then reports whether any card changed.
-        async unfurl(message) {
-            if (!enabled || !message) return false;
-            if (get('SELECT 1 FROM hidden_link_previews WHERE message=?', message.id)) return false;
-            const work = previewLinks(message.body).map(refresh).filter(Boolean);
-            if (!work.length) return false;
-            return (await Promise.all(work)).some(Boolean);
+        unfurl(id) {
+            const task = unfurl(id);
+            const clear = () => unfurls.delete(task);
+            unfurls.add(task);
+            task.then(clear, clear);
+            return task;
         },
         async idle() {
-            await Promise.allSettled([...pending.values()]);
+            await settled();
         },
         // Lets running fetches finish without writing, before the database closes.
         async close() {
             closed = true;
             queue.length = 0;
-            await Promise.allSettled([...pending.values()]);
+            await settled();
         },
     };
 }
@@ -418,6 +454,8 @@ export function registerLinkPreviews({
                 403,
             );
             run('INSERT OR IGNORE INTO hidden_link_previews(message) VALUES(?)', m.id);
+            previews.link(m.id);
+            previews.prune();
             emitRoom(m.room, 'message:update', messageView(m));
             res.json({ ok: true });
         }),

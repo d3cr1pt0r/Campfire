@@ -26,7 +26,7 @@ export function ImageAttachment({
     const [expanded, setExpanded] = useState(false);
     const [loaded, setLoaded] = useState<{ width: number; height: number } | null>(null);
     const original = `/attachments/${attachment.id}?inline=1`;
-    // Older uploads may lack a stored size; GIFs among them are treated as animated.
+    // Images whose header could not be read have no size; GIFs among them are treated as animated.
     const animated = attachment.animated ?? (!attachment.width && attachment.mime === 'image/gif');
     const preview = useImage(url, token, near ? `/attachments/${attachment.id}/preview` : null);
     const full = useImage(url, token, (near && animated) || expanded ? original : null);
