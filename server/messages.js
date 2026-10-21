@@ -5,7 +5,7 @@ import { formatUploadLimit, maxUploadFiles } from '../shared/uploads.js';
 import { canonicalRoom } from '../shared/rooms.js';
 import { emojis } from '../shared/emojis.js';
 import { check, route } from './policies.js';
-import { transaction } from './database.js';
+import { containsText, transaction } from './database.js';
 import { createThumbnails } from './thumbnails.js';
 import { forViewer } from './poll-view.js';
 const removedFile = 'This file was removed after the retention period';
@@ -26,6 +26,7 @@ export function registerMessages({
     uploadLimit,
     polls,
     previews,
+    reader,
 }) {
     const thumbnails = createThumbnails({ get, all, run });
     const requireAction = (user, room, permission) =>
@@ -62,9 +63,32 @@ export function registerMessages({
             res.json(forViewer(messageView(message), req.user.id));
         }),
     );
+    // Search scans the conversation, so it runs on a worker thread and nobody waits for it.
+    // Access may change, and messages be edited or deleted, while it runs; the page is
+    // checked again against the current rows.
+    const search = async (req, res, room, sql, params) => {
+        const cancel = new AbortController();
+        res.on('close', () =>
+            cancel.abort(Object.assign(new Error('Search cancelled'), { status: 499 })),
+        );
+        const found = await reader.all(sql, params, cancel.signal);
+        const user = get('SELECT * FROM users WHERE id=? AND banned=0', req.user.id);
+        check(user && hasRoom(user, room), 'Unknown conversation', 403);
+        if (!found.length) return found;
+        const current = new Map(
+            all(
+                `SELECT * FROM messages WHERE id IN (${found.map(() => '?').join(',')})`,
+                ...found.map((row) => row.id),
+            ).map((row) => [row.id, row]),
+        );
+        return found.map((row) => {
+            const now = current.get(row.id);
+            return now && containsText(now.body, req.query.search) ? now : { ...row, gone: true };
+        });
+    };
     app.get(
         '/api/messages',
-        route((req, res) => {
+        route(async (req, res) => {
             const room = canonicalRoom(req.query.room);
             check(hasRoom(req.user, room), 'Unknown conversation', 403);
             const limit = Number(req.query.limit || 500);
@@ -105,11 +129,10 @@ export function registerMessages({
                 clauses.push('(created < ? OR (created = ? AND id < ?))');
                 params.push(cursor[0], cursor[0], cursor[1]);
             }
-            const rows = all(
-                `SELECT * FROM messages WHERE ${clauses.join(' AND ')} ORDER BY created DESC,id DESC LIMIT ?`,
-                ...params,
-                limit + 1,
-            );
+            const sql = `SELECT * FROM messages WHERE ${clauses.join(' AND ')} ORDER BY created DESC,id DESC LIMIT ?`;
+            const rows = req.query.search
+                ? await search(req, res, room, sql, [...params, limit + 1])
+                : all(sql, ...params, limit + 1);
             const hasMore = rows.length > limit;
             rows.length = Math.min(rows.length, limit);
             const oldest = rows.at(-1);
@@ -117,7 +140,7 @@ export function registerMessages({
                 hasMore && oldest
                     ? Buffer.from(JSON.stringify([oldest.created, oldest.id])).toString('base64url')
                     : null;
-            const messages = messageViews(rows.reverse()).map((view) =>
+            const messages = messageViews(rows.filter((row) => !row.gone).reverse()).map((view) =>
                 forViewer(view, req.user.id),
             );
             res.json({ messages, next });

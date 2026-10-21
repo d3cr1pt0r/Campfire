@@ -104,7 +104,7 @@ All `/api` routes except `/info` and `/auth/:action` require a session. Errors r
 | POST | `/api/auth/register`, `/api/auth/login` | `{username,password}`; register/sign in |
 | POST | `/api/logout` | Revoke current session |
 | GET | `/api/state` | Current user, users, roles, channels, online IDs, visible call roster, private-call invitations/membership, custom emoji metadata, ICE config |
-| GET | `/api/messages?room=...&search=...` | `{messages,next}`: the latest accessible messages (up to `limit`, at most 500) with `before` paging; optional substring filter |
+| GET | `/api/messages?room=...&search=...` | `{messages,next}`: the latest accessible messages (up to `limit`, at most 500) with `before` paging; optional substring filter, run on a worker thread (503 when busy) |
 | POST | `/api/messages` | JSON `{room,body,thread?,poll?}`, or `multipart/form-data` with `room`, `body`, `thread` fields and one `file` part per attachment |
 | PATCH | `/api/messages/:id` | `{body? ,pinned?}` with separate permission checks; returns the message |
 | DELETE | `/api/messages/:id` | Delete owned message or manager-moderated message |
@@ -366,3 +366,7 @@ Database migration 11 drops the obsolete relationship table and its index. Exist
 ## Message retention
 
 Owners can have old messages deleted automatically so a self-hosted database stays bounded. `server/retention.js` holds the hourly sweep, the policy and preview routes and the storage overview; `shared/retention.js` resolves a conversation's periods and deletion times for both the server and the apps. The server default and the direct-message period live in `retention_policies`, each text channel's override in `channels`. With the keep-text switch on, periods remove only files and link cards, leaving placeholders. Threads are deleted as a unit once their newest message is old enough; a pin anywhere keeps the whole thread, and unpinning restarts the clock. A shorter period waits a week, announced to members, unless the owner applies it at once. Expired threads reach open apps as `messages:expired`, and freed pages return to the disk through incremental vacuum. See `Docs/MessageRetention-2026-10-21.md`.
+
+## Background search
+
+Search scans a conversation's text, which takes longer as history grows, and the server's SQLite calls are synchronous: on the main thread, one slow search would pause chat, typing and call signaling for everyone. `server/reader.js` runs search queries on up to two worker threads (`server/reader-worker.js`), each with its own read-only connection, which WAL mode lets read while the main thread writes. Access is checked before the search and again after it, and the page is re-read from the current rows, so messages edited or deleted meanwhile are left out. At most 32 searches wait; beyond that, and while the server shuts down, search answers 503. A search running longer than 10 seconds is stopped with its worker. A waiting search is dropped when its request closes; one already running finishes. Search is no faster this way, only no longer in everyone's way; see `Docs/BackgroundSearch-2026-10-21.md`.

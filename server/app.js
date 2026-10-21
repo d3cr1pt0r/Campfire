@@ -23,6 +23,7 @@ import { registerPresence } from './presence.js';
 import { registerGifs } from './gifs.js';
 import { createLinkPreviews, registerLinkPreviews } from './link-previews.js';
 import { registerRetention } from './retention.js';
+import { createReader } from './reader.js';
 import { klipyMediaHosts } from '../shared/klipy.js';
 import { defaultUploadBytes, isStorageQuota, isUploadLimit } from '../shared/uploads.js';
 import { loadCertificateFiles, loadIdentity, recordIdentity } from './identity.js';
@@ -149,6 +150,7 @@ export function createApp({
         enabled: linkPreviews,
         ...(linkPreviewFetcher ? { fetcher: linkPreviewFetcher } : {}),
     });
+    const reader = createReader(database.file);
     const context = {
         ...database,
         ...sessions,
@@ -158,6 +160,7 @@ export function createApp({
         hasRoom,
         messageView,
         previews,
+        reader,
         messageViews: views,
         emitRoom,
         storageQuota,
@@ -285,6 +288,7 @@ export function createApp({
         close: () => {
             closing ??= (async () => {
                 await retention.close();
+                await reader.close();
                 clearInterval(renewal);
                 await messages.close();
                 await previews.close();

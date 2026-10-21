@@ -31,15 +31,19 @@ function checkCurrent(db) {
         );
 }
 
+// Message search matches text anywhere in the body, ignoring case.
+export const containsText = (text, search) => text.toLowerCase().includes(search.toLowerCase());
+export const addTextSearch = (db) =>
+    db.function('contains_text', (text, search) => Number(containsText(text, search)));
+
 export function openDatabase(dataDir, name) {
     mkdirSync(dataDir, { recursive: true });
-    const db = new DatabaseSync(path.join(dataDir, 'campfire.sqlite'));
+    const file = path.join(dataDir, 'campfire.sqlite');
+    const db = new DatabaseSync(file);
     try {
         checkCurrent(db);
         db.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
-        db.function('contains_text', (text, search) =>
-            Number(text.toLowerCase().includes(search.toLowerCase())),
-        );
+        addTextSearch(db);
         const run = (sql, ...params) => db.prepare(sql).run(...params);
         const get = (sql, ...params) => db.prepare(sql).get(...params);
         const all = (sql, ...params) => db.prepare(sql).all(...params);
@@ -73,7 +77,7 @@ export function openDatabase(dataDir, name) {
         );
         run('INSERT OR IGNORE INTO settings VALUES(?,?)', 'registrationMode', 'invite');
         run('INSERT OR IGNORE INTO settings VALUES(?,?)', 'name', name);
-        return { db, run, get, all };
+        return { db, file, run, get, all };
     } catch (error) {
         db.close();
         throw error;
