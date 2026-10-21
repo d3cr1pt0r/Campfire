@@ -176,22 +176,23 @@ export function createApp({
                         ? all('SELECT * FROM users WHERE banned=1').map(sessions.publicUser)
                         : [],
                 users,
-                directMessages: users
-                    .filter((user) => user.id !== req.user.id)
-                    .flatMap((user) => {
-                        const room = canonicalRoom(`dm:${req.user.id}:${user.id}`);
-                        const latest = get(
-                            'SELECT created AS updated FROM messages WHERE room=? ORDER BY created DESC,id DESC LIMIT 1',
-                            room,
-                        );
-                        if (!latest) return [];
-                        const received = get(
-                            'SELECT COALESCE(MAX(created),0) received FROM messages WHERE room=? AND author=?',
-                            room,
-                            user.id,
-                        ).received;
-                        return [{ room, updated: latest.updated, received }];
-                    }),
+                directMessages: users.flatMap((user) => {
+                    const room = canonicalRoom(`dm:${req.user.id}:${user.id}`);
+                    const latest = get(
+                        'SELECT created AS updated FROM messages WHERE room=? ORDER BY created DESC,id DESC LIMIT 1',
+                        room,
+                    );
+                    if (!latest) return [];
+                    const received =
+                        user.id === req.user.id
+                            ? 0
+                            : get(
+                                  'SELECT COALESCE(MAX(created),0) received FROM messages WHERE room=? AND author=?',
+                                  room,
+                                  user.id,
+                              ).received;
+                    return [{ room, updated: latest.updated, received }];
+                }),
                 presence: presence.snapshot(),
                 roles: all("SELECT * FROM roles WHERE id<>'owner' ORDER BY position DESC,id").map(
                     (role) => ({

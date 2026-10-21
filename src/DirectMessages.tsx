@@ -133,7 +133,6 @@ export function DirectMessages({
     for (const entry of state.directMessages || [])
         activity[entry.room] = Math.max(activity[entry.room] || 0, entry.updated);
     const conversations = state.users
-        .filter((user) => user.id !== state.me.id)
         .map((user) => ({
             user,
             destination: canonicalRoom(`dm:${state.me.id}:${user.id}`),
@@ -193,7 +192,10 @@ export function DirectMessages({
                                     <Avatar user={user} color={color(user)} />
                                     <PresenceDot status={userStatus(state, user.id)} />
                                 </div>
-                                <span className="direct-message-name">{displayName(user)}</span>
+                                <span className="direct-message-name">
+                                    {displayName(user)}
+                                    {user.id === state.me.id ? ' (you)' : ''}
+                                </span>
                                 {count > 0 && (
                                     <span className="count dm-unread">
                                         {count > 99 ? '99+' : count}

@@ -43,7 +43,7 @@ import { useDialog } from './useDialog';
 import { useModalNavigation } from './modalNavigation';
 import { createApiClient } from './api';
 import { useConversation } from './useConversation';
-import { canonicalRoom } from '../shared/rooms.js';
+import { canonicalRoom, dmParticipant } from '../shared/rooms.js';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { io } from 'socket.io-client';
@@ -1020,6 +1020,7 @@ function App() {
         });
     const startDirectCall = (id: string) =>
         act(async () => {
+            if (id === state?.me.id) throw new Error('You cannot call yourself.');
             if (call.channel) throw new Error('Leave your current call before starting another.');
             const result = await api<{ id: string }>('/calls', 'POST', { user: id });
             await call.join(result.id);
@@ -1086,9 +1087,8 @@ function App() {
     };
     const visibleMessages = messages;
     const currentChannel = state?.channels.find((c) => c.id === room),
-        dmUser = room.startsWith('dm:')
-            ? user(room.split(':').find((id) => id !== state?.me.id && id !== 'dm') || '')
-            : undefined;
+        dmUser = room.startsWith('dm:') ? user(dmParticipant(room, state?.me.id) || '') : undefined;
+    const selfDm = !!dmUser && dmUser.id === state?.me.id;
     const openSettings = (tab = 'account') => {
         setSettingsTab(tab);
         setModal('settings');
@@ -1891,7 +1891,9 @@ function App() {
                                         title={!dmUser ? currentChannel?.description : undefined}
                                     >
                                         {dmUser
-                                            ? 'A space for the two of you.'
+                                            ? selfDm
+                                                ? 'Your private space for notes and files.'
+                                                : 'A space for the two of you.'
                                             : currentChannel?.description}
                                     </span>
                                 </div>
@@ -1899,8 +1901,14 @@ function App() {
                                     <>
                                         {dmUser && (
                                             <button
-                                                title="Call member"
+                                                title={
+                                                    selfDm
+                                                        ? 'You cannot call yourself'
+                                                        : 'Call member'
+                                                }
+                                                aria-label="Call member"
                                                 disabled={
+                                                    selfDm ||
                                                     !!call.channel ||
                                                     !permission('calls.join') ||
                                                     !permission('calls.start') ||
@@ -2144,7 +2152,6 @@ function App() {
                                     callActive={!!call.channel}
                                     busy={busy}
                                     onClose={() => setMembers(false)}
-                                    onSettings={() => openSettings()}
                                 />
                             )}
                         </div>

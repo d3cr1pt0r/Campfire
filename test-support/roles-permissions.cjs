@@ -164,7 +164,7 @@ app.whenReady()
         );
         await wait(
             b,
-            `document.querySelector('.member[aria-label="Open your settings"]')?.textContent.includes('Presenter')`,
+            `document.querySelector('.member[aria-label="Message Bob (you)"]')?.textContent.includes('Presenter')`,
             'second client receives multiple roles live',
         );
         state = await api(bob, '/state');
@@ -172,7 +172,7 @@ app.whenReady()
         assert.equal(
             await js(
                 b,
-                'getComputedStyle(document.querySelector(".member[aria-label=\\\"Open your settings\\\"] strong")).color',
+                'getComputedStyle(document.querySelector(".member[aria-label=\\\"Message Bob (you)\\\"] strong")).color',
             ),
             'rgb(208, 118, 179)',
         );

@@ -15,7 +15,6 @@ export function MemberList({
     callActive,
     busy,
     onClose,
-    onSettings,
 }: {
     state: State;
     color: (user?: User) => string | undefined;
@@ -24,7 +23,6 @@ export function MemberList({
     callActive: boolean;
     busy: boolean;
     onClose: () => void;
-    onSettings: () => void;
 }) {
     return (
         <aside className="member-list" id="community-members" aria-label="Community members">
@@ -60,9 +58,9 @@ export function MemberList({
                                 <div className="member-row" key={user.id}>
                                     <button
                                         className="member"
-                                        aria-label={self ? 'Open your settings' : `Message ${name}`}
+                                        aria-label={`Message ${name}${self ? ' (you)' : ''}`}
                                         title={`@${user.username}`}
-                                        onClick={() => (self ? onSettings() : dm(user.id))}
+                                        onClick={() => dm(user.id)}
                                     >
                                         <div className="avatar-status">
                                             <Avatar

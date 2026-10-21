@@ -37,7 +37,6 @@ export function canReadRoom(userId, room, channelExists, userExists) {
         parts.length === 3 &&
         parts[0] === 'dm' &&
         parts.slice(1).includes(userId) &&
-        parts[1] !== parts[2] &&
         parts.slice(1).every(userExists)
     );
 }

@@ -41,7 +41,7 @@ test('server owners retain control while other roles combine their granted permi
     assert.equal(hasPermission({ owner: false, roles: ['member'] }, roles, 'server.edit'), false);
     assert.equal(hasPermission({ owner: false, roles: ['member'] }, roles, 'calls.join'), true);
 });
-test('DM access requires exactly two existing distinct participants and membership', () => {
+test('DM access requires existing participants and membership, including personal DMs', () => {
     const channelExists = (r) => r === 'general';
     const userExists = (id) => ['alice', 'bob', 'eve'].includes(id);
     const can = (id, room) => canReadRoom(id, room, channelExists, userExists);
@@ -51,6 +51,8 @@ test('DM access requires exactly two existing distinct participants and membersh
     assert.equal(can('eve', 'dm:alice:bob'), false);
     assert.equal(can('alice', 'dm:alice:missing'), false);
     assert.equal(can('alice', 'dm:alice:bob:eve'), false);
-    assert.equal(can('alice', 'dm:alice:alice'), false);
+    assert.equal(can('alice', 'dm:alice:alice'), true);
+    assert.equal(can('bob', 'dm:alice:alice'), false);
+    assert.equal(can('alice', 'dm:missing:missing'), false);
     assert.equal(can('alice', 'unknown-channel'), false);
 });

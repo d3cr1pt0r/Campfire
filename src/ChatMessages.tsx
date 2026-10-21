@@ -255,19 +255,26 @@ function ChatMessageList({
                                     </span>
                                     <h1>
                                         {dmUser
-                                            ? `Say hello to ${displayName(dmUser)}.`
+                                            ? dmUser.id === state.me.id
+                                                ? 'Your personal space.'
+                                                : `Say hello to ${displayName(dmUser)}.`
                                             : `Welcome to #${currentChannel?.name || 'general'}`}
                                     </h1>
                                     <p>
                                         {dmUser
-                                            ? 'Your direct conversation starts here.'
+                                            ? dmUser.id === state.me.id
+                                                ? 'Save notes, links, and files here. Only you can see this conversation.'
+                                                : 'Your direct conversation starts here.'
                                             : 'Settle in. Swap stories. Stay for one more.'}
                                     </p>
                                     <div className="welcome-line">
                                         <span>
                                             <Shield size={14} /> Hosted on your server
                                         </span>
-                                        <i /> Only your community
+                                        <i />{' '}
+                                        {dmUser?.id === state.me.id
+                                            ? 'Only you'
+                                            : 'Only your community'}
                                     </div>
                                 </div>
                             )}

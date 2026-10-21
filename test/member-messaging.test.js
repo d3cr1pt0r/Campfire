@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
-import { canonicalRoom } from '../shared/rooms.js';
+import { canonicalRoom, dmParticipant } from '../shared/rooms.js';
 import { roleFixture } from '../test-support/role-fixture.js';
 
 test('member DMs, attachments and sessions survive a restart without relationship endpoints', async () => {
@@ -108,4 +108,60 @@ test('DM activity distinguishes incoming messages from outgoing messages after r
     assert.equal((await f.api(f.owner, '/state')).directMessages[0].received, incoming.created);
     const next = await f.api(f.member, '/messages', 'POST', { room, body: 'New incoming' });
     assert.equal((await f.api(f.owner, '/state')).directMessages[0].received, next.created);
+});
+
+test('personal DMs persist notes and files privately, support normal actions, and cannot start self calls', async (t) => {
+    const f = await roleFixture(t);
+    const room = canonicalRoom(`dm:${f.member.user.id}:${f.member.user.id}`);
+    assert.equal(dmParticipant(room, f.member.user.id), f.member.user.id);
+    assert.equal(dmParticipant(room, f.owner.user.id), null);
+    assert.equal(
+        dmParticipant(`dm:${f.owner.user.id}:${f.member.user.id}`, f.owner.user.id),
+        f.member.user.id,
+    );
+    const sent = await f.api(f.member, '/messages', 'POST', {
+        room,
+        body: 'A private note to myself',
+        attachments: [
+            { name: 'private.txt', data: Buffer.from('private file').toString('base64') },
+        ],
+    });
+    const thread = await f.api(f.member, '/messages', 'POST', {
+        room,
+        thread: sent.id,
+        body: 'A private reply',
+    });
+    await f.api(f.member, `/messages/${sent.id}`, 'PATCH', {
+        body: 'An edited personal note',
+        pinned: true,
+    });
+    await f.api(f.member, `/messages/${sent.id}/reaction`, 'POST', { emoji: '👍' });
+    for (const account of [f.owner, f.other]) {
+        await f.api(account, `/messages?room=${encodeURIComponent(room)}`, 'GET', undefined, 403);
+        await f.api(account, `/messages/${sent.id}`, 'GET', undefined, 404);
+        await f.api(account, `/attachments/${sent.attachments[0].id}`, 'GET', undefined, 404);
+        await f.api(account, '/messages', 'POST', { room, body: 'Intrusion' }, 403);
+        assert.ok(
+            !(await f.api(account, '/state')).directMessages.some((entry) => entry.room === room),
+        );
+    }
+    await f.api(f.member, '/calls', 'POST', { user: f.member.user.id }, 403);
+    await f.restart();
+    assert.deepEqual((await f.api(f.member, '/state')).directMessages, [
+        { room, updated: thread.created, received: 0 },
+    ]);
+    const history = await f.api(
+        f.member,
+        `/messages?room=${encodeURIComponent(room)}&search=personal`,
+    );
+    assert.equal(history.length, 1);
+    assert.equal(history[0].pinned, 1);
+    assert.equal(history[0].reactions.length, 1);
+    assert.equal(
+        (await f.api(f.member, `/attachments/${sent.attachments[0].id}`)).toString(),
+        'private file',
+    );
+    await f.api(f.member, `/messages/${thread.id}`, 'DELETE');
+    await f.api(f.member, `/messages/${sent.id}`, 'DELETE');
+    assert.deepEqual(await f.api(f.member, `/messages?room=${encodeURIComponent(room)}`), []);
 });
