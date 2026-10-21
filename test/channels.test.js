@@ -48,6 +48,31 @@ async function fixture(t) {
     };
 }
 
+test('Unicode channel names can be created, renamed and persisted for text and voice', async (t) => {
+    const f = await fixture(t),
+        { owner, api } = f;
+    const expected = new Map();
+    for (const kind of ['text', 'voice']) {
+        for (const name of ['ČŠŽ café', 'ČŠŽ café'.normalize('NFD'), 'हिन्दी 日本語']) {
+            const channel = await api(owner, '/channels', 'POST', { name, kind });
+            const normalized = kind === 'text' ? name.toLowerCase().replace(/\s+/g, '-') : name;
+            expected.set(channel.id, normalized.normalize('NFC'));
+        }
+        const channel = await api(owner, '/channels', 'POST', { name: 'Rename', kind });
+        await api(owner, `/channels/${channel.id}`, 'PATCH', { name: 'Živjo ŠČ'.normalize('NFD') });
+        expected.set(channel.id, kind === 'text' ? 'živjo-šč' : 'Živjo ŠČ');
+        for (const name of ['', 'č'.repeat(33), 'bad/name', '<script>', 'hello😀']) {
+            await api(owner, '/channels', 'POST', { name, kind }, 400);
+            await api(owner, `/channels/${channel.id}`, 'PATCH', { name }, 400);
+        }
+    }
+    await f.restart();
+    const state = await api(owner, '/state');
+    for (const [id, name] of expected) {
+        assert.equal(state.channels.find((channel) => channel.id === id)?.name, name);
+    }
+});
+
 test('protected channels can be renamed; additional channel deletion cascades and survives restart', async (t) => {
     const f = await fixture(t),
         { owner, member, api } = f;

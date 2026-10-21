@@ -143,9 +143,13 @@ export function boundedPng(encoded, side) {
 export function channelName(name, kind) {
     if (!['text', 'voice'].includes(kind) || typeof name !== 'string')
         throw new Error('Invalid channel type or name');
-    name = name.trim();
+    name = name.trim().normalize('NFC');
     if (kind === 'text') name = name.toLowerCase().replace(/\s+/g, '-');
-    if (!(kind === 'text' ? /^[a-z0-9-]{1,32}$/ : /^[\p{L}\p{N} _-]{1,32}$/u).test(name))
+    if (
+        !(kind === 'text' ? /^[\p{L}\p{M}\p{N}-]{1,32}$/u : /^[\p{L}\p{M}\p{N} _-]{1,32}$/u).test(
+            name,
+        )
+    )
         throw new Error(
             kind === 'text'
                 ? 'Use 1–32 letters, numbers, spaces, or hyphens'
