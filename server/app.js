@@ -21,6 +21,8 @@ import { registerAdministration } from './administration.js';
 import { registerCalls } from './calls.js';
 import { registerVoiceInvitations } from './voice-invitations.js';
 import { registerPresence } from './presence.js';
+import { registerGifs } from './gifs.js';
+import { klipyMediaHosts } from '../shared/klipy.js';
 import { loadCertificateFiles, loadIdentity } from './identity.js';
 
 export function createApp({
@@ -28,6 +30,7 @@ export function createApp({
     origins = [],
     name = 'My Campfire server',
     iceServers = [],
+    klipyKey = '',
     trustProxy = false,
     maxStoredUploadBytes = 1024 * 1024 * 1024,
     setupCode,
@@ -86,7 +89,7 @@ export function createApp({
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader(
             'Content-Security-Policy',
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; img-src 'self' data: blob:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+            `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; img-src 'self' data: blob: ${klipyMediaHosts.map((host) => `https://${host}`).join(' ')}; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
         );
         if (req.method === 'OPTIONS') return res.sendStatus(204);
         next();
@@ -155,6 +158,7 @@ export function createApp({
     const presence = registerPresence(context);
     const calls = registerCalls(context);
     registerVoiceInvitations(context);
+    registerGifs(context);
     app.get(
         '/api/state',
         route((req, res) => {
@@ -217,6 +221,8 @@ export function createApp({
                 directCalls: calls.privateState(req.user.id),
                 emojis: all('SELECT id,name,author FROM emojis'),
                 iceServers,
+                // Members' apps search KLIPY directly with the server owner's key.
+                klipyKey: klipyKey || null,
                 identity: publicIdentity(),
             });
         }),

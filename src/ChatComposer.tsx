@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { EditorState } from 'prosemirror-state';
 import { Emoji } from './ChatContent';
 import { emojiQuery, emojiMatches } from './emojiCompletion';
@@ -7,6 +8,8 @@ import { CaseSensitive, Paperclip, X, Plus, Smile, Send, Vote } from 'lucide-rea
 import { pollCommand } from './polls';
 import { displayName } from './profiles';
 import { FormattingToolbar, RichEditor, type RichEditorHandle } from './RichEditor';
+import { GifPicker } from './GifPicker';
+import type { Gif } from './klipy';
 import { inCodeBlock } from './richText';
 import type { User } from './types';
 
@@ -49,6 +52,9 @@ type Props = {
     emojis?: { id: string; name: string; author: string | null }[];
     // Opens the poll dialog, with a question when typed as "/poll Question".
     onPoll?: (question: string) => void;
+    // GIF search appears when the server has a KLIPY key and the conversation can send.
+    klipyKey?: string | null;
+    onGif?: (gif: Gif) => void;
     formattingToolbar: boolean;
     setFormattingToolbar: (shown: boolean) => void;
 };
@@ -76,6 +82,8 @@ export function ChatComposer({
     users,
     emojis = [],
     onPoll,
+    klipyKey,
+    onGif,
     formattingToolbar,
     setFormattingToolbar,
 }: Props) {
@@ -84,6 +92,46 @@ export function ChatComposer({
     const addButton = useRef<HTMLButtonElement>(null);
     const menu = useRef<HTMLDivElement>(null);
     const [menuOpen, setMenuOpen] = useState(false);
+    const [gifOpen, setGifOpen] = useState(false);
+    const gifButton = useRef<HTMLButtonElement>(null);
+    const gifPanel = useRef<HTMLDivElement>(null);
+    const canGif = !!klipyKey && !!onGif && canPost;
+    useEffect(() => {
+        if (!gifOpen) return;
+        const close = (event: MouseEvent) => {
+            const target = event.target as Node;
+            if (!gifPanel.current?.contains(target) && !gifButton.current?.contains(target))
+                setGifOpen(false);
+        };
+        document.addEventListener('mousedown', close);
+        return () => document.removeEventListener('mousedown', close);
+    }, [gifOpen]);
+    // The picker floats above the GIF button, outside the composer's scroll area.
+    const [gifAnchor, setGifAnchor] = useState<{
+        right: number;
+        bottom: number;
+        height: number;
+    } | null>(null);
+    useLayoutEffect(() => {
+        if (!gifOpen) return;
+        const place = () => {
+            const button = gifButton.current?.getBoundingClientRect();
+            const box = form.current?.getBoundingClientRect();
+            if (!button || !box) return;
+            setGifAnchor({
+                right: Math.max(8, window.innerWidth - button.right - 4),
+                bottom: window.innerHeight - box.top + 8,
+                height: Math.min(440, box.top - 16),
+            });
+        };
+        place();
+        window.addEventListener('resize', place);
+        return () => window.removeEventListener('resize', place);
+    }, [gifOpen]);
+    const closeGifs = () => {
+        setGifOpen(false);
+        gifButton.current?.focus();
+    };
     const canPoll = !!onPoll && canPost;
     const menuItems = () => [
         ...(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ||
@@ -265,6 +313,31 @@ export function ChatComposer({
                     ))}
                 </div>
             )}
+            {gifOpen &&
+                canGif &&
+                gifAnchor &&
+                createPortal(
+                    <div
+                        ref={gifPanel}
+                        className="gif-popover"
+                        style={{
+                            right: gifAnchor.right,
+                            bottom: gifAnchor.bottom,
+                            height: gifAnchor.height,
+                        }}
+                    >
+                        <GifPicker
+                            klipyKey={klipyKey!}
+                            onClose={closeGifs}
+                            onPick={(gif) => {
+                                setGifOpen(false);
+                                onGif!(gif);
+                                editor.current?.focus();
+                            }}
+                        />
+                    </div>,
+                    document.body,
+                )}
             {menuOpen && (
                 <div
                     className="composer-menu"
@@ -395,6 +468,21 @@ export function ChatComposer({
                 >
                     <CaseSensitive size={21} />
                 </button>
+                {canGif && (
+                    <button
+                        type="button"
+                        ref={gifButton}
+                        className="gif-button"
+                        title="Send a GIF"
+                        aria-label="Send a GIF"
+                        aria-haspopup="dialog"
+                        aria-expanded={gifOpen}
+                        disabled={busy}
+                        onClick={() => setGifOpen((open) => !open)}
+                    >
+                        <span className="gif-label">GIF</span>
+                    </button>
+                )}
                 <button
                     type="button"
                     title="Add emoji"

@@ -60,6 +60,8 @@ export type State = {
     directMessages?: { room: string; updated: number; received?: number }[];
     emojis: { id: string; name: string; author: string | null }[];
     iceServers: RTCIceServer[];
+    // The server owner's KLIPY key; null when GIF search is not set up.
+    klipyKey?: string | null;
     // Present when the server terminates TLS itself; fingerprint only for its own identity.
     identity?: { fingerprint?: string; certificateSha256: string };
 };
@@ -170,3 +172,13 @@ export interface ClientEvents {
     'call:speaking': (active: boolean) => void;
     signal: (event: { to: string; data: CallSignal }) => void;
 }
+
+// A GIF a member starred; the links are KLIPY's own.
+export type GifFavorite = {
+    id: string;
+    url: string;
+    preview: string;
+    width: number;
+    height: number;
+    title: string;
+};

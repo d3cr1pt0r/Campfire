@@ -11,7 +11,10 @@ import {
     useState,
     type RefObject,
 } from 'react';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, Star } from 'lucide-react';
+import { klipyGifMessage } from './klipy';
+import { useGifFavorites } from './GifPicker';
+import { attachmentFrame } from './images';
 import { useImage } from './useImage';
 import { useAvatarImage } from './useAvatarImage';
 export const AssetContext = createContext({ url: '', token: '', account: '' });
@@ -165,6 +168,58 @@ function CodeBlock({ text }: { text: string }) {
         </div>
     );
 }
+// A sent KLIPY GIF, loaded from KLIPY's own link. It takes its shape once loaded.
+function GifMessage({ url }: { url: string }) {
+    const { favorites, toggle } = useGifFavorites();
+    const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+    const [failed, setFailed] = useState(false);
+    if (failed)
+        return (
+            <a href={url} target="_blank" rel="noopener noreferrer">
+                GIF unavailable
+            </a>
+        );
+    const frame = size ? attachmentFrame(size.width, size.height) : null;
+    const starred = favorites.some((favorite) => favorite.url === url);
+    return (
+        <div
+            className={`gif-embed ${frame ? '' : 'unsized'}`}
+            style={
+                frame
+                    ? {
+                          aspectRatio: `${frame.width} / ${frame.height}`,
+                          width: `min(100%, ${frame.width}px, calc(var(--attachment-max-height, 360px) * ${frame.width / frame.height}))`,
+                      }
+                    : undefined
+            }
+        >
+            <img
+                src={url}
+                alt="GIF"
+                decoding="async"
+                onLoad={(event) =>
+                    setSize({
+                        width: event.currentTarget.naturalWidth,
+                        height: event.currentTarget.naturalHeight,
+                    })
+                }
+                onError={() => setFailed(true)}
+            />
+            {size && (
+                <button
+                    type="button"
+                    className="gif-star"
+                    aria-pressed={starred}
+                    title={starred ? 'Remove from favourites' : 'Add to favourites'}
+                    aria-label={starred ? 'Remove GIF from favourites' : 'Add GIF to favourites'}
+                    onClick={() => toggle({ url, preview: url, ...size, title: '' })}
+                >
+                    <Star size={15} />
+                </button>
+            )}
+        </div>
+    );
+}
 // Consecutive lines share one pre-wrapped run; lists, quotes and code blocks break lines themselves.
 export function ChatContent({
     text,
@@ -175,6 +230,8 @@ export function ChatContent({
     users?: User[];
     custom: Custom;
 }) {
+    const gif = klipyGifMessage(text);
+    if (gif) return <GifMessage url={gif} />;
     const lines = (rows: Inline[][]) =>
         rows.map((row, i) => (
             <Fragment key={i}>

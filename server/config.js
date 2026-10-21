@@ -65,6 +65,8 @@ export function serverConfig(env = process.env, argv = []) {
             .map((origin) => origin.trim())
             .filter(Boolean),
         iceServers: JSON.parse(env.ICE_SERVERS || '[]'),
+        // Optional: a KLIPY API key turns on GIF search for members.
+        klipyKey: (env.KLIPY_API_KEY || '').trim(),
         trustProxy,
         maxStoredUploadBytes: Number(env.MAX_STORED_UPLOAD_BYTES || 1073741824),
         publicAddress: publicAddress(env.PUBLIC_ADDRESS),

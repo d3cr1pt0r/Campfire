@@ -145,6 +145,18 @@ CREATE TABLE IF NOT EXISTS attachment_images(
     height INTEGER NOT NULL,
     animated INTEGER NOT NULL CHECK(animated IN (0,1))
 );
+-- GIFs a member starred in the GIF picker. Only KLIPY's links are kept, not the media.
+CREATE TABLE IF NOT EXISTS gif_favorites(
+    id TEXT PRIMARY KEY,
+    user TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    preview TEXT NOT NULL,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    created INTEGER NOT NULL,
+    UNIQUE(user, url)
+);
 CREATE TABLE IF NOT EXISTS attachment_previews(
     attachment TEXT PRIMARY KEY REFERENCES attachments(id) ON DELETE CASCADE,
     data BLOB,

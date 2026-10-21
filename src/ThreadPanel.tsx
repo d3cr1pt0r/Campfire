@@ -331,6 +331,16 @@ export function ThreadPanel(props: Props) {
                 onPoll={(question) =>
                     props.openPoll({ room: parent.room, thread: parent.id, question })
                 }
+                klipyKey={state.klipyKey}
+                onGif={(gif) =>
+                    void api('/messages', 'POST', {
+                        room: parent.room,
+                        thread: parent.id,
+                        body: gif.send.url,
+                    }).catch((e: Error) => {
+                        if (mounted.current) setError(e.message);
+                    })
+                }
                 formattingToolbar={props.formattingToolbar}
                 setFormattingToolbar={props.setFormattingToolbar}
             />

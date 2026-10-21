@@ -76,7 +76,9 @@ import {
     Video,
     Maximize2,
 } from 'lucide-react';
-import type { State, Message, Preferences, User } from './types';
+import type { State, Message, Preferences, User, GifFavorite } from './types';
+import { publishGifFavorites, type FavoriteGif } from './GifPicker';
+import type { Gif } from './klipy';
 import { useCall } from './useCall';
 import { displayName } from './profiles';
 import { PresenceDot } from './PresenceDot';
@@ -436,6 +438,36 @@ function App() {
     const notify = useCallback((text: string) => setError(text), []);
     const client = useMemo(() => createApiClient(url, token), [url, token]);
     const api = client.json;
+    // Starred GIFs belong to the account, so they are loaded from the server per sign-in.
+    const [gifFavorites, setGifFavorites] = useState<GifFavorite[]>([]);
+    const gifFavoritesRef = useRef(gifFavorites);
+    gifFavoritesRef.current = gifFavorites;
+    const klipyKey = state?.klipyKey || null;
+    useEffect(() => {
+        setGifFavorites([]);
+        if (!klipyKey) return;
+        const controller = new AbortController();
+        api<GifFavorite[]>('/gif-favorites', 'GET', undefined, controller.signal)
+            .then(setGifFavorites)
+            .catch(() => {});
+        return () => controller.abort();
+    }, [client, klipyKey]);
+    const toggleGifFavorite = useCallback(
+        (gif: FavoriteGif) => {
+            const existing = gifFavoritesRef.current.find((favorite) => favorite.url === gif.url);
+            (existing
+                ? api<GifFavorite[]>(`/gif-favorites/${existing.id}`, 'DELETE')
+                : api<GifFavorite[]>('/gif-favorites', 'POST', gif)
+            )
+                .then(setGifFavorites)
+                .catch((error: Error) => notify(error.message));
+        },
+        [client, notify],
+    );
+    useEffect(
+        () => publishGifFavorites({ favorites: gifFavorites, toggle: toggleGifFavorite }),
+        [gifFavorites, toggleGifFavorite],
+    );
     const roomVisible =
         !!state &&
         (room.startsWith('dm:') ||
@@ -2113,6 +2145,12 @@ function App() {
                                     user={user}
                                     placeholder={`Message ${dmUser ? '@' + displayName(dmUser) : '#' + (currentChannel?.name || 'general')}`}
                                     onPoll={(question) => openPoll({ room, question })}
+                                    klipyKey={klipyKey}
+                                    onGif={(gif: Gif) =>
+                                        void act(() =>
+                                            api('/messages', 'POST', { room, body: gif.send.url }),
+                                        )
+                                    }
                                     formattingToolbar={formattingToolbar}
                                     setFormattingToolbar={setFormattingToolbar}
                                 />
