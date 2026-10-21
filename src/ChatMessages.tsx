@@ -1,3 +1,4 @@
+import { messageAvatarMode, type MessageAvatarMode } from './messageAppearance';
 import { VoiceInviteCard } from './VoiceInviteCard';
 import { ReactionChip } from './ReactionChip';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -87,12 +88,14 @@ function ChatMessageList({
     setEdit,
     clearFilters,
     onReply,
+    messageAvatars,
     currentVoiceChannel,
     onJoinVoice,
     thread = false,
     saved,
     save,
 }: {
+    messageAvatars?: MessageAvatarMode;
     saved?: ChatScrollPosition;
     save: (position: ChatScrollPosition) => void;
     currentVoiceChannel?: string | null;
@@ -338,6 +341,7 @@ function ChatMessageList({
                                         setEdit={setEdit}
                                         onReply={onReply}
                                         thread={thread}
+                                        messageAvatars={messageAvatars}
                                         currentVoiceChannel={currentVoiceChannel}
                                         onJoinVoice={onJoinVoice}
                                     />
@@ -378,11 +382,13 @@ export function ChatMessage({
     setModal,
     setEdit,
     onReply,
+    messageAvatars,
     currentVoiceChannel,
     onJoinVoice,
     thread = false,
 }: Pick<
     React.ComponentProps<typeof ChatMessageList>,
+    | 'messageAvatars'
     | 'currentVoiceChannel'
     | 'onJoinVoice'
     | 'permission'
@@ -399,8 +405,9 @@ export function ChatMessage({
     | 'thread'
 > & { message: Message }) {
     const u = m.author ? user(m.author) : undefined;
+    const avatars = messageAvatarMode(messageAvatars);
     return (
-        <article className="message">
+        <article className={`message message-avatars-${avatars}`}>
             <time className="message-time" dateTime={new Date(m.created).toISOString()}>
                 <span>
                     {new Date(m.created).toLocaleTimeString('en-US', {
@@ -409,7 +416,7 @@ export function ChatMessage({
                     })}
                 </span>
             </time>
-            <Avatar user={u} color={color(u)} />
+            {avatars !== 'hidden' && <Avatar user={u} color={color(u)} />}
             <div className="message-body">
                 <div className="message-line">
                     <span className="message-meta">

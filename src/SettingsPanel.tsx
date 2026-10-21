@@ -1,3 +1,4 @@
+import { MessageAppearanceSettings } from './MessageAppearanceSettings';
 import { RolesSettings } from './RolesSettings';
 import { MemberManagement } from './MemberManagement';
 import { RegistrationSettings } from './RegistrationSettings';
@@ -243,277 +244,351 @@ export function SettingsPanel({
                             This preference applies only to this client, including the sign-in
                             screen.
                         </p>
+                        <MessageAppearanceSettings
+                            prefs={prefs}
+                            setPrefs={setPrefs}
+                            user={state.me}
+                            color={color(state.me)}
+                        />
                     </>
                 )}
                 {settingsTab === 'account' && (
-                    <>
-                        <label>
-                            Status
-                            <select
-                                value={state.me.status || 'online'}
-                                disabled={busy}
-                                onChange={(event) => {
-                                    const status = event.target.value;
-                                    void act(async () => {
-                                        await api('/presence', 'PATCH', { status });
-                                        await refresh();
-                                    });
-                                }}
-                            >
-                                <option value="online">Online</option>
-                                <option value="idle">Idle</option>
-                                <option value="dnd">Do not disturb</option>
-                            </select>
-                        </label>
-                        <p className="field-help">
-                            Do not disturb silences message sounds and desktop notifications. You
-                            can still receive messages and join calls.
-                        </p>
-                        <Toggle
-                            title="Set Idle automatically when I’m away"
-                            value={!!prefs.autoIdle}
-                            set={(autoIdle) => setPrefs({ ...prefs, autoIdle })}
-                        />
-                        {prefs.autoIdle && (
-                            <label>
-                                Idle after
-                                <select
-                                    value={prefs.idleMinutes || 5}
-                                    onChange={(event) =>
-                                        setPrefs({
-                                            ...prefs,
-                                            idleMinutes: Number(event.target.value),
-                                        })
-                                    }
-                                >
-                                    {[1, 5, 10, 15, 30].map((minutes) => (
-                                        <option key={minutes} value={minutes}>
-                                            {minutes} {minutes === 1 ? 'minute' : 'minutes'}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
-                        )}
-                        <p className="field-help">
-                            Automatically returns to Online when activity resumes. Manual Idle and
-                            Do not disturb stay selected. The desktop app uses computer activity
-                            where supported; the browser and unsupported desktops use activity in
-                            this app. This preference saves on this device.
-                        </p>
-                        <div className="profile-card">
-                            <Avatar
-                                user={state.me}
-                                color={color(state.me)}
-                                frame={state.me.frame}
-                            />
-                            <div>
-                                <h3>{displayName(state.me)}</h3>
-                                <p>
-                                    {state.me.owner
-                                        ? 'Owner'
-                                        : state.roles
-                                              .filter((role) => state.me.roles.includes(role.id))
-                                              .map((role) => role.name)
-                                              .join(' · ') ||
-                                          state.roles.find((role) => role.id === 'everyone')
-                                              ?.name ||
-                                          'Default'}
-                                </p>
+                    <div className="account-settings">
+                        <section className="account-section account-profile" aria-label="Profile">
+                            <div className="account-profile-overview">
+                                <div className="profile-card">
+                                    <Avatar
+                                        user={state.me}
+                                        color={color(state.me)}
+                                        frame={state.me.frame}
+                                    />
+                                    <div>
+                                        <h3>{displayName(state.me)}</h3>
+                                        <p>
+                                            {state.me.owner
+                                                ? 'Owner'
+                                                : state.roles
+                                                      .filter((role) =>
+                                                          state.me.roles.includes(role.id),
+                                                      )
+                                                      .map((role) => role.name)
+                                                      .join(' · ') ||
+                                                  state.roles.find((role) => role.id === 'everyone')
+                                                      ?.name ||
+                                                  'Default'}
+                                        </p>
+                                    </div>
+                                </div>
+                                <label className="account-status">
+                                    Status
+                                    <select
+                                        value={state.me.status || 'online'}
+                                        disabled={busy}
+                                        onChange={(event) => {
+                                            const status = event.target.value;
+                                            void act(async () => {
+                                                await api('/presence', 'PATCH', { status });
+                                                await refresh();
+                                            });
+                                        }}
+                                    >
+                                        <option value="online">Online</option>
+                                        <option value="idle">Idle</option>
+                                        <option value="dnd">Do not disturb</option>
+                                    </select>
+                                </label>
                             </div>
-                        </div>
-                        <form
-                            onSubmit={(event) => {
-                                event.preventDefault();
-                                const form = new FormData(event.currentTarget);
-                                void act(async () => {
-                                    await api('/profile', 'PATCH', {
-                                        nickname: form.get('nickname'),
-                                    });
-                                    await refresh();
-                                    notify('Nickname saved.');
-                                });
-                            }}
-                        >
-                            <label>
-                                Username
-                                <input readOnly value={state.me.username} />
-                            </label>
-                            <p className="muted">
-                                Your account username is permanent. Use it to sign in.
+                            <p className="field-help">
+                                Do not disturb silences message sounds and desktop alerts.
                             </p>
-                            <label>
-                                Nickname
-                                <input
-                                    key={state.me.nickname}
-                                    name="nickname"
-                                    defaultValue={state.me.nickname || state.me.username}
-                                    minLength={1}
-                                    maxLength={32}
-                                    required
-                                />
-                            </label>
-                            <button className="primary" disabled={busy}>
-                                Save nickname
-                            </button>
-                        </form>
-                        <label className="secondary">
-                            Upload profile picture
-                            <input
-                                type="file"
-                                accept="image/png,image/jpeg,image/webp,image/gif"
-                                disabled={busy}
-                                onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) setAvatarFile(file);
-                                    e.target.value = '';
-                                }}
-                            />
-                        </label>
-                        <p className="muted">
-                            Choose the crop and position before saving. Saved as a 512 × 512 image.
-                            Upload the original again to restore an earlier crop.
-                        </p>
-                        {state.me.avatar && (
-                            <button
-                                className="secondary"
-                                disabled={busy}
-                                onClick={() =>
-                                    void act(async () => setAvatarFile(await loadAvatar()))
-                                }
-                            >
-                                Adjust current picture
-                            </button>
-                        )}
-                        {state.me.avatar && (
-                            <button
-                                className="secondary danger-text"
-                                disabled={busy}
-                                onClick={() =>
+                            <form
+                                className="account-nickname-form"
+                                onSubmit={(event) => {
+                                    event.preventDefault();
+                                    const form = new FormData(event.currentTarget);
                                     void act(async () => {
-                                        await api('/profile/avatar', 'DELETE');
+                                        await api('/profile', 'PATCH', {
+                                            nickname: form.get('nickname'),
+                                        });
                                         await refresh();
-                                    })
-                                }
-                            >
-                                Remove profile picture
-                            </button>
-                        )}
-                        {state.profileFrames === false ? (
-                            <p className="muted">Profile frames are turned off on this server.</p>
-                        ) : (
-                            <>
-                                <fieldset className="frame-options">
-                                    <legend>Profile frame</legend>
-                                    {frameGroups.map(([group, frames]) => (
-                                        <div className="frame-group" key={group}>
-                                            <h4>{group}</h4>
-                                            <div className="frame-grid">
-                                                {frames.map(([frame, title]) => (
-                                                    <label className="frame-choice" key={title}>
-                                                        <Avatar
-                                                            user={state.me}
-                                                            color={color(state.me)}
-                                                            frame={frame}
-                                                        />
-                                                        <strong>{title}</strong>
-                                                        <input
-                                                            type="radio"
-                                                            name="frame"
-                                                            checked={
-                                                                (state.me.frame ?? null) === frame
-                                                            }
-                                                            disabled={busy}
-                                                            onChange={() =>
-                                                                void act(async () => {
-                                                                    await api('/profile', 'PATCH', {
-                                                                        frame,
-                                                                    });
-                                                                    await refresh();
-                                                                })
-                                                            }
-                                                        />
-                                                    </label>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </fieldset>
-                                <p className="muted">
-                                    Everyone sees your frame in the member list. Animated frames
-                                    move there when someone hovers over you.
-                                </p>
-                            </>
-                        )}
-                        <form
-                            onSubmit={(event) => {
-                                event.preventDefault();
-                                const form = event.currentTarget;
-                                const data = new FormData(form);
-                                void act(async () => {
-                                    if (data.get('password') !== data.get('confirm'))
-                                        throw new Error('The new passwords don’t match.');
-                                    await api('/account/password', 'POST', {
-                                        current: data.get('current'),
-                                        password: data.get('password'),
+                                        notify('Nickname saved.');
                                     });
-                                    form.reset();
-                                    notify('Password changed. Your other devices were signed out.');
-                                });
-                            }}
+                                }}
+                            >
+                                <label>
+                                    Username
+                                    <input readOnly value={state.me.username} />
+                                    <small className="field-help">Permanent sign-in name.</small>
+                                </label>
+                                <label>
+                                    Nickname
+                                    <input
+                                        key={state.me.nickname}
+                                        name="nickname"
+                                        defaultValue={state.me.nickname || state.me.username}
+                                        minLength={1}
+                                        maxLength={32}
+                                        required
+                                    />
+                                </label>
+                                <button className="primary" disabled={busy}>
+                                    Save nickname
+                                </button>
+                            </form>
+                            <div className="account-picture-actions">
+                                <label className="secondary account-picture-upload">
+                                    Upload profile picture
+                                    <input
+                                        type="file"
+                                        className="sr-only"
+                                        accept="image/png,image/jpeg,image/webp,image/gif"
+                                        disabled={busy}
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) setAvatarFile(file);
+                                            e.target.value = '';
+                                        }}
+                                    />
+                                </label>
+                                {state.me.avatar && (
+                                    <button
+                                        className="secondary"
+                                        disabled={busy}
+                                        onClick={() =>
+                                            void act(async () => setAvatarFile(await loadAvatar()))
+                                        }
+                                    >
+                                        Adjust current picture
+                                    </button>
+                                )}
+                                {state.me.avatar && (
+                                    <button
+                                        className="secondary danger-text"
+                                        disabled={busy}
+                                        onClick={() =>
+                                            void act(async () => {
+                                                await api('/profile/avatar', 'DELETE');
+                                                await refresh();
+                                            })
+                                        }
+                                    >
+                                        Remove profile picture
+                                    </button>
+                                )}
+                            </div>
+                            <p className="field-help">
+                                Choose your crop before saving. Upload the original again to restore
+                                an earlier crop.
+                            </p>{' '}
+                            {state.profileFrames === false ? (
+                                <p className="muted">
+                                    Profile frames are turned off on this server.
+                                </p>
+                            ) : (
+                                <details className="account-details account-frames">
+                                    <summary>
+                                        <span>Profile frame</span>
+                                        <small>
+                                            {frameGroups
+                                                .flatMap(([, frames]) => frames)
+                                                .find(
+                                                    ([frame]) => frame === (state.me.frame ?? null),
+                                                )?.[1] || 'None'}
+                                        </small>
+                                    </summary>
+                                    <fieldset className="frame-options">
+                                        <legend>Profile frame</legend>
+                                        {frameGroups.map(([group, frames]) => (
+                                            <div className="frame-group" key={group}>
+                                                <h4>{group}</h4>
+                                                <div className="frame-grid">
+                                                    {frames.map(([frame, title]) => (
+                                                        <label className="frame-choice" key={title}>
+                                                            <Avatar
+                                                                user={state.me}
+                                                                color={color(state.me)}
+                                                                frame={frame}
+                                                            />
+                                                            <strong>{title}</strong>
+                                                            <input
+                                                                type="radio"
+                                                                name="frame"
+                                                                checked={
+                                                                    (state.me.frame ?? null) ===
+                                                                    frame
+                                                                }
+                                                                disabled={busy}
+                                                                onChange={() =>
+                                                                    void act(async () => {
+                                                                        await api(
+                                                                            '/profile',
+                                                                            'PATCH',
+                                                                            {
+                                                                                frame,
+                                                                            },
+                                                                        );
+                                                                        await refresh();
+                                                                    })
+                                                                }
+                                                            />
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </fieldset>
+                                    <p className="muted">
+                                        Everyone sees your frame in the member list. Animated frames
+                                        move there when someone hovers over you.
+                                    </p>
+                                </details>
+                            )}
+                        </section>
+                        <section
+                            className="account-section account-behavior"
+                            aria-labelledby="account-behavior-title"
                         >
-                            <h3>Change password</h3>
-                            <label>
-                                Current password
-                                <input
-                                    name="current"
-                                    type="password"
-                                    autoComplete="current-password"
-                                    maxLength={128}
-                                    required
+                            <h3 id="account-behavior-title">Behavior</h3>
+                            <p className="field-help">Saved automatically on this device.</p>
+                            {window.campfire && (
+                                <Toggle
+                                    title="Close to system tray"
+                                    value={prefs.closeToTray !== false}
+                                    set={(value) =>
+                                        setPrefs((previous) => ({
+                                            ...previous,
+                                            closeToTray: value,
+                                        }))
+                                    }
                                 />
-                            </label>
+                            )}
+                            <Toggle
+                                title="Set Idle automatically when I’m away"
+                                value={!!prefs.autoIdle}
+                                set={(autoIdle) =>
+                                    setPrefs((previous) => ({ ...previous, autoIdle }))
+                                }
+                            />
+                            {prefs.autoIdle && (
+                                <label className="account-idle-delay">
+                                    Idle after
+                                    <select
+                                        value={prefs.idleMinutes || 5}
+                                        onChange={(event) =>
+                                            setPrefs({
+                                                ...prefs,
+                                                idleMinutes: Number(event.target.value),
+                                            })
+                                        }
+                                    >
+                                        {[1, 5, 10, 15, 30].map((minutes) => (
+                                            <option key={minutes} value={minutes}>
+                                                {minutes} {minutes === 1 ? 'minute' : 'minutes'}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+                            )}
+                            <p className="field-help">
+                                Returns to Online when activity resumes. Manual Idle and Do not
+                                disturb stay selected. Uses computer activity when supported,
+                                otherwise activity in this app.
+                            </p>
+                        </section>
+                        <section className="account-section">
+                            <details className="account-details account-security">
+                                <summary>
+                                    <span>Password & security</span>
+                                    <small>Change password</small>
+                                </summary>
+                                <form
+                                    onSubmit={(event) => {
+                                        event.preventDefault();
+                                        const form = event.currentTarget;
+                                        const data = new FormData(form);
+                                        void act(async () => {
+                                            if (data.get('password') !== data.get('confirm'))
+                                                throw new Error('The new passwords don’t match.');
+                                            await api('/account/password', 'POST', {
+                                                current: data.get('current'),
+                                                password: data.get('password'),
+                                            });
+                                            form.reset();
+                                            notify(
+                                                'Password changed. Your other devices were signed out.',
+                                            );
+                                        });
+                                    }}
+                                >
+                                    <label>
+                                        Current password
+                                        <input
+                                            name="current"
+                                            type="password"
+                                            autoComplete="current-password"
+                                            maxLength={128}
+                                            required
+                                        />
+                                    </label>
+                                    <label>
+                                        New password
+                                        <input
+                                            name="password"
+                                            type="password"
+                                            autoComplete="new-password"
+                                            minLength={8}
+                                            maxLength={128}
+                                            required
+                                            placeholder="At least 8 characters"
+                                        />
+                                    </label>
+                                    <label>
+                                        Confirm new password
+                                        <input
+                                            name="confirm"
+                                            type="password"
+                                            autoComplete="new-password"
+                                            minLength={8}
+                                            maxLength={128}
+                                            required
+                                        />
+                                    </label>
+                                    <p className="muted">
+                                        Changing your password signs out every other device.
+                                    </p>
+                                    <button className="primary" disabled={busy}>
+                                        Change password
+                                    </button>
+                                </form>
+                            </details>
+                        </section>
+                        <section
+                            className="account-section account-connection"
+                            aria-labelledby="account-connection-title"
+                        >
+                            <h3 id="account-connection-title">Connection</h3>
                             <label>
-                                New password
-                                <input
-                                    name="password"
-                                    type="password"
-                                    autoComplete="new-password"
-                                    minLength={8}
-                                    maxLength={128}
-                                    required
-                                    placeholder="At least 8 characters"
-                                />
-                            </label>
-                            <label>
-                                Confirm new password
-                                <input
-                                    name="confirm"
-                                    type="password"
-                                    autoComplete="new-password"
-                                    minLength={8}
-                                    maxLength={128}
-                                    required
-                                />
+                                Server address
+                                <input value={url} readOnly />
                             </label>
                             <p className="muted">
-                                Changing your password signs out every other device.
+                                Accounts and messages belong to this server. Sessions expire after
+                                30 days.
                             </p>
-                            <button className="primary" disabled={busy}>
-                                Change password
+                            <button className="secondary" onClick={() => setModal('switch')}>
+                                Connect to another server <ArrowRight size={16} />
                             </button>
-                        </form>
-                        <label>
-                            Connected server
-                            <input value={url} readOnly />
-                        </label>
-                        <p className="muted">
-                            Accounts and messages belong to this server. Sessions expire after 30
-                            days.
-                        </p>
-                        <button className="secondary" onClick={() => setModal('switch')}>
-                            Connect to another server <ArrowRight size={16} />
-                        </button>
-                    </>
+                        </section>
+                        <details className="account-section account-details account-shortcuts">
+                            <summary>Keyboard shortcuts</summary>
+                            <p className="muted">
+                                Shortcuts: Ctrl/Cmd + F searches messages · Ctrl/Cmd + , opens
+                                settings · Ctrl/Cmd + Shift + M mutes your microphone · Ctrl/Cmd +
+                                Shift + D deafens. Type : for emoji suggestions; use arrows and
+                                Enter or Tab to choose.
+                            </p>{' '}
+                        </details>
+                    </div>
                 )}
                 {settingsTab === 'audio' && (
                     <AudioVideoSettings
@@ -755,22 +830,6 @@ export function SettingsPanel({
                                 })}
                         </details>
                     </>
-                )}
-                {settingsTab === 'account' && (
-                    <p className="muted">
-                        Shortcuts: Ctrl/Cmd + F searches messages · Ctrl/Cmd + , opens settings ·
-                        Ctrl/Cmd + Shift + M mutes your microphone · Ctrl/Cmd + Shift + D deafens.
-                        Type : for emoji suggestions; use arrows and Enter or Tab to choose.
-                    </p>
-                )}
-                {settingsTab === 'account' && window.campfire && (
-                    <Toggle
-                        title="Close to system tray"
-                        value={prefs.closeToTray !== false}
-                        set={(value) =>
-                            setPrefs((previous) => ({ ...previous, closeToTray: value }))
-                        }
-                    />
                 )}
                 {settingsTab === 'server' && (
                     <>

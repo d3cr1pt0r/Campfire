@@ -6,12 +6,14 @@ import { Emoji } from './ChatContent';
 import { useConversation } from './useConversation';
 import type { ApiClient } from './api';
 import type { AppSocket, Message, State, User } from './types';
+import type { MessageAvatarMode } from './messageAppearance';
 import type { PollTarget } from './PollDialog';
 import { appendText } from './richText';
 import { validateFileSelection } from '../shared/uploads.js';
 import { emojis } from '../shared/emojis.js';
 
 type Props = {
+    messageAvatars?: MessageAvatarMode;
     currentVoiceChannel?: string | null;
     onJoinVoice?: (channel: string) => void;
     focusRequest: number;

@@ -104,6 +104,7 @@ export type Poll = {
 export type ChannelNotificationMode = 'all' | 'mentions' | 'muted';
 export type Preferences = {
     theme?: 'system' | 'dark' | 'light';
+    messageAvatars?: 'normal' | 'compact' | 'hidden';
     autoIdle?: boolean;
     idleMinutes?: number;
     notifications: boolean;
