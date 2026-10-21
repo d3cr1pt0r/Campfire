@@ -1,6 +1,10 @@
 /// <reference types="vite/client" />
 interface Window {
     campfire?: {
+        avatars?: {
+            read(key: string): Promise<Uint8Array | null>;
+            write(key: string, bytes: Uint8Array): Promise<boolean>;
+        };
         readClipboardAttachments?: () => Promise<{
             files: { name: string; data: Uint8Array; type: string }[];
             text: string;

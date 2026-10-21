@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
 // No arbitrary IPC, file access, shell commands, or Node APIs reach the renderer.
 contextBridge.exposeInMainWorld('campfire', {
+    avatars: {
+        read: (key) => ipcRenderer.invoke('avatars:read', key),
+        write: (key, bytes) => ipcRenderer.invoke('avatars:write', key, bytes),
+    },
     readClipboardAttachments: () => ipcRenderer.invoke('clipboard:attachments'),
     getIdleState: () => ipcRenderer.invoke('presence:idle-state'),
     insecureHttp: {

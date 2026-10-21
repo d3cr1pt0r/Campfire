@@ -1347,7 +1347,7 @@ function App() {
         );
     return (
         <MediaContexts
-            assets={{ url, token }}
+            assets={{ url, token, account: state.me.id }}
             audio={{
                 outputVolume: audioLevel(prefs.outputVolume),
                 levels: (id) =>

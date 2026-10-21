@@ -17,6 +17,7 @@ const { installWindowPolicy } = require('./window-policy.cjs');
 const { clipboardAttachments } = require('./clipboard-files.cjs');
 const { createRendererServer, listenRendererServer } = require('./renderer-server.cjs');
 const { createClientState } = require('./client-state.cjs');
+const { createAvatarStore } = require('./avatar-cache.cjs');
 const { installHttpPolicy } = require('./http-policy.cjs');
 const {
     fingerprint,
@@ -199,6 +200,13 @@ else {
             ipcMain.on('client-state:get', (event, key) => {
                 event.returnValue = trusted(event.senderFrame?.url) ? clientState.get(key) : null;
             });
+            const avatars = createAvatarStore(path.join(app.getPath('userData'), 'avatars'));
+            ipcMain.handle('avatars:read', (event, key) =>
+                trusted(event.senderFrame?.url) ? avatars.read(key) : null,
+            );
+            ipcMain.handle('avatars:write', (event, key, bytes) =>
+                trusted(event.senderFrame?.url) ? avatars.write(key, bytes) : false,
+            );
             ipcMain.on('client-state:set', (event, key, value) => {
                 try {
                     event.returnValue =

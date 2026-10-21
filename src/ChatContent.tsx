@@ -13,13 +13,14 @@ import {
 } from 'react';
 import { Check, Copy } from 'lucide-react';
 import { useImage } from './useImage';
-export const AssetContext = createContext({ url: '', token: '' });
+import { useAvatarImage } from './useAvatarImage';
+export const AssetContext = createContext({ url: '', token: '', account: '' });
 // Becomes true once the element comes within 240px of the message list's viewport.
-export function useNearViewport(element: RefObject<HTMLElement | null>) {
+export function useNearViewport(element: RefObject<HTMLElement | null>, immediate = false) {
     const [near, setNear] = useState(false);
     useEffect(() => {
         const target = element.current;
-        if (!target) return;
+        if (!target || immediate) return;
         if (!('IntersectionObserver' in window)) {
             setNear(true);
             return;
@@ -35,8 +36,8 @@ export function useNearViewport(element: RefObject<HTMLElement | null>) {
         );
         observer.observe(target);
         return () => observer.disconnect();
-    }, [element]);
-    return near;
+    }, [element, immediate]);
+    return immediate || near;
 }
 export function AuthImage({
     path,
@@ -47,14 +48,17 @@ export function AuthImage({
     alt: string;
     className?: string;
 }) {
-    const { url, token } = useContext(AssetContext);
+    const { url, token, account } = useContext(AssetContext);
     const container = useRef<HTMLSpanElement>(null);
-    const near = useNearViewport(container);
-    const preview = useImage(url, token, near ? path : null);
+    const avatar = path.startsWith('/avatars/');
+    const near = useNearViewport(container, avatar);
+    const preview = useImage(url, token, !avatar && near ? path : null);
+    const avatarSource = useAvatarImage(url, token, account, avatar ? path : null);
+    const source = avatar ? avatarSource : preview.source;
     return (
         <span ref={container} className="auth-image">
-            {preview.source ? (
-                <img src={preview.source} alt={alt} className={className} decoding="async" />
+            {source ? (
+                <img src={source} alt={alt} className={className} decoding="async" />
             ) : (
                 <span className={`image-placeholder ${className}`} aria-label={alt} />
             )}
