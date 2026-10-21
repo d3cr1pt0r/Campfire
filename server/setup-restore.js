@@ -26,6 +26,8 @@ export function mountSetupRestore({ app, db, get, run }, token) {
                 'PATCH /settings',
                 'PATCH /registration',
                 'POST /roles',
+                'GET /state',
+                'POST /channels',
                 'PATCH /profile',
                 'PATCH /presence',
                 'PATCH /retention/server',
@@ -33,6 +35,9 @@ export function mountSetupRestore({ app, db, get, run }, token) {
                 'PATCH /retention/keep-text',
             ].includes(endpoint) &&
             !/^PATCH \/(?:roles\/[^/]+|users\/[^/]+\/roles)$/.test(endpoint) &&
+            !/^(?:PATCH|DELETE) \/channels\/[^/]+(?:\/privacy)?$/.test(endpoint) &&
+            !/^POST \/channels\/[^/]+\/drop$/.test(endpoint) &&
+            !/^PATCH \/retention\/channels\/[^/]+$/.test(endpoint) &&
             !/^POST \/users\/[^/]+\/access$/.test(endpoint)
         )
             return res.status(403).json({ error: 'API unavailable during setup restore' });

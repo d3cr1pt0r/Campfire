@@ -3,7 +3,8 @@
 The setup snapshot keeps usernames and password hashes, ownership, bans, role
 assignments, role names/colors/order/permissions, server settings (including the
 attachment storage limit), message retention, nicknames, profile frames, and saved
-presence preferences. Appearance, audio, and notification
+presence preferences, channels, channel order, names, descriptions, privacy, reaction-author
+visibility, role permission overrides, and per-channel retention. Appearance, audio, and notification
 preferences saved on clients remain on those clients.
 
 The current local setup is saved in `.private/server-setup.json`. Keep a private
@@ -23,7 +24,7 @@ npm run server
 The tool creates a fresh database through normal server initialization, starts a
 temporary API server on an automatically chosen `127.0.0.1` port, and populates it
 through the existing role, assignment, registration settings, server settings,
-profile, presence, and member access APIs. No migrations are run.
+profile, presence, member access, channel, and channel retention APIs. No migrations are run.
 
 A private, randomly generated restore token enables account creation from stored
 password hashes, editing the Owner role, and restoring the recorded server identity.
@@ -31,7 +32,8 @@ This mode requires an empty community, accepts only loopback requests, and block
 requests without its token. Normal server startup does not enable it. Account creation
 shares the same account creation function used by ordinary registration.
 
-Account and custom role IDs are newly generated. Snapshot role keys only connect
+Account, custom role, and custom channel IDs are newly generated. Protected channels
+are matched by type and retain their protection. Snapshot role keys only connect
 the saved assignments to their new roles. Role order is preserved, with positions
 normalized by the normal role API. The Owner role retains its name and color and receives every current permission,
 matching ownership behavior. Retired permission names in its old row are omitted;
@@ -45,9 +47,9 @@ and files too; remove them manually when no longer needed. An open WAL connectio
 to the original database makes the script refuse replacement.
 
 Messages, uploads, avatars, custom emojis, GIF favorites, sessions, invitations,
-and password-reset tokens are discarded. Custom channels and their permission
-overrides are discarded, as are channels' own retention periods; the current
-server's default channels are created.
+and password-reset tokens are discarded. Channels and their settings are restored from the snapshot, replacing the default
+channel list. Older version 1 snapshots without channels still create the default
+channels; capture a new baseline to include channels before resetting.
 
 Retention keeps the channel default, the direct-message period and whether only
 files are removed, as the owner last chose them. A change still waiting out its

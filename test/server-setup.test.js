@@ -60,6 +60,43 @@ async function fixture(t) {
         service.db
             .prepare("UPDATE roles SET permissions=? WHERE id='owner'")
             .run(JSON.stringify([...permissionIds, 'messages.editOwn', 'messages.deleteOwn']));
+        const privateChannel = await api('/channels', owner.token, 'POST', {
+            name: 'staff',
+            kind: 'text',
+            private: true,
+        });
+        await api(`/channels/${privateChannel.id}`, owner.token, 'PATCH', {
+            description: 'Staff discussions',
+            reactionAuthors: false,
+        });
+        await api(`/channels/${privateChannel.id}/drop`, owner.token, 'POST', {
+            target: 'general',
+            placement: 'before',
+        });
+        await api(`/retention/channels/${privateChannel.id}`, owner.token, 'PATCH', {
+            retention: 7,
+        });
+        await api('/retention/channels/general', owner.token, 'PATCH', {
+            retention: 14,
+            applyNow: true,
+        });
+        await api('/retention/channels/general', owner.token, 'PATCH', { retention: null });
+        await api('/channels/lounge', owner.token, 'PATCH', { name: 'Saved lounge' });
+        await api('/channels', owner.token, 'POST', {
+            name: 'Private voice',
+            kind: 'voice',
+            private: true,
+        });
+        await api('/channels/introductions', owner.token, 'DELETE');
+        await api(`/roles/${role.id}/access`, owner.token, 'PUT', {
+            overrides: [
+                { channel: privateChannel.id, permission: 'channels.view', effect: 'allow' },
+                { channel: privateChannel.id, permission: 'messages.send', effect: 'deny' },
+            ],
+        });
+        await api('/roles/everyone/access', owner.token, 'PUT', {
+            overrides: [{ channel: 'general', permission: 'messages.send', effect: 'deny' }],
+        });
         const baseline = captureSetup(data, snapshot);
         return { root, data, snapshot, baseline, owner, member, banned };
     } finally {
@@ -87,7 +124,6 @@ test('reset uses real HTTP APIs, regenerates IDs, retains account setup and back
             'sessions',
             'password_resets',
             'invitations',
-            'channel_overrides',
             'avatars',
         ])
             assert.equal(counts(table), 0, table);
@@ -138,6 +174,15 @@ test('reset uses real HTTP APIs, regenerates IDs, retains account setup and back
         const semantics = (s) => ({
             server: s.server,
             retention: s.retention,
+            channels: s.channels.map(({ key, overrides, ...c }) => ({
+                ...c,
+                overrides: overrides
+                    .map((o) => ({
+                        ...o,
+                        role: s.roles.find((r) => r.key === o.role).name,
+                    }))
+                    .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+            })),
             roles: s.roles.map(({ key, ...role }) => ({
                 ...role,
                 permissions: key === 'owner' ? permissionIds : role.permissions,
@@ -248,5 +293,28 @@ test('reset refuses an open original WAL connection without losing committed mes
         assert.equal(original.db.prepare('SELECT COUNT(*) n FROM messages').get().n, 1);
     } finally {
         await original.close();
+    }
+});
+
+test('legacy snapshots still restore default channels and malformed channel references leave data intact', async (t) => {
+    const f = await fixture(t);
+    const before = readFileSync(path.join(f.data, 'campfire.sqlite'));
+    f.baseline.channels[0].overrides.push({
+        role: 'missing',
+        permission: 'channels.view',
+        effect: 'allow',
+    });
+    writeFileSync(f.snapshot, JSON.stringify(f.baseline));
+    await assert.rejects(resetSetup(f.data, f.snapshot), /invalid channels/);
+    assert.deepEqual(readFileSync(path.join(f.data, 'campfire.sqlite')), before);
+    delete f.baseline.channels;
+    f.baseline.version = 1;
+    writeFileSync(f.snapshot, JSON.stringify(f.baseline));
+    await resetSetup(f.data, f.snapshot);
+    const db = new DatabaseSync(path.join(f.data, 'campfire.sqlite'), { readOnly: true });
+    try {
+        assert.equal(db.prepare('SELECT COUNT(*) n FROM channels').get().n, 3);
+    } finally {
+        db.close();
     }
 });

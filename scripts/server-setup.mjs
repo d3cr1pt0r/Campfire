@@ -29,7 +29,7 @@ const serverFields = [
 function validateSnapshot(value) {
     if (
         value?.format !== format ||
-        value.version !== 1 ||
+        ![1, 2].includes(value.version) ||
         !value.server ||
         !Array.isArray(value.roles) ||
         !Array.isArray(value.users) ||
@@ -72,6 +72,27 @@ function validateSnapshot(value) {
             typeof value.retention.keepText !== 'boolean')
     )
         throw new Error('Snapshot contains invalid retention settings');
+    if (value.version === 2 || value.channels !== undefined) {
+        if (
+            !Array.isArray(value.channels) ||
+            new Set(value.channels.map((c) => c.key)).size !== value.channels.length ||
+            value.channels.some(
+                (c) =>
+                    typeof c.key !== 'string' ||
+                    !['text', 'voice'].includes(c.kind) ||
+                    typeof c.protected !== 'boolean' ||
+                    typeof c.private !== 'boolean' ||
+                    typeof c.reactionAuthors !== 'boolean' ||
+                    (c.retention !== null && !isRetentionDays(c.retention)) ||
+                    !Array.isArray(c.overrides) ||
+                    c.overrides.some((o) => !keys.includes(o.role)),
+            ) ||
+            !['text', 'voice'].every(
+                (kind) => value.channels.filter((c) => c.kind === kind && c.protected).length === 1,
+            )
+        )
+            throw new Error('Snapshot contains invalid channels or role references');
+    }
     return value;
 }
 
@@ -113,10 +134,24 @@ export function captureSetup(dataDir, snapshotFile) {
         }
         snapshot = validateSnapshot({
             format,
-            version: 1,
+            version: 2,
             created: new Date().toISOString(),
             server,
             retention: captureRetention(get),
+            channels: all('SELECT * FROM channels ORDER BY kind,position,rowid').map((c) => ({
+                key: c.id,
+                name: c.name,
+                kind: c.kind,
+                protected: !!c.protected,
+                description: c.description,
+                reactionAuthors: !!c.reactionAuthors,
+                private: !!c.private,
+                retention: (c.retentionAt == null ? c.retention : c.retentionNext) ?? null,
+                overrides: all(
+                    'SELECT role,permission,effect FROM channel_overrides WHERE channel=? ORDER BY role,permission',
+                    c.id,
+                ).map((row) => ({ ...row })),
+            })),
             roles: all('SELECT * FROM roles ORDER BY position,id').map((role) => ({
                 key: role.id,
                 name: role.name,
@@ -198,7 +233,50 @@ export async function populateSetup(snapshot, api) {
         await api('PATCH', '/retention/server', { retention: server, applyNow: true });
         await api('PATCH', '/retention/dm', { retention: dm, applyNow: true });
     }
-    return { accounts, roles };
+    const channels = new Map();
+    if (snapshot.channels) {
+        const defaults = (await api('GET', '/state')).channels;
+        for (const c of snapshot.channels) {
+            const id = c.protected
+                ? defaults.find((entry) => entry.kind === c.kind && entry.protected).id
+                : (await api('POST', '/channels', { name: c.name, kind: c.kind })).id;
+            channels.set(c.key, id);
+            await api('PATCH', `/channels/${id}`, {
+                name: c.name,
+                ...(c.kind === 'text'
+                    ? { description: c.description, reactionAuthors: c.reactionAuthors }
+                    : {}),
+            });
+            await api('PATCH', `/channels/${id}/privacy`, { private: c.private });
+            if (c.kind === 'text')
+                await api('PATCH', `/retention/channels/${id}`, {
+                    retention: c.retention,
+                    applyNow: true,
+                });
+        }
+        for (const c of defaults.filter((entry) => !entry.protected))
+            await api('DELETE', `/channels/${c.id}`);
+        for (const kind of ['text', 'voice']) {
+            const ordered = snapshot.channels.filter((c) => c.kind === kind);
+            for (let i = 1; i < ordered.length; i++)
+                await api('POST', `/channels/${channels.get(ordered[i].key)}/drop`, {
+                    target: channels.get(ordered[i - 1].key),
+                    placement: 'after',
+                });
+        }
+        for (const role of snapshot.roles) {
+            const overrides = snapshot.channels.flatMap((c) =>
+                c.overrides
+                    .filter((o) => o.role === role.key)
+                    .map(({ role: ignored, ...o }) => ({ ...o, channel: channels.get(c.key) })),
+            );
+            if (overrides.length) {
+                const { key, ...body } = role;
+                await api('PATCH', `/roles/${roles.get(key)}`, { ...body, overrides });
+            }
+        }
+    }
+    return { accounts, roles, channels };
 }
 
 function verifyDatabase(filename, snapshot) {
@@ -215,6 +293,11 @@ function verifyDatabase(filename, snapshot) {
             db.prepare('SELECT COUNT(*) n FROM users WHERE owner=1 AND banned=0').get().n !== 1
         )
             throw new Error('Restored account/role counts do not match the snapshot');
+        if (
+            snapshot.channels &&
+            db.prepare('SELECT COUNT(*) n FROM channels').get().n !== snapshot.channels.length
+        )
+            throw new Error('Restored channel count does not match the snapshot');
         for (const table of [
             'messages',
             'attachments',
@@ -257,7 +340,7 @@ export async function resetSetup(dataDir, snapshotFile) {
                         'content-type': 'application/json',
                         ...(user ? { 'x-setup-user': user } : {}),
                     },
-                    body: JSON.stringify(body),
+                    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
                     signal: AbortSignal.timeout(10000),
                 });
                 const result = await response.json();
