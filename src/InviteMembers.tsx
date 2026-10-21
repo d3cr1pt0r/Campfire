@@ -4,7 +4,7 @@ import type { State, User } from './types';
 import { Avatar } from './Avatar';
 import { displayName } from './profiles';
 import { statusLabels, userStatus } from './presence';
-import { inviteMembers } from './inviteMembers';
+import { inviteMembers } from './inviteCandidates';
 
 // Mount once per open dialog: delivery feedback belongs to that opening only.
 export function InviteMembers({

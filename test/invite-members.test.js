@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { inviteMembers } from '../src/inviteMembers.ts';
+import { inviteMembers } from '../src/inviteCandidates.ts';
 
 test('invite lists order by presence then display name and search nicknames and usernames', () => {
     const users = [
