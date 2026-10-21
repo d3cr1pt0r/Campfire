@@ -55,7 +55,8 @@ SQLite runs in WAL mode with foreign keys and incremental auto-vacuum, so space 
 - `channels`: ID, normalized lowercase text-channel name or case-preserving voice display name, `text` or `voice` kind, and a retention override (`retention`: days, 0 forever, NULL the server default; a shorter period waits in `retentionNext` until `retentionAt`).
 - `messages`: UUID, conversation key, author FK, plain-text body, creation/edit timestamps, pinned flag, nullable `thread` FK to a top-level parent message, and `since`, the start of its retention period (posting, or the last unpin).
 - `retention_policies`: the server default and the direct-message period, in the same shape as a channel's override.
-- `attachments`: UUID, message FK, original filename, sniffed raster MIME (otherwise binary), size and raw BLOB bytes. Cascade deletion with the message.
+- `retention_mode`: the server-wide switch that makes periods remove only files and keep the text, with the date it stops while turning it off waits.
+- `attachments`: UUID, message FK, original filename, sniffed raster MIME (otherwise binary), size and raw BLOB bytes, and `removed` once retention removed the file and kept the message (no bytes are left). Cascade deletion with the message.
 - `message_link_previews`: the link cards each message shows, in link order; cards no message links are pruned a day after their fetch.
 - `reactions`: message/user/emoji primary key. Cascade deletion with the message.
 - `settings`: key/value store (server name, icon, feature switches, upload size and attachment storage quota).
@@ -128,7 +129,8 @@ All `/api` routes except `/info` and `/auth/:action` require a session. Errors r
 | PATCH | `/api/settings` | `{name?,icon?,reactionAuthors?,profileFrames?,maxUploadBytes?,maxStoredUploadBytes?}`; `server.edit` |
 | PATCH | `/api/retention/server`, `/api/retention/dm` | `{retention: days, applyNow?}`; `server.edit` |
 | PATCH | `/api/retention/channels/:id` | `{retention: days or null, applyNow?}` for a text channel; `server.edit` |
-| GET | `/api/retention/preview?scope=&channel=&retention=` | What a shorter period would delete, for scope `server`, `dm` or `channel`; `server.edit` |
+| PATCH | `/api/retention/keep-text` | `{keepText: boolean, applyNow?}`: periods remove only files; turning it off waits a week; `server.edit` |
+| GET | `/api/retention/preview?scope=&channel=&retention=&keepText=` | Messages, files and bytes a change would remove, for scope `server`, `dm`, `channel` or `keep-text`; `server.edit` |
 | GET | `/api/storage` | Attachment use against the quota, database size and free space, pinned bytes, top channels and DMs; `server.edit` |
 
 ## Socket contract
@@ -140,6 +142,7 @@ Server → client:
 - `message:update`: replacement message.
 - `message:delete`: `{id,room}`.
 - `messages:expired`: `{room,ids}`, top-level messages whose retention period ended; their replies went with them.
+- `messages:files-removed`: `{room,ids}`, threads whose files and link cards retention removed while keeping the text.
 - `typing`: `{room,user}`.
 - `calls`: `[{socket,user,channel}]` roster, excluding private rooms the recipient is not allowed to join.
 - `call:invite`: `{id,from}` invitation hint; `/state` holds authoritative pending invitations.
@@ -362,4 +365,4 @@ Database migration 11 drops the obsolete relationship table and its index. Exist
 
 ## Message retention
 
-Owners can have old messages deleted automatically so a self-hosted database stays bounded. `server/retention.js` holds the hourly sweep, the policy and preview routes and the storage overview; `shared/retention.js` resolves a conversation's periods and deletion times for both the server and the apps. The server default and the direct-message period live in `retention_policies`, each text channel's override in `channels`. Threads are deleted as a unit once their newest message is old enough; a pin anywhere keeps the whole thread, and unpinning restarts the clock. A shorter period waits a week, announced to members, unless the owner applies it at once. Expired threads reach open apps as `messages:expired`, and freed pages return to the disk through incremental vacuum. See `Docs/MessageRetention-2026-10-21.md`.
+Owners can have old messages deleted automatically so a self-hosted database stays bounded. `server/retention.js` holds the hourly sweep, the policy and preview routes and the storage overview; `shared/retention.js` resolves a conversation's periods and deletion times for both the server and the apps. The server default and the direct-message period live in `retention_policies`, each text channel's override in `channels`. With the keep-text switch on, periods remove only files and link cards, leaving placeholders. Threads are deleted as a unit once their newest message is old enough; a pin anywhere keeps the whole thread, and unpinning restarts the clock. A shorter period waits a week, announced to members, unless the owner applies it at once. Expired threads reach open apps as `messages:expired`, and freed pages return to the disk through incremental vacuum. See `Docs/MessageRetention-2026-10-21.md`.

@@ -3,7 +3,11 @@ export interface RetentionPolicy {
     retentionNext: number | null;
     retentionAt: number | null;
 }
-export interface RetentionPolicies {
+export interface KeepTextMode {
+    keepText: boolean;
+    keepTextUntil: number | null;
+}
+export interface RetentionPolicies extends KeepTextMode {
     server: RetentionPolicy;
     dm: RetentionPolicy;
 }
@@ -11,6 +15,11 @@ export interface RetentionStep {
     from: number;
     days: number;
     source: 'server' | 'dm' | 'channel';
+    // Whether the period removes only files at this point.
+    keepText: boolean;
+}
+export interface RetentionChange extends RetentionStep {
+    kind: 'files' | 'messages' | 'text';
 }
 export interface RetentionUnit {
     since: number;
@@ -28,9 +37,17 @@ export function retentionSchedule(
     channel: Partial<RetentionPolicy> | null,
 ): RetentionStep[];
 export function periodAt(schedule: RetentionStep[], time: number): number;
-export function deletionTime(schedule: RetentionStep[], unit: RetentionUnit): number | null;
-export function expiryCutoff(schedule: RetentionStep[], time: number): number;
-export function upcomingChange(schedule: RetentionStep[], now: number): RetentionStep | null;
+export function deletionTime(
+    schedule: RetentionStep[],
+    unit: RetentionUnit,
+    options?: { text?: boolean },
+): number | null;
+export function expiryCutoff(
+    schedule: RetentionStep[],
+    time: number,
+    options?: { text?: boolean },
+): number;
+export function upcomingChange(schedule: RetentionStep[], now: number): RetentionChange | null;
 export function appliesRetention(schedule: RetentionStep[], now: number): boolean;
 export function finalWindow(days: number): number;
 export function settlePolicy(policy: RetentionPolicy, now: number): RetentionPolicy;
@@ -44,3 +61,9 @@ export function isShorter(
     value: number | null,
     options: { now: number; inherited?: number },
 ): boolean;
+export function settleKeepText(mode: Partial<KeepTextMode>, now: number): KeepTextMode;
+export function nextKeepText(
+    mode: Partial<KeepTextMode>,
+    keepText: boolean,
+    options: { now: number; applyNow?: boolean },
+): KeepTextMode;

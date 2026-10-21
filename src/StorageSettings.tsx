@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ApiClient } from './api';
 import type { State, StorageOverview } from './types';
-import { RetentionField } from './RetentionSettings';
-import { conversationSchedule } from './retention';
+import { KeepTextField, RetentionField } from './RetentionSettings';
+import { conversationSchedule, periodLabel } from './retention';
 import {
     formatBytes,
     formatStorageQuota,
     gigabyte,
     storageQuotaCeiling,
 } from '../shared/uploads.js';
-import { formatRetention, periodAt } from '../shared/retention.js';
 
 export function StorageSettings({
     state,
@@ -46,22 +45,40 @@ export function StorageSettings({
     const now = Date.now();
     const period = (room: string) => {
         const schedule = conversationSchedule(state, room);
-        return schedule ? formatRetention(periodAt(schedule, now)) : '';
+        return schedule ? periodLabel(schedule, now) : '';
+    };
+    const keepText = {
+        keepText: state.retention.keepText,
+        keepTextUntil: state.retention.keepTextUntil,
     };
     const quota = overview?.attachments.quota;
     return (
         <>
             <p className="muted">
-                Old messages can be deleted automatically to keep the server small. Pinned messages
-                are always kept, and a thread is deleted only once its newest message is old enough.
-                A shorter period starts after a week, so members can pin what they want to keep.
+                Old messages, or only their files, can be deleted automatically to keep the server
+                small. Pinned messages are always kept, and a thread is deleted only once its newest
+                message is old enough. A change that deletes more starts after a week, so members
+                can pin what they want to keep.
             </p>
             <h3>Message retention</h3>
+            <KeepTextField
+                key={JSON.stringify(keepText)}
+                mode={keepText}
+                save={async (value, applyNow) => {
+                    await api('/retention/keep-text', 'PATCH', { keepText: value, applyNow });
+                    await refresh();
+                    await load();
+                }}
+                api={api}
+                act={act}
+                busy={busy}
+            />
             <RetentionField
-                key={JSON.stringify(state.retention.server)}
+                key={JSON.stringify([state.retention.server, keepText])}
                 label="Channels"
                 help="Applies to every text channel unless the channel sets its own period in Channels."
                 policy={state.retention.server}
+                keepText={keepText}
                 canEdit
                 previewQuery="scope=server"
                 save={saveScope('server')}
@@ -70,10 +87,11 @@ export function StorageSettings({
                 busy={busy}
             />
             <RetentionField
-                key={JSON.stringify(state.retention.dm)}
+                key={JSON.stringify([state.retention.dm, keepText])}
                 label="Direct messages"
                 help="Applies to every direct message, including personal notes."
                 policy={state.retention.dm}
+                keepText={keepText}
                 canEdit
                 previewQuery="scope=dm"
                 save={saveScope('dm')}

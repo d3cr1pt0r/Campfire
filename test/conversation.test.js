@@ -61,6 +61,30 @@ test('expired threads leave loaded and late history, replies included', async ()
     assert.deepEqual(store.getSnapshot().messages, []);
 });
 
+test('removed files become placeholders in loaded and late history', async () => {
+    const result = deferred();
+    const store = createConversation('general', () => result.promise);
+    const loading = store.reload();
+    const file = { id: 'f', name: 'photo.png', mime: 'image/png', width: 4, height: 3 };
+    store.receive({ type: 'strip', ids: ['old'] });
+    result.resolve({
+        messages: [
+            { ...message('old'), attachments: [file], previews: [{ id: 'card' }] },
+            { ...message('reply'), thread: 'old', attachments: [{ ...file, id: 'g' }] },
+            { ...message('other'), attachments: [{ ...file, id: 'h' }] },
+        ],
+        next: null,
+    });
+    await loading;
+    const byId = Object.fromEntries(store.getSnapshot().messages.map((m) => [m.id, m]));
+    assert.deepEqual(byId.old.attachments, [
+        { id: 'f', name: 'photo.png', mime: 'image/png', removed: true },
+    ]);
+    assert.equal(byId.old.previews, undefined);
+    assert.equal(byId.reply.attachments[0].removed, true);
+    assert.equal(byId.other.attachments[0].removed, undefined);
+});
+
 test('member deletion anonymizes loaded and arriving history without reviving reactions', async () => {
     const result = deferred();
     const authored = {

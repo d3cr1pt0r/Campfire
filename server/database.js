@@ -21,11 +21,11 @@ function checkCurrent(db) {
     const users = db
         .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='users'")
         .get();
-    // messages.since is the newest part of the schema, so its absence marks an older database.
-    const since = db
-        .prepare("SELECT 1 FROM pragma_table_info('messages') WHERE name='since'")
+    // attachments.removed is the newest part of the schema, so its absence marks an older database.
+    const current = db
+        .prepare("SELECT 1 FROM pragma_table_info('attachments') WHERE name='removed'")
         .get();
-    if (users && !since)
+    if (users && !current)
         throw new Error(
             'This database was created by an older Campfire version, which this version cannot open. Use a new data directory.',
         );
@@ -86,12 +86,13 @@ export function messageViews(all, messages) {
         placeholders = ids.map(() => '?').join(',');
     const attachments = new Map(),
         reactions = new Map();
-    for (const { message, width, height, animated, ...value } of all(
-        `SELECT a.message,a.id,a.name,a.mime,i.width,i.height,i.animated FROM attachments a LEFT JOIN attachment_images i ON i.attachment=a.id WHERE a.message IN (${placeholders})`,
+    for (const { message, width, height, animated, removed, ...value } of all(
+        `SELECT a.message,a.id,a.name,a.mime,a.removed,i.width,i.height,i.animated FROM attachments a LEFT JOIN attachment_images i ON i.attachment=a.id WHERE a.message IN (${placeholders})`,
         ...ids,
     )) {
-        // Zero sizes mark images whose header could not be read.
-        if (width) Object.assign(value, { width, height, animated: !!animated });
+        // Removed files stay as placeholders; zero sizes mark images whose header could not be read.
+        if (removed) value.removed = true;
+        else if (width) Object.assign(value, { width, height, animated: !!animated });
         if (!attachments.has(message)) attachments.set(message, []);
         attachments.get(message).push(value);
     }

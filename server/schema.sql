@@ -127,6 +127,15 @@ CREATE TABLE IF NOT EXISTS retention_policies(
     CHECK((retentionNext IS NULL) = (retentionAt IS NULL))
 );
 INSERT OR IGNORE INTO retention_policies(scope) VALUES('server'),('dm');
+-- With keepText, periods remove only files and link cards and the text stays. Turning it off
+-- waits a week: text is still kept until keepTextUntil.
+CREATE TABLE IF NOT EXISTS retention_mode(
+    id INTEGER PRIMARY KEY CHECK(id=1),
+    keepText INTEGER NOT NULL DEFAULT 0 CHECK(keepText IN (0,1)),
+    keepTextUntil INTEGER,
+    CHECK(keepTextUntil IS NULL OR keepText=1)
+);
+INSERT OR IGNORE INTO retention_mode(id) VALUES(1);
 -- Keep the original name so a deleted channel still has a readable invitation.
 CREATE TABLE IF NOT EXISTS voice_channel_invitations(
     message TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
@@ -147,15 +156,18 @@ WHEN NEW.thread IS NOT OLD.thread OR NEW.room IS NOT OLD.room
 BEGIN SELECT RAISE(ABORT,'Message conversation cannot change'); END;
 
 -- Files are stored as raw bytes, last so reading the other columns never loads them; bytes
--- repeats their length for the storage triggers.
+-- repeats their length for the storage triggers. removed is when retention removed the file
+-- from a message whose text is kept; its name and type stay as a placeholder.
 CREATE TABLE IF NOT EXISTS attachments(
     id TEXT PRIMARY KEY,
     message TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     mime TEXT NOT NULL,
     bytes INTEGER NOT NULL,
+    removed INTEGER,
     data BLOB NOT NULL,
-    CHECK(typeof(data)='blob' AND bytes=length(data))
+    CHECK(typeof(data)='blob' AND bytes=length(data)),
+    CHECK(removed IS NULL OR bytes=0)
 );
 CREATE INDEX IF NOT EXISTS attachments_message ON attachments(message);
 -- Displayed size of image attachments, so clients can reserve their exact space before

@@ -88,6 +88,8 @@ export type Message = {
         width?: number;
         height?: number;
         animated?: boolean;
+        // Retention removed the file and kept the message; only its name and type remain.
+        removed?: boolean;
     }[];
     reactions: {
         user: string;
@@ -101,11 +103,13 @@ export type Message = {
     // The retention clock of the message's thread, which is deleted as a unit.
     retention?: RetentionUnit;
 };
+// Messages deleted, and files removed with them or from messages whose text is kept.
+export type RetentionCount = { messages: number; files: number; bytes: number };
 export type RetentionPreview = {
     // When a scheduled change would take effect; null when the change applies at once.
     at: number | null;
-    scheduled: { messages: number; bytes: number };
-    immediate: { messages: number; bytes: number };
+    scheduled: RetentionCount;
+    immediate: RetentionCount;
 };
 export type StorageOverview = {
     attachments: { bytes: number; quota: number };
@@ -194,6 +198,8 @@ export interface ServerEvents {
     'message:delete': (event: { id: string; room: string }) => void;
     // Top-level messages whose retention period ended; their replies went with them.
     'messages:expired': (event: { room: string; ids: string[] }) => void;
+    // Threads whose files and link cards retention removed, keeping their text.
+    'messages:files-removed': (event: { room: string; ids: string[] }) => void;
     'member:deleted': (event: { id: string }) => void;
     typing: (event: { room: string; user: string; thread?: string | null }) => void;
     calls: (members: CallMember[]) => void;

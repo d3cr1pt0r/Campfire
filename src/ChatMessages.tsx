@@ -23,14 +23,16 @@ import {
     Reply,
     TimerOff,
     Hourglass,
+    ImageOff,
+    FileX,
 } from 'lucide-react';
 import { PollCard } from './PollCard';
 import { ChatContent } from './ChatContent';
 import { ImageAttachment } from './ImageAttachment';
 import { LinkPreviews } from './LinkPreviews';
 import { needsScrollHistory, restoredScrollOffset, type ChatScrollPosition } from './chatScroll';
-import { conversationSchedule, messageRetention, unpinText } from './retention';
-import { appliesRetention, type RetentionUnit } from '../shared/retention.js';
+import { conversationSchedule, hasFiles, messageRetention, pinKeeps, unpinText } from './retention';
+import type { RetentionUnit } from '../shared/retention.js';
 
 export function ChatMessages(
     props: Omit<React.ComponentProps<typeof ChatMessageList>, 'saved' | 'save'> & {
@@ -429,14 +431,10 @@ export function ChatMessage({
     const u = m.author ? user(m.author) : undefined;
     const avatars = messageAvatarMode(messageAvatars);
     const now = Date.now();
-    const schedule = conversationSchedule(state, m.room);
-    const retention = messageRetention(
-        schedule,
-        retentionUnit ?? m.retention,
-        m.created,
-        Boolean(m.pinned),
-        now,
-    );
+    const schedule = conversationSchedule(state, m.room),
+        unit = retentionUnit ?? m.retention,
+        files = hasFiles(m);
+    const retention = messageRetention(schedule, unit, m.created, Boolean(m.pinned), now, files);
     return (
         <article className={`message message-avatars-${avatars}`}>
             <time
@@ -510,6 +508,18 @@ export function ChatMessage({
                     />
                 )}
                 {m.attachments.map((a) => {
+                    const image = /^image\/(png|jpeg|gif|webp)$/.test(a.mime);
+                    // Retention removed the file but kept the message; its name stays.
+                    if (a.removed)
+                        return (
+                            <div className="attachment attachment-removed" key={a.id}>
+                                {image ? <ImageOff size={21} /> : <FileX size={21} />}
+                                <span>
+                                    {a.name}
+                                    <small>Removed after the retention period</small>
+                                </span>
+                            </div>
+                        );
                     // Files without a preview keep the download card; images download from it.
                     const card = (
                         <button
@@ -525,7 +535,7 @@ export function ChatMessage({
                             <Download size={18} />
                         </button>
                     );
-                    return /^image\/(png|jpeg|gif|webp)$/.test(a.mime) ? (
+                    return image ? (
                         <ImageAttachment
                             key={a.id}
                             attachment={a}
@@ -621,7 +631,7 @@ export function ChatMessage({
                         title={
                             m.pinned
                                 ? 'Unpin'
-                                : schedule && appliesRetention(schedule, now)
+                                : pinKeeps(schedule, unit, now, files)
                                   ? 'Pin — keeps it permanently'
                                   : 'Pin'
                         }
@@ -631,7 +641,8 @@ export function ChatMessage({
                                     pinned: !m.pinned,
                                 });
                                 const text =
-                                    m.pinned && unpinText(schedule, view.retention, Date.now());
+                                    m.pinned &&
+                                    unpinText(schedule, view.retention, Date.now(), hasFiles(view));
                                 if (text) notify?.(text);
                             })
                         }

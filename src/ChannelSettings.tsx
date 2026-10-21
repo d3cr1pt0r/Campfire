@@ -294,6 +294,8 @@ function ChannelEditor({
                         channel.retentionNext,
                         channel.retentionAt,
                         state.retention.server,
+                        state.retention.keepText,
+                        state.retention.keepTextUntil,
                     ])}
                     label="Keep messages"
                     help={
@@ -303,6 +305,10 @@ function ChannelEditor({
                     }
                     policy={channel}
                     inherited={settlePolicy(state.retention.server, Date.now()).retention ?? 0}
+                    keepText={{
+                        keepText: state.retention.keepText,
+                        keepTextUntil: state.retention.keepTextUntil,
+                    }}
                     canEdit={permission('server.edit')}
                     previewQuery={`scope=channel&channel=${encodeURIComponent(channel.id)}`}
                     save={async (value, applyNow) => {

@@ -3803,3 +3803,17 @@ label,
 .storage-table tbody th {
     font-weight: 600;
 }
+/* A file retention removed: its name stays, faded, with nothing to open. */
+.attachment.attachment-removed {
+    display: flex;
+    align-items: center;
+    width: fit-content;
+    background: transparent;
+    border-style: dashed;
+    color: var(--muted);
+}
+.attachment.attachment-removed > svg {
+    flex-shrink: 0;
+    margin-left: 0;
+    color: var(--muted);
+}

@@ -50,7 +50,7 @@ const listen = (f, account, t) => {
     });
     f.service.io.sockets.sockets.set(id, socket);
     EventEmitter.prototype.emit.call(f.service.io.sockets, 'connection', socket);
-    for (const event of ['messages:expired', 'message:update'])
+    for (const event of ['messages:expired', 'messages:files-removed', 'message:update'])
         socket.on(event, (payload) => events.push({ event, ...payload }));
     t.after(() => {
         f.service.io.sockets.sockets.delete(id);
@@ -63,7 +63,12 @@ test('messages are kept forever by default and carry their thread’s clock', as
     const f = await roleFixture(t);
     const state = await f.api(f.member, '/state');
     const forever = { retention: 0, retentionNext: null, retentionAt: null };
-    assert.deepEqual(state.retention, { server: forever, dm: forever });
+    assert.deepEqual(state.retention, {
+        server: forever,
+        dm: forever,
+        keepText: false,
+        keepTextUntil: null,
+    });
     assert.equal(state.channels.find((channel) => channel.id === 'general').retention, null);
     const root = await post(f, f.member, 'Ancient');
     age(f, root.id, 10000);
@@ -332,16 +337,16 @@ test('a preview counts what a shorter period would delete, beyond today’s peri
     const preview = (query) => f.api(f.owner, `/retention/preview?${query}`);
     const month = await preview('scope=server&retention=30');
     assert.ok(Math.abs(month.at - (Date.now() + 7 * day)) < 5000);
-    assert.deepEqual(month.scheduled, { messages: 1, bytes: 5 });
-    assert.deepEqual(month.immediate, { messages: 1, bytes: 5 });
+    assert.deepEqual(month.scheduled, { messages: 1, files: 1, bytes: 5 });
+    assert.deepEqual(month.immediate, { messages: 1, files: 1, bytes: 5 });
     const week = await preview('scope=server&retention=7');
-    assert.deepEqual(week.scheduled, { messages: 2, bytes: 5 });
-    assert.deepEqual(week.immediate, { messages: 1, bytes: 5 });
+    assert.deepEqual(week.scheduled, { messages: 2, files: 1, bytes: 5 });
+    assert.deepEqual(week.immediate, { messages: 1, files: 1, bytes: 5 });
     // Longer periods delete nothing more.
     assert.deepEqual(await preview('scope=server&retention=0'), {
         at: null,
-        scheduled: { messages: 0, bytes: 0 },
-        immediate: { messages: 0, bytes: 0 },
+        scheduled: { messages: 0, files: 0, bytes: 0 },
+        immediate: { messages: 0, files: 0, bytes: 0 },
     });
     // A channel returning to a shorter default, and the direct message period.
     await keepChannel(f, 'general', 0);
@@ -350,6 +355,7 @@ test('a preview counts what a shorter period would delete, beyond today’s peri
     assert.ok(exists(f, old.id));
     assert.deepEqual((await preview('scope=channel&channel=general&retention=default')).scheduled, {
         messages: 1,
+        files: 1,
         bytes: 5,
     });
     const direct = await f.api(f.member, '/messages', 'POST', {
@@ -359,6 +365,7 @@ test('a preview counts what a shorter period would delete, beyond today’s peri
     age(f, direct.id, 40);
     assert.deepEqual((await preview('scope=dm&retention=30')).immediate, {
         messages: 1,
+        files: 0,
         bytes: 0,
     });
     await f.api(f.owner, '/retention/preview?scope=server&retention=soon', 'GET', undefined, 400);
@@ -411,4 +418,155 @@ test('expired files give their space back to the disk, and closing waits for a s
     const running = sweep(f);
     await f.service.close();
     assert.equal(await running, 0);
+});
+
+const keepText = (f, value, applyNow) =>
+    f.api(f.owner, '/retention/keep-text', 'PATCH', {
+        keepText: value,
+        ...(applyNow === undefined ? {} : { applyNow }),
+    });
+const files = (f, message) =>
+    f.db
+        .prepare('SELECT name,bytes,removed IS NOT NULL removed FROM attachments WHERE message=?')
+        .all(message.id)
+        .map((row) => ({ ...row }));
+const card = (f, message) => {
+    f.db
+        .prepare(
+            "INSERT OR IGNORE INTO link_previews(id,url,title,fetched) VALUES('card','https://example.com','Example',?)",
+        )
+        .run(Date.now());
+    f.db
+        .prepare("INSERT INTO message_link_previews(message,position,preview) VALUES(?,0,'card')")
+        .run(message.id);
+};
+
+test('with text kept, a period removes only files and link cards, leaving placeholders', async (t) => {
+    const f = await roleFixture(t);
+    const events = listen(f, f.member, t);
+    const old = await upload(f, f.member, 'general', 'old.png', 6);
+    const text = await post(f, f.member, 'Old words with a link');
+    card(f, text);
+    const root = await post(f, f.member, 'Old thread');
+    const reply = await upload(f, f.other, 'general', 'reply.txt', 4, { thread: root.id });
+    const pinned = await upload(f, f.member, 'general', 'pinned.txt', 3);
+    const recent = await upload(f, f.member, 'general', 'recent.txt', 2);
+    await f.api(f.owner, `/messages/${pinned.id}`, 'PATCH', { pinned: true });
+    for (const message of [old, text, root, reply, pinned]) age(f, message.id, 40);
+    age(f, recent.id, 5);
+    assert.deepEqual((await keepText(f, true)).mode, { keepText: true, keepTextUntil: null });
+    await keep(f, 'server', 30, true);
+    await sweep(f);
+    for (const message of [old, text, root, reply, pinned, recent])
+        assert.ok(exists(f, message.id), message.body);
+    assert.deepEqual(files(f, old), [{ name: 'old.png', bytes: 0, removed: 1 }]);
+    assert.deepEqual(files(f, reply), [{ name: 'reply.txt', bytes: 0, removed: 1 }]);
+    assert.deepEqual(files(f, pinned), [{ name: 'pinned.txt', bytes: 3, removed: 0 }]);
+    assert.deepEqual(files(f, recent), [{ name: 'recent.txt', bytes: 2, removed: 0 }]);
+    assert.equal(f.db.prepare('SELECT bytes FROM storage_usage').get().bytes, 5);
+    assert.equal(
+        f.db.prepare("SELECT length(data) bytes FROM attachments WHERE name='old.png'").get().bytes,
+        0,
+    );
+    // The link card is gone and stays gone if the text is edited.
+    assert.equal((await f.api(f.member, `/messages/${text.id}`)).previews, undefined);
+    assert.ok(f.db.prepare('SELECT 1 FROM hidden_link_previews WHERE message=?').get(text.id));
+    // Placeholders keep the name and type; the files themselves are gone.
+    const view = await f.api(f.member, `/messages/${old.id}`);
+    assert.deepEqual(view.attachments, [
+        {
+            id: old.attachments[0].id,
+            name: 'old.png',
+            mime: 'application/octet-stream',
+            removed: true,
+        },
+    ]);
+    for (const endpoint of [
+        `/attachments/${old.attachments[0].id}`,
+        `/attachments/${old.attachments[0].id}/preview`,
+    ])
+        assert.match(
+            (await f.api(f.member, endpoint, 'GET', undefined, 410)).error,
+            /removed after the retention period/,
+        );
+    const removed = events.filter((e) => e.event === 'messages:files-removed');
+    assert.equal(removed.length, 1);
+    assert.deepEqual(new Set(removed[0].ids), new Set([old.id, text.id, root.id]));
+    // A later pass finds nothing left to remove.
+    await sweep(f);
+    assert.equal(events.filter((e) => e.event === 'messages:files-removed').length, 1);
+    // Removed files no longer count in the overview.
+    const overview = await f.api(f.owner, '/storage');
+    assert.deepEqual(overview.channels, [{ id: 'general', name: 'general', bytes: 5, files: 2 }]);
+    assert.deepEqual(overview.kept, { bytes: 3, files: 1 });
+});
+
+test('no longer keeping text waits a week, then deletes the old messages', async (t) => {
+    const f = await roleFixture(t);
+    const editors = await f.role('Channel editors', ['channels.edit']);
+    await f.assign(f.other, [editors.id]);
+    await f.api(f.other, '/retention/keep-text', 'PATCH', { keepText: true }, 403);
+    await f.api(f.owner, '/retention/keep-text', 'PATCH', { keepText: 'yes' }, 400);
+    await f.api(
+        f.owner,
+        '/retention/preview?scope=keep-text&keepText=maybe',
+        'GET',
+        undefined,
+        400,
+    );
+    const old = await upload(f, f.member, 'general', 'old.txt', 4);
+    age(f, old.id, 40);
+    await keepText(f, true);
+    await keep(f, 'server', 30, true);
+    await sweep(f);
+    assert.ok(exists(f, old.id));
+    // Turning text keeping on again would delete nothing more.
+    assert.deepEqual(
+        (await f.api(f.owner, '/retention/preview?scope=keep-text&keepText=true')).at,
+        null,
+    );
+    const preview = await f.api(f.owner, '/retention/preview?scope=keep-text&keepText=false');
+    assert.ok(Math.abs(preview.at - (Date.now() + 7 * day)) < 5000);
+    assert.deepEqual(preview.scheduled, { messages: 1, files: 0, bytes: 0 });
+    assert.deepEqual(preview.immediate, { messages: 1, files: 0, bytes: 0 });
+    const { mode } = await keepText(f, false);
+    assert.equal(mode.keepText, true);
+    assert.ok(Math.abs(mode.keepTextUntil - (Date.now() + 7 * day)) < 5000);
+    assert.equal((await f.api(f.member, '/state')).retention.keepTextUntil, mode.keepTextUntil);
+    await sweep(f);
+    assert.ok(exists(f, old.id));
+    // Keeping text again cancels the change.
+    assert.equal((await keepText(f, true)).mode.keepTextUntil, null);
+    await keepText(f, false);
+    await sweep(f, 8);
+    assert.ok(!exists(f, old.id));
+    assert.deepEqual(
+        {
+            keepText: (await f.api(f.member, '/state')).retention.keepText,
+            keepTextUntil: (await f.api(f.member, '/state')).retention.keepTextUntil,
+        },
+        { keepText: false, keepTextUntil: null },
+    );
+    // Applying it now deletes at once.
+    const another = await post(f, f.member, 'Another old message');
+    age(f, another.id, 40);
+    await keepText(f, true);
+    await sweep(f);
+    assert.ok(exists(f, another.id));
+    assert.deepEqual((await keepText(f, false, true)).mode, {
+        keepText: false,
+        keepTextUntil: null,
+    });
+    await sweep(f);
+    assert.ok(!exists(f, another.id));
+});
+
+test('with text kept, a preview counts the files a shorter period removes', async (t) => {
+    const f = await roleFixture(t);
+    const old = await upload(f, f.member, 'general', 'old.bin', 7);
+    age(f, old.id, 40);
+    await keepText(f, true);
+    const preview = await f.api(f.owner, '/retention/preview?scope=server&retention=30');
+    assert.deepEqual(preview.scheduled, { messages: 0, files: 1, bytes: 7 });
+    assert.deepEqual(preview.immediate, { messages: 0, files: 1, bytes: 7 });
 });

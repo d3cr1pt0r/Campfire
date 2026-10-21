@@ -7,7 +7,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import electron from 'electron';
 import { createApp } from '../test-support/open-server.js';
-import { request } from '../test-support/http.js';
+import { messageForm, request } from '../test-support/http.js';
 const { createRendererServer, listenRendererServer } = createRequire(import.meta.url)(
     '../electron/renderer-server.cjs',
 );
@@ -15,6 +15,8 @@ const root = path.resolve(import.meta.dirname, '..');
 const directory = await mkdtemp(path.join(tmpdir(), 'campfire-retention-'));
 const output = process.env.RETENTION_OUTPUT || path.join(tmpdir(), 'campfire-retention');
 const day = 86400000;
+const pixel =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=';
 const service = createApp({ dataDir: path.join(directory, 'data'), name: 'Retention review' });
 let renderer, control;
 try {
@@ -51,10 +53,26 @@ try {
         age(messages[name].id, days);
     }
     messages.reply = await post('Thread reply', { thread: messages['Thread start'].id });
+    messages.file = (
+        await request(
+            service.app,
+            '/messages',
+            accounts[1].token,
+            'POST',
+            messageForm({ room: 'general', body: 'Words that stay' }, [
+                { name: 'sketch.png', data: Buffer.from(pixel, 'base64') },
+            ]),
+        )
+    ).data;
+    age(messages.file.id, 20);
     age(messages.reply.id, 10);
     await post('Fresh message');
     // The desktop app asks this to age a thread and run a cleanup pass.
     control = createServer(async (req, res) => {
+        if (req.url === '/expire-file') {
+            age(messages.file.id, 15);
+            await service.retention.sweep();
+        }
         if (req.url === '/expire-thread') {
             for (const message of [messages['Thread start'], messages.reply]) age(message.id, 25);
             await service.retention.sweep();
@@ -93,6 +111,7 @@ try {
         [
             { name: 'dot.png', type: 'blob' },
             { name: 'notes.txt', type: 'blob' },
+            { name: 'sketch.png', type: 'blob' },
         ],
     );
     console.log('PASS uploads from the app are stored as raw bytes');

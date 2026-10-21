@@ -173,6 +173,28 @@ app.whenReady()
         await wait(`!${article('Thread start')}`, 'expired thread leaves the channel');
         await click('Dismiss notification');
 
+        // With text kept, an expired file leaves a placeholder and the words stay.
+        await api('/retention/keep-text', 'PATCH', { keepText: true });
+        await wait(
+            "document.querySelector('.retention-chip span')?.textContent==='Files · 1 month'",
+            'chip says only files are removed',
+        );
+        assert.equal(await js(`${article('Fresh message')}.querySelector('time').title`), '');
+        console.log('PASS text-only messages show no retention cues while text is kept');
+        await fetch(`${process.env.RETENTION_CONTROL}/expire-file`, { method: 'POST' });
+        await wait(
+            `(${article('Words that stay')}?.querySelector('.attachment-removed')?.textContent||'').includes('sketch.png')`,
+            'expired file becomes a placeholder live',
+        );
+        assert.match(
+            await js(
+                `${article('Words that stay')}.querySelector('.attachment-removed').textContent`,
+            ),
+            /Removed after the retention period/,
+        );
+        await js(`${article('Words that stay')}.scrollIntoView({block:'center'})`);
+        await shot('placeholder');
+
         // The owner's Storage tab.
         await click('Settings');
         await click('Storage');
@@ -186,6 +208,12 @@ app.whenReady()
             ),
             '1 month,Forever',
         );
+        assert.equal(
+            await js(
+                `document.querySelector('[role=switch][aria-label="Keep messages permanently, only remove files"]').getAttribute('aria-checked')`,
+            ),
+            'true',
+        );
         assert.match(
             await js("document.querySelector('.storage-table tbody').textContent"),
             /#general.*1 month.*Direct messages.*Forever/,
@@ -197,7 +225,7 @@ app.whenReady()
         );
         await click('Save');
         await wait(
-            "(document.querySelector('.channel-delete-confirm')?.textContent||'').includes('messages older than 2 weeks will be deleted')",
+            "(document.querySelector('.channel-delete-confirm')?.textContent||'').includes('files older than 2 weeks will be removed')",
             'shortening shows a confirmation with its effect',
         );
         await shot('confirm');

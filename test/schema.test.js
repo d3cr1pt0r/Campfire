@@ -52,6 +52,11 @@ test('schema initializes twice and enforces identity, role and attachment integr
         assert.throws(() => attach.run('g', 'm', 'text', 'text/plain', 8, 'aGVsbG8='), /CHECK/);
         assert.throws(() => attach.run('h', 'm', 'short', 'x', 9, Buffer.from('hello')), /CHECK/);
         assert.throws(() => attach.run('i', 'm', null, 'x', 5, Buffer.from('hello')), /NOT NULL/);
+        // A removed file keeps no bytes.
+        assert.throws(
+            () => db.prepare("UPDATE attachments SET removed=1 WHERE id='f'").run(),
+            /CHECK/,
+        );
         assert.equal(db.prepare('SELECT bytes FROM storage_usage').get().bytes, 5);
         db.prepare('INSERT INTO reactions VALUES(?,?,?)').run('m', 'a', '👍');
         db.prepare(
@@ -108,6 +113,16 @@ test('retention policies exist for the server and direct messages and stay consi
         channel.run(30, null, 1);
         assert.throws(() => channel.run(30, 14, null), /CHECK/);
         assert.throws(() => db.prepare("UPDATE channels SET kind='other'").run(), /CHECK|change/);
+        // Text is kept until a date only while it is kept at all.
+        assert.deepEqual(
+            { ...db.prepare('SELECT keepText,keepTextUntil FROM retention_mode').get() },
+            {
+                keepText: 0,
+                keepTextUntil: null,
+            },
+        );
+        assert.throws(() => db.prepare('UPDATE retention_mode SET keepTextUntil=1').run(), /CHECK/);
+        db.prepare('UPDATE retention_mode SET keepText=1,keepTextUntil=1').run();
     } finally {
         db.close();
     }

@@ -4,6 +4,7 @@ import { ChatMessage, ChatMessages } from './ChatMessages';
 import { ChatComposer } from './ChatComposer';
 import { Emoji } from './ChatContent';
 import { useConversation } from './useConversation';
+import { removeFiles } from './conversation';
 import { messagePayload, type ApiClient } from './api';
 import type { AppSocket, Message, State, User } from './types';
 import type { MessageAvatarMode } from './messageAppearance';
@@ -103,6 +104,11 @@ export function ThreadPanel(props: Props) {
             notify.current('This thread reached the end of its retention period and was deleted.');
             close.current();
         };
+        const strip = (event: { room: string; ids: string[] }) => {
+            if (event.room !== parent.room || !event.ids.includes(parent.id)) return;
+            revision++;
+            setRoot((message) => removeFiles(message));
+        };
         const onTyping = (event: { room: string; user: string; thread?: string | null }) => {
             if (
                 event.room === parent.room &&
@@ -115,6 +121,7 @@ export function ThreadPanel(props: Props) {
         socket?.on('message:update', update);
         socket?.on('message:delete', remove);
         socket?.on('messages:expired', expire);
+        socket?.on('messages:files-removed', strip);
         socket?.on('typing', onTyping);
         void load();
         const timer = setInterval(
@@ -134,6 +141,7 @@ export function ThreadPanel(props: Props) {
             socket?.off('message:update', update);
             socket?.off('message:delete', remove);
             socket?.off('messages:expired', expire);
+            socket?.off('messages:files-removed', strip);
             socket?.off('typing', onTyping);
         };
     }, [api, socket, parent.id, parent.room, state.me.id]);

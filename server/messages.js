@@ -8,6 +8,7 @@ import { check, route } from './policies.js';
 import { transaction } from './database.js';
 import { createThumbnails } from './thumbnails.js';
 import { forViewer } from './poll-view.js';
+const removedFile = 'This file was removed after the retention period';
 // node:sqlite returns blobs as Uint8Array; a Buffer view avoids copying large files.
 const bytesOf = (data) => Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 export function registerMessages({
@@ -400,10 +401,11 @@ export function registerMessages({
         route(async (req, res) => {
             // Check access before consulting the cache or touching image data.
             const attachment = get(
-                'SELECT a.id,a.mime,m.room FROM attachments a JOIN messages m ON m.id=a.message WHERE a.id=?',
+                'SELECT a.id,a.mime,a.removed,m.room FROM attachments a JOIN messages m ON m.id=a.message WHERE a.id=?',
                 req.params.id,
             );
             check(attachment && hasRoom(req.user, attachment.room), 'Attachment not found', 404);
+            check(!attachment.removed, removedFile, 410);
             check(/^image\/(png|jpeg|gif|webp)$/.test(attachment.mime), 'Preview unavailable', 404);
             const data = await thumbnails.get(attachment.id, () => {
                 const row = get('SELECT data FROM attachments WHERE id=?', attachment.id);
@@ -428,10 +430,11 @@ export function registerMessages({
         '/api/attachments/:id',
         route((req, res) => {
             const a = get(
-                'SELECT a.id,a.name,m.room FROM attachments a JOIN messages m ON m.id=a.message WHERE a.id=?',
+                'SELECT a.id,a.name,a.removed,m.room FROM attachments a JOIN messages m ON m.id=a.message WHERE a.id=?',
                 req.params.id,
             );
             check(a && hasRoom(req.user, a.room), 'Attachment not found', 404);
+            check(!a.removed, removedFile, 410);
             res.setHeader(
                 'Content-Disposition',
                 `attachment; filename*=UTF-8''${encodeURIComponent(a.name)}`,

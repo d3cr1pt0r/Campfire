@@ -1,12 +1,25 @@
 import type { Message } from './types';
 
 export type MessagePage = { messages: Message[]; next: string | null };
+// A message after retention removed its files and link cards, which leave placeholders.
+export const removeFiles = (message: Message): Message => ({
+    ...message,
+    attachments: message.attachments.map(({ id, name, mime }) => ({
+        id,
+        name,
+        mime,
+        removed: true,
+    })),
+    previews: undefined,
+});
 export type ConversationEvent =
     | { type: 'upsert'; message: Message }
     | { type: 'member-deleted'; id: string }
     | { type: 'delete'; id: string }
     // Expired threads: their first messages, which took the replies with them.
-    | { type: 'expire'; ids: string[] };
+    | { type: 'expire'; ids: string[] }
+    // Threads whose files and link cards were removed, keeping the text.
+    | { type: 'strip'; ids: string[] };
 type Snapshot = {
     messages: Message[];
     next: string | null;
@@ -37,10 +50,13 @@ export function createConversation(
                 author: message.author === event.id ? null : message.author,
                 reactions: message.reactions.filter((reaction) => reaction.user !== event.id),
             }));
+        const inThread = (message: Message, ids: string[]) =>
+            ids.includes(message.id) || ids.includes(message.thread ?? '');
         if (event.type === 'expire')
-            return messages.filter(
-                (message) =>
-                    !event.ids.includes(message.id) && !event.ids.includes(message.thread ?? ''),
+            return messages.filter((message) => !inThread(message, event.ids));
+        if (event.type === 'strip')
+            return messages.map((message) =>
+                inThread(message, event.ids) ? removeFiles(message) : message,
             );
         const id = event.type === 'delete' ? event.id : event.message.id;
         const next = messages.filter((message) => message.id !== id);

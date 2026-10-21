@@ -8,6 +8,7 @@ import {
     finalWindow,
     formatRetention,
     isRetentionDays,
+    nextKeepText,
     nextPolicy,
     noticeMs,
     periodAt,
@@ -17,7 +18,10 @@ import {
 import { formatBytes, formatStorageQuota, gigabyte, isStorageQuota } from '../shared/uploads.js';
 import {
     conversationSchedule,
+    hasFiles,
     messageRetention,
+    periodLabel,
+    pinKeeps,
     retentionChip,
     retentionNotice,
     unpinText,
@@ -46,32 +50,32 @@ test('schedules merge a channel with the server default it follows', () => {
     const T1 = 1000 * dayMs,
         T2 = 2000 * dayMs;
     assert.deepEqual(retentionSchedule({ server: forever, dm: policy(30) }, null), [
-        { from: -Infinity, days: 30, source: 'dm' },
+        { from: -Infinity, days: 30, source: 'dm', keepText: false },
     ]);
     const server = policy(0, 14, T1);
     assert.deepEqual(retentionSchedule({ server, dm: forever }, { retention: null }), [
-        { from: -Infinity, days: Infinity, source: 'server' },
-        { from: T1, days: 14, source: 'server' },
+        { from: -Infinity, days: Infinity, source: 'server', keepText: false },
+        { from: T1, days: 14, source: 'server', keepText: false },
     ]);
     // A channel's own period ignores the server default.
     assert.deepEqual(retentionSchedule({ server, dm: forever }, { retention: 0 }), [
-        { from: -Infinity, days: Infinity, source: 'channel' },
+        { from: -Infinity, days: Infinity, source: 'channel', keepText: false },
     ]);
     // A channel that will follow the server default again, before or after the server changes.
     const following = (at) => policy(365, null, at);
     assert.deepEqual(
         retentionSchedule({ server: policy(30, 14, T1), dm: forever }, following(T2)),
         [
-            { from: -Infinity, days: 365, source: 'channel' },
-            { from: T2, days: 14, source: 'server' },
+            { from: -Infinity, days: 365, source: 'channel', keepText: false },
+            { from: T2, days: 14, source: 'server', keepText: false },
         ],
     );
     assert.deepEqual(
         retentionSchedule({ server: policy(30, 14, T2), dm: forever }, following(T1)),
         [
-            { from: -Infinity, days: 365, source: 'channel' },
-            { from: T1, days: 30, source: 'server' },
-            { from: T2, days: 14, source: 'server' },
+            { from: -Infinity, days: 365, source: 'channel', keepText: false },
+            { from: T1, days: 30, source: 'server', keepText: false },
+            { from: T2, days: 14, source: 'server', keepText: false },
         ],
     );
     const schedule = retentionSchedule({ server: forever, dm: forever }, following(T1));
@@ -124,7 +128,7 @@ test('only shorter coming periods are announced, and the hourglass shows in the 
         { from: -Infinity, days: Infinity, source: 'server' },
         { from: now + dayMs, days: 14, source: 'server' },
     ];
-    assert.deepEqual(upcomingChange(shorter, now), shorter[1]);
+    assert.deepEqual(upcomingChange(shorter, now), { ...shorter[1], kind: 'messages' });
     assert.equal(appliesRetention(shorter, now), true);
     // A channel returning to a longer server default is no warning.
     const longer = [
@@ -236,4 +240,120 @@ test('members see the period, coming changes and deletion dates in plain words',
         unpinText(conversationSchedule(state(policy(365)), 'general'), { since: now }, now),
         'Unpinned. It will be deleted on Oct 21, 2027.',
     );
+});
+
+test('keeping text splits schedules, so files and text expire separately', () => {
+    const now = 100 * dayMs,
+        until = now + 7 * dayMs;
+    const kept = { server: policy(30), dm: forever, keepText: true, keepTextUntil: null };
+    assert.deepEqual(retentionSchedule(kept, { retention: null }), [
+        { from: -Infinity, days: 30, source: 'server', keepText: true },
+    ]);
+    const ending = retentionSchedule({ ...kept, keepTextUntil: until }, { retention: null });
+    assert.deepEqual(ending, [
+        { from: -Infinity, days: 30, source: 'server', keepText: true },
+        { from: until, days: 30, source: 'server', keepText: false },
+    ]);
+    const unit = (since) => ({ since, kept: false, pollEnds: null });
+    const forEver = retentionSchedule(kept, { retention: null });
+    assert.equal(deletionTime(forEver, unit(now), { text: true }), null);
+    assert.equal(deletionTime(forEver, unit(now)), now + 30 * dayMs);
+    assert.equal(expiryCutoff(forEver, now, { text: true }), -Infinity);
+    // Once text is no longer kept, old messages go when that starts.
+    assert.equal(deletionTime(ending, unit(now - 40 * dayMs), { text: true }), until);
+    assert.equal(deletionTime(ending, unit(now), { text: true }), now + 30 * dayMs);
+    for (let since = now - 60 * dayMs; since <= now + 40 * dayMs; since += 2 * dayMs + 11)
+        for (const time of [now, until, until + 20 * dayMs])
+            for (const text of [true, false]) {
+                const at = deletionTime(ending, unit(since), { text });
+                assert.equal(
+                    at !== null && at <= time,
+                    since <= expiryCutoff(ending, time, { text }),
+                    `${since} at ${time}`,
+                );
+            }
+    assert.equal(upcomingChange(ending, now).kind, 'text');
+    // A shorter period while text is kept only removes files sooner.
+    const sooner = retentionSchedule(
+        { ...kept, server: policy(30, 14, until) },
+        { retention: null },
+    );
+    assert.equal(upcomingChange(sooner, now).kind, 'files');
+    // Nothing is announced where messages are kept forever anyway.
+    assert.equal(
+        upcomingChange(retentionSchedule({ ...kept, keepTextUntil: until }, { retention: 0 }), now),
+        null,
+    );
+});
+
+test('keeping text applies at once; no longer keeping it waits a week unless applied now', () => {
+    const now = 100 * dayMs,
+        at = now + 3 * dayMs;
+    const mode = (keepText, keepTextUntil = null) => ({ keepText, keepTextUntil });
+    assert.deepEqual(nextKeepText(mode(false), true, { now }), mode(true));
+    assert.deepEqual(nextKeepText(mode(true), false, { now }), mode(true, now + noticeMs));
+    assert.deepEqual(nextKeepText(mode(true, at), false, { now }), mode(true, at));
+    assert.deepEqual(nextKeepText(mode(true, at), true, { now }), mode(true));
+    assert.deepEqual(nextKeepText(mode(true), false, { now, applyNow: true }), mode(false));
+    assert.deepEqual(nextKeepText(mode(false), false, { now }), mode(false));
+    assert.deepEqual(nextKeepText(mode(true, now - 1), false, { now }), mode(false));
+});
+
+test('with text kept, members are told about files, and text-only messages show nothing', () => {
+    const now = new Date(2026, 9, 21, 12).getTime();
+    const day = (offset) => now + offset * dayMs;
+    const state = (keepTextUntil = null, server = policy(30)) => ({
+        retention: { server, dm: forever, keepText: true, keepTextUntil },
+        channels: [{ id: 'general' }],
+    });
+    const kept = conversationSchedule(state(), 'general');
+    assert.deepEqual(retentionChip(kept, now, false), {
+        label: 'Files · 1 month',
+        title: 'Files here are removed 1 month after they’re posted; the messages are kept. Pinned messages keep their files.',
+    });
+    assert.equal(periodLabel(kept, now), 'Files · 1 month');
+    const old = { since: day(-25), kept: false, pollEnds: null };
+    assert.equal(messageRetention(kept, old, day(-25), false, now, false), null);
+    assert.equal(messageRetention(kept, old, day(-25), true, now, false), null);
+    assert.deepEqual(messageRetention(kept, old, day(-25), false, now, true), {
+        title: 'Posted Sep 26 · files removed Oct 26 unless pinned',
+        ending: true,
+    });
+    assert.equal(pinKeeps(kept, old, now, false), false);
+    assert.equal(pinKeeps(kept, old, now, true), true);
+    const fresh = { since: now, kept: false, pollEnds: null };
+    assert.equal(unpinText(kept, fresh, now, false), null);
+    assert.equal(
+        unpinText(kept, fresh, now, true),
+        'Unpinned. Its files will be removed on Nov 20.',
+    );
+    // Text kept only until Oct 28.
+    const ending = conversationSchedule(state(day(7)), 'general');
+    assert.deepEqual(retentionChip(ending, now, false), {
+        label: '1 month from Oct 28',
+        title: 'Files here are removed 1 month after they’re posted; the messages are kept. From Oct 28, messages are deleted too, 1 month after posting. Pinned messages are kept.',
+    });
+    assert.deepEqual(retentionNotice(ending, now, false, true), {
+        source: 'keep-text',
+        at: day(7),
+        text: 'From Oct 28, messages here older than 1 month will be deleted, not just their files. Pin anything you want to keep.',
+    });
+    assert.equal(
+        messageRetention(ending, old, day(-25), false, now, true).title,
+        'Posted Sep 26 · files removed Oct 26, deleted Oct 28 unless pinned',
+    );
+    assert.equal(
+        messageRetention(ending, old, day(-25), false, now, false).title,
+        'Posted Sep 26 · deleted Oct 28 unless pinned',
+    );
+    const shorter = conversationSchedule(state(null, policy(30, 14, day(7))), 'general');
+    assert.equal(
+        retentionNotice(shorter, now, false, false).text,
+        'From Oct 28, files here older than 2 weeks will be removed. Pinned messages are kept.',
+    );
+    assert.equal(
+        hasFiles({ attachments: [{ id: 'a', name: 'a', mime: 'x', removed: true }] }),
+        false,
+    );
+    assert.equal(hasFiles({ attachments: [], previews: [{}] }), true);
 });
