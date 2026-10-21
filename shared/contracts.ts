@@ -116,6 +116,7 @@ export type Preferences = {
     noise: boolean;
     pushToTalk: boolean;
     sounds: boolean;
+    formattingToolbar?: boolean;
 };
 
 export type MediaRole = 'voice' | 'video' | 'streamAudio';

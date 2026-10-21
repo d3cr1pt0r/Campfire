@@ -1,4 +1,6 @@
-import { useState, type Ref } from 'react';
+import { useRef, useState, type Ref } from 'react';
+import { RichEditor } from './RichEditor';
+import { inCodeBlock } from './richText';
 import {
     permissionGroups,
     channelPermissionIds,
@@ -55,28 +57,62 @@ export function SimpleForm({
         >
             <label>
                 {label}
-                {label === 'Message' ? (
-                    <textarea
-                        name="value"
-                        autoFocus
-                        defaultValue={initialValue}
-                        required
-                        maxLength={4000}
-                        rows={5}
-                    />
-                ) : (
-                    <input
-                        ref={inputRef}
-                        name="value"
-                        autoFocus
-                        defaultValue={initialValue}
-                        required
-                        maxLength={32}
-                    />
-                )}
+                <input
+                    ref={inputRef}
+                    name="value"
+                    autoFocus
+                    defaultValue={initialValue}
+                    required
+                    maxLength={32}
+                />
             </label>
             <button className="primary" disabled={busy}>
                 {busy ? 'Working…' : submit}
+            </button>
+        </form>
+    );
+}
+// Edits a message with the same formatting editor as the composer; Enter saves.
+export function MessageForm({
+    initialValue,
+    busy,
+    formattingToolbar,
+    onSubmit,
+}: {
+    initialValue: string;
+    busy: boolean;
+    formattingToolbar: boolean;
+    onSubmit: (value: string) => unknown;
+}) {
+    const [value, setValue] = useState(initialValue);
+    const form = useRef<HTMLFormElement>(null);
+    return (
+        <form
+            ref={form}
+            onSubmit={(e) => {
+                e.preventDefault();
+                if (value.trim() && !busy) void onSubmit(value);
+            }}
+        >
+            <div className="message-form-field">
+                <span>Message</span>
+                <RichEditor
+                    className="message-form-input"
+                    value={value}
+                    onChange={setValue}
+                    label="Message"
+                    autoFocus
+                    toolbar={formattingToolbar}
+                    onKey={(event, state) => {
+                        if (event.key !== 'Enter' || event.shiftKey || event.altKey) return false;
+                        if (!event.ctrlKey && !event.metaKey && inCodeBlock(state)) return false;
+                        form.current?.requestSubmit();
+                        return true;
+                    }}
+                />
+            </div>
+            <button className="primary" disabled={busy || !value.trim()}>
+                {busy ? 'Working…' : 'Save message'}
             </button>
         </form>
     );

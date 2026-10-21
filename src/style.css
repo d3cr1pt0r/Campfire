@@ -999,7 +999,7 @@ small {
     padding: 5px;
     color: #af9781;
 }
-.composer > button:first-child {
+.composer > .composer-add {
     background: #ac947d;
     color: #40342c;
     border-radius: 50%;
@@ -1007,21 +1007,6 @@ small {
     height: 21px;
     padding: 0;
     flex-shrink: 0;
-}
-.composer textarea {
-    background: transparent;
-    border: 0;
-    padding: 3px 0;
-    color: #d6cabf;
-    font-size: 13px;
-    line-height: 1.7;
-    min-height: 26px;
-    max-height: 224px;
-    overflow-y: auto;
-    outline: none;
-}
-.composer textarea:focus-visible {
-    outline: none;
 }
 .composer .send-button {
     color: #f8d7bc;
@@ -2578,7 +2563,7 @@ label textarea {
     box-shadow: 0 0 0 1px var(--accent);
 }
 .composer > button,
-.composer > button:first-child {
+.composer > .composer-add {
     width: 36px;
     height: 36px;
     min-width: 36px;
@@ -2586,12 +2571,6 @@ label textarea {
     border-radius: 8px;
     background: transparent;
     color: #ccbcae;
-}
-.composer textarea {
-    min-width: 0;
-    padding: 6px 4px;
-    font-size: 14px;
-    color: #f4f1ee;
 }
 .composer .send-button {
     background: #f5c19626;
@@ -3094,13 +3073,13 @@ label textarea {
     .nav-item,
     .settings-nav button,
     .composer > button,
-    .composer > button:first-child,
+    .composer > .composer-add,
     .call-controls button,
     .emoji-picker button {
         min-height: 44px;
     }
     .composer > button,
-    .composer > button:first-child {
+    .composer > .composer-add {
         min-width: 44px;
     }
 }

@@ -1,11 +1,28 @@
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import type { EditorState } from 'prosemirror-state';
 import { Emoji } from './ChatContent';
 import { emojiQuery, emojiMatches } from './emojiCompletion';
 import { mentionQuery, completeMention } from './mentions';
-import { Paperclip, X, Plus, Smile, Send, Vote } from 'lucide-react';
+import { CaseSensitive, Paperclip, X, Plus, Smile, Send, Vote } from 'lucide-react';
 import { pollCommand } from './polls';
 import { displayName } from './profiles';
+import { FormattingToolbar, RichEditor, type RichEditorHandle } from './RichEditor';
+import { inCodeBlock } from './richText';
 import type { User } from './types';
+
+// The text around the caret, for mention and emoji suggestions.
+type Caret = { text: string; offset: number; start: number; head: number; code: boolean };
+const caretAt = (state: EditorState): Caret | null => {
+    const { $head, empty } = state.selection;
+    if (!empty) return null;
+    return {
+        text: $head.parent.textContent,
+        offset: $head.parentOffset,
+        start: $head.start(),
+        head: $head.pos,
+        code: !!$head.parent.type.spec.code || $head.marks().some((mark) => !!mark.type.spec.code),
+    };
+};
 
 type Props = {
     attachments: File[];
@@ -20,7 +37,7 @@ type Props = {
     lastTyping: React.RefObject<number>;
     addFiles: (files: File[]) => void;
     send: (e: React.FormEvent) => Promise<void>;
-    pasteDesktop: (textarea: HTMLTextAreaElement) => Promise<void>;
+    pasteDesktop: (target: HTMLElement, insertText: (text: string) => void) => Promise<void>;
     onEmoji: () => void;
     onTyping: () => void;
     typing: Record<string, number>;
@@ -32,6 +49,8 @@ type Props = {
     emojis?: { id: string; name: string; author: string | null }[];
     // Opens the poll dialog, with a question when typed as "/poll Question".
     onPoll?: (question: string) => void;
+    formattingToolbar: boolean;
+    setFormattingToolbar: (shown: boolean) => void;
 };
 export function ChatComposer({
     attachments,
@@ -57,8 +76,11 @@ export function ChatComposer({
     users,
     emojis = [],
     onPoll,
+    formattingToolbar,
+    setFormattingToolbar,
 }: Props) {
-    const input = useRef<HTMLTextAreaElement>(null);
+    const editor = useRef<RichEditorHandle>(null);
+    const form = useRef<HTMLFormElement>(null);
     const addButton = useRef<HTMLButtonElement>(null);
     const menu = useRef<HTMLDivElement>(null);
     const [menuOpen, setMenuOpen] = useState(false);
@@ -90,40 +112,20 @@ export function ChatComposer({
         onPoll?.(question);
     };
     useLayoutEffect(() => {
-        if (focusRequest !== undefined && canPost) input.current?.focus({ preventScroll: true });
+        if (focusRequest !== undefined && canPost) editor.current?.focus();
     }, [focusRequest, canPost]);
-    useLayoutEffect(() => {
-        const textarea = input.current;
-        const composer = textarea?.parentElement;
-        if (!textarea || !composer) return;
-        const resize = () => {
-            textarea.style.height = 'auto';
-            textarea.style.height = `${textarea.scrollHeight}px`;
-        };
-        resize();
-        let width = composer.clientWidth;
-        let frame = 0;
-        const observer = new ResizeObserver(() => {
-            if (composer.clientWidth === width) return;
-            width = composer.clientWidth;
-            cancelAnimationFrame(frame);
-            frame = requestAnimationFrame(resize);
-        });
-        observer.observe(composer);
-        return () => {
-            observer.disconnect();
-            cancelAnimationFrame(frame);
-        };
-    }, [draft]);
     const listId = useId();
-    const [caret, setCaret] = useState(0);
+    const [caret, setCaret] = useState<Caret | null>(null);
+    const [editorState, setEditorState] = useState<EditorState | null>(null);
     const [active, setActive] = useState(0);
     const [focused, setFocused] = useState(false);
     const [composing, setComposing] = useState(false);
     const [dismissed, setDismissed] = useState('');
-    const query = !composing && focused && canPost ? mentionQuery(draft, caret) : null;
+    const suggesting = !composing && focused && canPost && !!caret && !caret.code;
+    const caretKey = caret ? `${caret.text}:${caret.head}` : '';
+    const query = suggesting ? mentionQuery(caret.text, caret.offset) : null;
     const matches =
-        query && dismissed !== `${draft}:${caret}`
+        query && dismissed !== caretKey
             ? users
                   .filter((candidate) =>
                       candidate.username.toLowerCase().startsWith(query.query.toLowerCase()),
@@ -132,22 +134,15 @@ export function ChatComposer({
                   .slice(0, 8)
             : [];
     const emojiSearch =
-        !composing && focused && canPost && dismissed !== `${draft}:${caret}`
-            ? emojiQuery(draft, caret)
-            : null;
+        suggesting && dismissed !== caretKey ? emojiQuery(caret.text, caret.offset) : null;
     const emojiOptions = emojiSearch ? emojiMatches(emojiSearch.query, emojis) : [];
     const completeEmoji = (option: { value: string }) => {
-        if (!emojiSearch) return;
-        const text = draft.slice(0, emojiSearch.start) + option.value + ' ' + draft.slice(caret);
-        if (text.length > 4000) return;
-        const next = emojiSearch.start + option.value.length + 1;
-        setDraft(text);
-        setCaret(next);
-        setDismissed(`${text}:${next}`);
-        requestAnimationFrame(() => {
-            input.current?.focus();
-            input.current?.setSelectionRange(next, next);
-        });
+        if (!emojiSearch || !caret) return;
+        const insertion = option.value + ' ';
+        const text =
+            caret.text.slice(0, emojiSearch.start) + insertion + caret.text.slice(caret.offset);
+        setDismissed(`${text}:${caret.start + emojiSearch.start + insertion.length}`);
+        editor.current?.replace(caret.start + emojiSearch.start, caret.head, insertion);
     };
     const optionCount = matches.length || emojiOptions.length;
     const chosen = Math.min(active, Math.max(0, optionCount - 1));
@@ -156,16 +151,53 @@ export function ChatComposer({
             document.getElementById(`${listId}-${chosen}`)?.scrollIntoView({ block: 'nearest' });
     }, [chosen, listId, optionCount]);
     const complete = (candidate: User) => {
-        if (!query) return;
-        const result = completeMention(draft, query, candidate.username);
+        if (!query || !caret) return;
+        const result = completeMention(caret.text, query, candidate.username);
         if (!result) return;
-        setDraft(result.text);
-        setCaret(result.caret);
-        setDismissed(`${result.text}:${result.caret}`);
-        requestAnimationFrame(() => {
-            input.current?.focus();
-            input.current?.setSelectionRange(result.caret, result.caret);
-        });
+        setDismissed(`${result.text}:${caret.start + result.caret}`);
+        editor.current?.replace(
+            caret.start + query.start,
+            caret.start + query.end,
+            `@${candidate.username} `,
+        );
+    };
+    const onKey = (e: KeyboardEvent, state: EditorState) => {
+        if (e.isComposing || composing) return false;
+        if (optionCount) {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                setActive((chosen + (e.key === 'ArrowDown' ? 1 : -1) + optionCount) % optionCount);
+                return true;
+            }
+            if ((e.key === 'Enter' || e.key === 'Tab') && !e.shiftKey) {
+                if (emojiOptions.length) completeEmoji(emojiOptions[chosen]);
+                else complete(matches[chosen]);
+                return true;
+            }
+            if (e.key === 'Escape') {
+                e.stopPropagation();
+                setDismissed(caretKey);
+                return true;
+            }
+        }
+        if (
+            (e.ctrlKey || e.metaKey) &&
+            !e.altKey &&
+            !e.shiftKey &&
+            e.key.toLowerCase() === 'v' &&
+            window.campfire?.readClipboardAttachments
+        ) {
+            void pasteDesktop(e.currentTarget as HTMLElement, (text) =>
+                editor.current?.insertText(text),
+            );
+            return true;
+        }
+        // Enter sends; inside a code block it adds a line unless Ctrl/Cmd is held.
+        if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
+            if (!e.ctrlKey && !e.metaKey && inCodeBlock(state)) return false;
+            if (!busy) form.current?.requestSubmit();
+            return true;
+        }
+        return false;
     };
     return (
         <div className="composer-wrap">
@@ -291,9 +323,17 @@ export function ChatComposer({
                     )}
                 </div>
             )}
-            <form className="composer" onSubmit={submit}>
+            <form className="composer" ref={form} onSubmit={submit}>
+                {formattingToolbar && canPost && editorState && (
+                    <FormattingToolbar
+                        state={editorState}
+                        disabled={!canPost}
+                        run={(command) => editor.current?.run(command)}
+                    />
+                )}
                 <button
                     type="button"
+                    className="composer-add"
                     ref={addButton}
                     title="Add files or a poll"
                     aria-label="Add files or a poll"
@@ -315,88 +355,46 @@ export function ChatComposer({
                         e.target.value = '';
                     }}
                 />
-                <textarea
-                    ref={input}
-                    role="combobox"
-                    aria-autocomplete="list"
-                    aria-expanded={!!optionCount}
-                    aria-controls={optionCount ? listId : undefined}
-                    aria-activedescendant={optionCount ? `${listId}-${chosen}` : undefined}
-                    onFocus={() => setFocused(true)}
-                    onBlur={() => setFocused(false)}
-                    onCompositionStart={() => setComposing(true)}
-                    onCompositionEnd={() => setComposing(false)}
-                    onSelect={(event) => {
-                        const next = event.currentTarget.selectionStart;
-                        if (next !== caret) {
-                            setCaret(next);
-                            setActive(0);
-                        }
-                    }}
-                    aria-label={label}
-                    placeholder={canPost ? placeholder : 'This conversation is read-only'}
+                <RichEditor
+                    ref={editor}
+                    className="composer-input"
                     value={draft}
+                    label={label}
+                    placeholder={canPost ? placeholder : 'This conversation is read-only'}
                     disabled={!canPost}
-                    maxLength={4000}
-                    rows={1}
-                    onChange={(e) => {
-                        setDraft(e.target.value);
-                        setCaret(e.target.selectionStart);
-                        setActive(0);
+                    attributes={{
+                        'aria-autocomplete': 'list',
+                        'aria-controls': optionCount ? listId : undefined,
+                        'aria-activedescendant': optionCount ? `${listId}-${chosen}` : undefined,
+                    }}
+                    onChange={(markdown) => {
+                        setDraft(markdown);
                         if (Date.now() - lastTyping.current > 2000) {
                             onTyping();
                             lastTyping.current = Date.now();
                         }
                     }}
-                    onPaste={(event) => {
-                        const files = Array.from(event.clipboardData.files);
-                        if (files.length) {
-                            event.preventDefault();
-                            addFiles(files);
-                        }
+                    onState={(state) => {
+                        const next = caretAt(state);
+                        if (next?.head !== caret?.head) setActive(0);
+                        setCaret(next);
+                        setEditorState(state);
                     }}
-                    onKeyDown={(e) => {
-                        if (e.nativeEvent.isComposing || composing) return;
-                        if (optionCount) {
-                            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-                                e.preventDefault();
-                                setActive(
-                                    (chosen + (e.key === 'ArrowDown' ? 1 : -1) + optionCount) %
-                                        optionCount,
-                                );
-                                return;
-                            }
-                            if ((e.key === 'Enter' || e.key === 'Tab') && !e.shiftKey) {
-                                e.preventDefault();
-                                if (emojiOptions.length) completeEmoji(emojiOptions[chosen]);
-                                else complete(matches[chosen]);
-                                return;
-                            }
-                            if (e.key === 'Escape') {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setDismissed(`${draft}:${caret}`);
-                                return;
-                            }
-                        }
-                        if (
-                            (e.ctrlKey || e.metaKey) &&
-                            !e.altKey &&
-                            !e.shiftKey &&
-                            e.key.toLowerCase() === 'v' &&
-                            window.campfire?.readClipboardAttachments
-                        ) {
-                            e.preventDefault();
-                            void pasteDesktop(e.currentTarget);
-                            return;
-                        }
-
-                        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                            e.preventDefault();
-                            if (!busy && !e.nativeEvent.isComposing) void submit(e);
-                        }
-                    }}
+                    onFocusChange={setFocused}
+                    onCompositionChange={setComposing}
+                    onFiles={addFiles}
+                    onKey={onKey}
                 />
+                <button
+                    type="button"
+                    title={formattingToolbar ? 'Hide formatting' : 'Show formatting'}
+                    aria-label="Formatting toolbar"
+                    aria-pressed={formattingToolbar}
+                    disabled={!canPost}
+                    onClick={() => setFormattingToolbar(!formattingToolbar)}
+                >
+                    <CaseSensitive size={21} />
+                </button>
                 <button
                     type="button"
                     title="Add emoji"

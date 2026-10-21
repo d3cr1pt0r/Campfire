@@ -117,7 +117,7 @@ async function client(account, partition) {
 const send = async (win, text) => {
     await js(
         win,
-        `{ const input = document.querySelector('.chat-area .composer textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,${JSON.stringify(text)}); input.dispatchEvent(new Event('input',{bubbles:true})); }`,
+        `{ const input = document.querySelector('.chat-area .composer .rich-input'); input.focus(); document.execCommand('insertText', false, ${JSON.stringify(text)}); }`,
     );
     await pause(50);
     await js(win, `document.querySelector('.chat-area .composer').requestSubmit()`);
