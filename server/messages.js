@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { imageMime } from './images.js';
+import { imageInfo, imageMime } from './images.js';
 import { maxUploadBytes, maxUploadFiles } from '../shared/uploads.js';
 import { canonicalRoom } from '../shared/rooms.js';
 import { emojis } from '../shared/emojis.js';
 import { check, route } from './policies.js';
-import { transaction, messageViews } from './database.js';
+import { transaction } from './database.js';
 import { createThumbnails } from './thumbnails.js';
 import { forViewer } from './poll-view.js';
 export function registerMessages({
@@ -16,6 +16,7 @@ export function registerMessages({
     hasRoom,
     canInRoom,
     messageView,
+    messageViews,
     emitRoom,
     maxStoredUploadBytes,
     polls,
@@ -101,7 +102,7 @@ export function registerMessages({
                 hasMore && oldest
                     ? Buffer.from(JSON.stringify([oldest.created, oldest.id])).toString('base64url')
                     : null;
-            const messages = messageViews(all, rows.reverse()).map((view) =>
+            const messages = messageViews(rows.reverse()).map((view) =>
                 forViewer(view, req.user.id),
             );
             res.json(req.query.page === '1' ? { messages, next } : messages);
@@ -153,12 +154,17 @@ export function registerMessages({
                     'Invalid attachment (maximum 5 MB)',
                 );
                 const bytes = Buffer.from(file.data, 'base64');
+                const mime = imageMime(bytes);
                 total += bytes.length;
                 check(total <= maxUploadBytes, 'Attachments must total 5 MB or less per message');
                 return {
                     ...file,
                     bytes: bytes.length,
-                    mime: imageMime(bytes) || 'application/octet-stream',
+                    mime: mime || 'application/octet-stream',
+                    // Images store their displayed size; zeros mark an unreadable header.
+                    image: mime
+                        ? (imageInfo(bytes) ?? { width: 0, height: 0, animated: false })
+                        : null,
                 };
             });
             const id = randomUUID();
@@ -179,16 +185,26 @@ export function registerMessages({
                     thread,
                 );
                 if (poll) polls.insert(id, poll);
-                for (const file of validated)
+                for (const file of validated) {
+                    const attachment = randomUUID();
                     run(
                         'INSERT INTO attachments(id,message,name,mime,data,bytes) VALUES(?,?,?,?,?,?)',
-                        randomUUID(),
+                        attachment,
                         id,
                         file.name,
                         file.mime,
                         file.data,
                         file.bytes,
                     );
+                    if (file.image)
+                        run(
+                            'INSERT INTO attachment_images(attachment,width,height,animated) VALUES(?,?,?,?)',
+                            attachment,
+                            file.image.width,
+                            file.image.height,
+                            file.image.animated ? 1 : 0,
+                        );
+                }
             });
             const m = messageView(get('SELECT * FROM messages WHERE id=?', id));
             if (poll) polls.schedule(id, poll.ends);

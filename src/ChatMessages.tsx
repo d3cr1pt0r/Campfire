@@ -23,7 +23,8 @@ import {
     TimerOff,
 } from 'lucide-react';
 import { PollCard } from './PollCard';
-import { ChatContent, AuthImage } from './ChatContent';
+import { ChatContent } from './ChatContent';
+import { ImageAttachment } from './ImageAttachment';
 import { needsScrollHistory, restoredScrollOffset, type ChatScrollPosition } from './chatScroll';
 
 export function ChatMessages(
@@ -452,18 +453,9 @@ export function ChatMessage({
                         }
                     />
                 )}
-                {m.attachments.map((a) => (
-                    <React.Fragment key={a.id}>
-                        {(/^image\/(png|jpeg|gif|webp)$/.test(a.mime) ||
-                            /\.(png|jpe?g|gif|webp)$/i.test(a.name)) && (
-                            <AuthImage
-                                path={`/attachments/${a.id}/preview`}
-                                originalPath={`/attachments/${a.id}?inline=1`}
-                                alt={a.name}
-                                className="chat-image"
-                                expandable
-                            />
-                        )}
+                {m.attachments.map((a) => {
+                    // Files without a preview keep the download card; images download from it.
+                    const card = (
                         <button
                             className="attachment"
                             key={a.id}
@@ -476,8 +468,18 @@ export function ChatMessage({
                             </span>
                             <Download size={18} />
                         </button>
-                    </React.Fragment>
-                ))}
+                    );
+                    return /^image\/(png|jpeg|gif|webp)$/.test(a.mime) ? (
+                        <ImageAttachment
+                            key={a.id}
+                            attachment={a}
+                            onDownload={() => void download(a.id, a.name)}
+                            fallback={card}
+                        />
+                    ) : (
+                        card
+                    );
+                })}
                 <div className="reactions">
                     {[...new Set(m.reactions.map((r) => r.emoji))].map((emoji) => (
                         <ReactionChip

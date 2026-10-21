@@ -77,6 +77,10 @@ export type Message = {
         id: string;
         name: string;
         mime: string;
+        // Displayed pixel size of an image, when the server could read it.
+        width?: number;
+        height?: number;
+        animated?: boolean;
     }[];
     reactions: {
         user: string;

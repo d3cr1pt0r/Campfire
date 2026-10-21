@@ -1370,12 +1370,6 @@ label,
 :root[data-theme='canvas'] {
     --scrollbar-thumb: #c7bfaf;
 }
-:root[data-theme='canvas'] .attachment-image .image-preview-button {
-    background: var(--panel);
-}
-:root[data-theme='canvas'] .attachment-image .image-preview-button:hover {
-    background: #eae3d5;
-}
 :root[data-theme='canvas'] .attachment {
     background: var(--panel);
     color: var(--ink);
@@ -3347,4 +3341,74 @@ label,
 .message-form-input .rich-input {
     min-height: 110px;
     max-height: 50vh;
+}
+
+/* Image attachments: framed to the image's own shape, with download on hover. */
+.attachment-image {
+    position: relative;
+    display: block;
+    max-width: 100%;
+    margin: 6px 0 4px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--field);
+}
+.attachment-image.loaded {
+    background: none;
+}
+.attachment-image.unsized {
+    width: min(100%, 320px);
+    aspect-ratio: 4 / 3;
+}
+.attachment-image .image-preview-button {
+    width: 100%;
+    height: 100%;
+}
+.attachment-image .image-preview-button:focus-visible {
+    outline-offset: -3px;
+}
+.attachment-image img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.attachment-image .image-download {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    justify-content: center;
+    border-radius: 8px;
+    background: #000000a8;
+    color: #fff;
+    opacity: 0;
+    transition: opacity 120ms;
+}
+.attachment-image:hover .image-download,
+.attachment-image:focus-within .image-download {
+    opacity: 1;
+}
+.attachment-image .image-download:hover,
+:root[data-theme='canvas'] .attachment-image .image-download:hover {
+    background: #000000d9;
+    color: #fff;
+}
+:root[data-theme='canvas'] .attachment-image .image-download {
+    color: #fff;
+}
+.thread-original .attachment-image {
+    --attachment-max-height: 160px;
+}
+.stream-viewer-footer > .viewer-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+    .attachment-image .image-download {
+        transition: none;
+    }
 }

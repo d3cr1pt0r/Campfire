@@ -5,6 +5,15 @@ export const fitImage = (width: number, height: number, side: number) => {
         height: Math.max(1, Math.round(height * scale)),
     };
 };
+// Image attachments show at their own aspect ratio within 480×360 without enlarging;
+// extremely narrow or flat images keep a minimum side and are cropped to it.
+export const attachmentFrame = (width: number, height: number, minimum = 48) => {
+    const scale = Math.min(1, 480 / width, 360 / height);
+    return {
+        width: Math.max(Math.min(minimum, width), Math.round(width * scale)),
+        height: Math.max(Math.min(minimum, height), Math.round(height * scale)),
+    };
+};
 export async function resizeImage(file: File, side: number): Promise<string> {
     if (file.size > 10 * 1024 * 1024) throw new Error('Choose an image smaller than 10 MB');
     const bitmap = await createImageBitmap(file);

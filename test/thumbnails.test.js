@@ -165,3 +165,105 @@ test('thumbnail decoding bounds concurrency and queued work, and deduplicates an
     assert.equal(loads, 32);
     assert.deepEqual(await duplicate, results[0].value);
 });
+
+test('image attachments report their displayed size and animation, read when uploaded', async (t) => {
+    const f = await fixture(t);
+    const frame = (background) =>
+        sharp({ create: { width: 300, height: 120, channels: 3, background } })
+            .png()
+            .toBuffer();
+    const [first, second] = await Promise.all([frame('#aa3322'), frame('#2233aa')]);
+    const files = {
+        'wide.png': first,
+        'sideways.jpg': await sharp(first).jpeg().withMetadata({ orientation: 6 }).toBuffer(),
+        'moving.gif': await sharp([first, second], { join: { animated: true } })
+            .gif()
+            .toBuffer(),
+        'moving.webp': await sharp([first, second], { join: { animated: true } })
+            .webp()
+            .toBuffer(),
+        'still.gif': await sharp(first).gif().toBuffer(),
+        'notes.txt': Buffer.from('plain text'),
+    };
+    const response = await request(f.service.app, '/messages', f.owner.token, 'POST', {
+        room: canonicalRoom(`dm:${f.owner.user.id}:${f.member.user.id}`),
+        attachments: Object.entries(files).map(([name, data]) => ({
+            name,
+            data: data.toString('base64'),
+        })),
+    });
+    assert.equal(response.status, 200, JSON.stringify(response.data));
+    const sizes = Object.fromEntries(
+        response.data.attachments.map(({ name, width, height, animated }) => [
+            name,
+            width === undefined ? null : { width, height, animated },
+        ]),
+    );
+    assert.deepEqual(sizes, {
+        'wide.png': { width: 300, height: 120, animated: false },
+        'sideways.jpg': { width: 120, height: 300, animated: false },
+        'moving.gif': { width: 300, height: 120, animated: true },
+        'moving.webp': { width: 300, height: 120, animated: true },
+        'still.gif': { width: 300, height: 120, animated: false },
+        'notes.txt': null,
+    });
+    assert.equal(f.service.db.prepare('SELECT COUNT(*) n FROM attachment_images').get().n, 5);
+});
+
+test('older image attachments are measured once, when their message is first viewed', async (t) => {
+    const f = await fixture(t);
+    const original = await sharp({
+        create: { width: 640, height: 200, channels: 3, background: '#55aa77' },
+    })
+        .webp()
+        .toBuffer();
+    const message = await f.upload(original),
+        id = message.attachments[0].id;
+    // Uploads from before sizes were stored have no row.
+    f.service.db.prepare('DELETE FROM attachment_images').run();
+    const history = async () =>
+        (
+            await request(
+                f.service.app,
+                `/messages?room=${encodeURIComponent(message.room)}`,
+                f.owner.token,
+            )
+        ).data[0].attachments[0];
+    assert.deepEqual(await history(), {
+        id,
+        name: 'image.png',
+        mime: 'image/webp',
+        width: 640,
+        height: 200,
+        animated: false,
+    });
+    assert.deepEqual(
+        { ...f.service.db.prepare('SELECT * FROM attachment_images WHERE attachment=?').get(id) },
+        { attachment: id, width: 640, height: 200, animated: 0 },
+    );
+    // An unreadable header is remembered too, so it is not read again on every view.
+    f.service.db.prepare('UPDATE attachment_images SET width=0,height=0').run();
+    assert.equal((await history()).width, undefined);
+    // Deleting the message removes its stored size.
+    await request(f.service.app, `/messages/${message.id}`, f.owner.token, 'DELETE');
+    assert.equal(f.service.db.prepare('SELECT COUNT(*) n FROM attachment_images').get().n, 0);
+});
+
+test('image headers give sizes for animated PNGs and nothing for truncated or foreign data', async () => {
+    const { imageInfo } = await import('../server/images.js');
+    const png = await sharp({ create: { width: 40, height: 30, channels: 3, background: '#fff' } })
+        .png()
+        .toBuffer();
+    // An acTL chunk with two frames placed before the image data, as in an APNG.
+    const control = Buffer.alloc(20);
+    control.writeUInt32BE(8, 0);
+    control.write('acTL', 4, 'ascii');
+    control.writeUInt32BE(2, 8);
+    const animated = Buffer.concat([png.subarray(0, 33), control, png.subarray(33)]);
+    assert.deepEqual(imageInfo(animated), { width: 40, height: 30, animated: true });
+    assert.deepEqual(imageInfo(png), { width: 40, height: 30, animated: false });
+    for (const data of [png.subarray(0, 20), Buffer.from('GIF89a'), Buffer.from('plain text')])
+        assert.equal(imageInfo(data), null);
+    const jpeg = await sharp(png).jpeg().toBuffer();
+    assert.equal(imageInfo(jpeg.subarray(0, 40)), null);
+});

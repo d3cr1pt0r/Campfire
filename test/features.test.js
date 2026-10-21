@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitImage } from '../src/images.ts';
+import { fitImage, attachmentFrame } from '../src/images.ts';
 import { rememberedDevice } from '../src/devices.ts';
 import { messageParts } from '../src/messageText.ts';
 import { channelName, boundedPng, imageMime } from '../server/images.js';
@@ -31,6 +31,15 @@ test('device recovery matches a unique label without guessing between duplicate 
         ),
         'old',
     );
+});
+test('image attachments keep their own shape within 480×360, cropping only extreme ones', () => {
+    assert.deepEqual(attachmentFrame(1920, 400), { width: 480, height: 100 });
+    assert.deepEqual(attachmentFrame(1200, 1600), { width: 270, height: 360 });
+    assert.deepEqual(attachmentFrame(120, 80), { width: 120, height: 80 });
+    // Slivers keep a 48px side and are cropped; tiny images are never enlarged.
+    assert.deepEqual(attachmentFrame(4800, 100), { width: 480, height: 48 });
+    assert.deepEqual(attachmentFrame(200, 6000), { width: 48, height: 360 });
+    assert.deepEqual(attachmentFrame(20, 10), { width: 20, height: 10 });
 });
 test('message links support HTTPS, query strings and balanced parentheses while excluding executable schemes', () => {
     const text =

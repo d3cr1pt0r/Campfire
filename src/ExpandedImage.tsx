@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Download } from 'lucide-react';
 import { ExpandedViewer } from './ExpandedViewer';
 
 export function ExpandedImage({
@@ -7,12 +8,14 @@ export function ExpandedImage({
     onClose,
     loading = false,
     error = '',
+    onDownload,
 }: {
     source: string;
     name: string;
     onClose: () => void;
     loading?: boolean;
     error?: string;
+    onDownload?: () => void;
 }) {
     const [notice, setNotice] = useState('');
     return (
@@ -22,6 +25,14 @@ export function ExpandedImage({
             label={`Expanded image: ${name}`}
             onClose={onClose}
             notice={error || notice || (loading ? 'Loading original image…' : '')}
+            controls={
+                onDownload && (
+                    <button type="button" className="viewer-download" onClick={onDownload}>
+                        <Download size={16} />
+                        Download
+                    </button>
+                )
+            }
         >
             {(fullscreen) =>
                 source ? (

@@ -137,6 +137,14 @@ CREATE TABLE IF NOT EXISTS attachments(
     bytes INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS attachments_message ON attachments(message);
+-- Displayed size of image attachments, so clients can reserve their exact space before
+-- loading them. Zero sizes mark images whose header could not be read.
+CREATE TABLE IF NOT EXISTS attachment_images(
+    attachment TEXT PRIMARY KEY REFERENCES attachments(id) ON DELETE CASCADE,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL,
+    animated INTEGER NOT NULL CHECK(animated IN (0,1))
+);
 CREATE TABLE IF NOT EXISTS attachment_previews(
     attachment TEXT PRIMARY KEY REFERENCES attachments(id) ON DELETE CASCADE,
     data BLOB,

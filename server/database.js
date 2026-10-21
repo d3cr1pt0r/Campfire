@@ -109,16 +109,28 @@ export function openDatabase(dataDir, name) {
     }
 }
 
-export function messageViews(all, messages) {
+const imageMimes = /^image\/(png|jpeg|gif|webp)$/;
+
+// describeImage measures an image attachment uploaded before sizes were stored.
+export function messageViews(all, messages, describeImage = () => null) {
     if (!messages.length) return [];
     const ids = messages.map((m) => m.id),
         placeholders = ids.map(() => '?').join(',');
     const attachments = new Map(),
         reactions = new Map();
-    for (const { message, ...value } of all(
-        `SELECT message,id,name,mime FROM attachments WHERE message IN (${placeholders})`,
+    // Measuring reads the whole image, so older uploads are measured a few per request.
+    let unmeasured = 20;
+    for (const { message, width, height, animated, ...value } of all(
+        `SELECT a.message,a.id,a.name,a.mime,i.width,i.height,i.animated FROM attachments a LEFT JOIN attachment_images i ON i.attachment=a.id WHERE a.message IN (${placeholders})`,
         ...ids,
     )) {
+        const size =
+            width != null
+                ? { width, height, animated: !!animated }
+                : imageMimes.test(value.mime) && unmeasured-- > 0
+                  ? describeImage(value.id)
+                  : null;
+        if (size?.width) Object.assign(value, size);
         if (!attachments.has(message)) attachments.set(message, []);
         attachments.get(message).push(value);
     }

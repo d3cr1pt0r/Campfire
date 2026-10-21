@@ -9,6 +9,7 @@ import { Server } from 'socket.io';
 import { createChannelAccess } from './channel-access.js';
 import { canonicalRoom } from '../shared/rooms.js';
 import { openDatabase, messageViews } from './database.js';
+import { imageInfo } from './images.js';
 import { originPolicy, route } from './policies.js';
 import { createSessions } from './sessions.js';
 import { registerAccounts } from './accounts.js';
@@ -100,7 +101,22 @@ export function createApp({
     const sessions = createSessions({ ...database, io });
     const access = createChannelAccess({ ...database, ...sessions, io });
     const { hasRoom } = access;
-    const messageView = (message) => messageViews(all, [message])[0];
+    // Image attachments from before sizes were stored are measured once, when first viewed.
+    const describeImage = (id) => {
+        const row = get('SELECT data FROM attachments WHERE id=?', id);
+        if (!row) return null;
+        const size = imageInfo(Buffer.from(row.data, 'base64'));
+        run(
+            'INSERT OR IGNORE INTO attachment_images(attachment,width,height,animated) VALUES(?,?,?,?)',
+            id,
+            size?.width ?? 0,
+            size?.height ?? 0,
+            size?.animated ? 1 : 0,
+        );
+        return size;
+    };
+    const views = (messages) => messageViews(all, messages, describeImage);
+    const messageView = (message) => views([message])[0];
     const emitRoom = (rawRoom, event, data) => {
         const room = canonicalRoom(rawRoom);
         for (const socket of io.sockets.sockets.values()) {
@@ -117,6 +133,7 @@ export function createApp({
         io,
         hasRoom,
         messageView,
+        messageViews: views,
         emitRoom,
         maxStoredUploadBytes,
         sessionLifetimeMs,

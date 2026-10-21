@@ -2,31 +2,24 @@ import { mentionSegments } from './mentions';
 import type { User } from './types';
 import { messageParts } from './messageText';
 import { parseMessage, type Inline, type List } from './messageFormat';
-import { createContext, Fragment, useContext, useEffect, useRef, useState } from 'react';
+import {
+    createContext,
+    Fragment,
+    useContext,
+    useEffect,
+    useRef,
+    useState,
+    type RefObject,
+} from 'react';
 import { Check, Copy } from 'lucide-react';
-import { ExpandedImage } from './ExpandedImage';
 import { useImage } from './useImage';
 export const AssetContext = createContext({ url: '', token: '' });
-export function AuthImage({
-    path,
-    alt,
-    className = '',
-    expandable = false,
-    originalPath,
-}: {
-    path: string;
-    alt: string;
-    className?: string;
-    expandable?: boolean;
-    originalPath?: string;
-}) {
-    const { url, token } = useContext(AssetContext);
-    const container = useRef<HTMLSpanElement>(null);
+// Becomes true once the element comes within 240px of the message list's viewport.
+export function useNearViewport(element: RefObject<HTMLElement | null>) {
     const [near, setNear] = useState(false);
-    const [expanded, setExpanded] = useState(false);
     useEffect(() => {
-        const element = container.current;
-        if (!element) return;
+        const target = element.current;
+        if (!target) return;
         if (!('IntersectionObserver' in window)) {
             setNear(true);
             return;
@@ -38,48 +31,32 @@ export function AuthImage({
                     observer.disconnect();
                 }
             },
-            { root: element.closest('.messages'), rootMargin: '240px' },
+            { root: target.closest('.messages'), rootMargin: '240px' },
         );
-        observer.observe(element);
+        observer.observe(target);
         return () => observer.disconnect();
-    }, []);
+    }, [element]);
+    return near;
+}
+export function AuthImage({
+    path,
+    alt,
+    className = '',
+}: {
+    path: string;
+    alt: string;
+    className?: string;
+}) {
+    const { url, token } = useContext(AssetContext);
+    const container = useRef<HTMLSpanElement>(null);
+    const near = useNearViewport(container);
     const preview = useImage(url, token, near ? path : null);
-    const original = useImage(url, token, expanded && originalPath ? originalPath : null);
-    const image = preview.source ? (
-        <img src={preview.source} alt={alt} className={className} decoding="async" />
-    ) : (
-        <span className={`image-placeholder ${className}`} aria-label={alt}>
-            {expandable
-                ? preview.error
-                    ? 'Preview unavailable — open original'
-                    : 'Image preview'
-                : ''}
-        </span>
-    );
     return (
-        <span ref={container} className={expandable ? 'auth-image attachment-image' : 'auth-image'}>
-            {expandable ? (
-                <button
-                    type="button"
-                    className="image-preview-button"
-                    title="Click to enlarge image"
-                    aria-label={`Enlarge image: ${alt}`}
-                    aria-haspopup="dialog"
-                    onClick={() => setExpanded(true)}
-                >
-                    {image}
-                </button>
+        <span ref={container} className="auth-image">
+            {preview.source ? (
+                <img src={preview.source} alt={alt} className={className} decoding="async" />
             ) : (
-                image
-            )}
-            {expanded && (
-                <ExpandedImage
-                    source={originalPath ? original.source : preview.source}
-                    name={alt}
-                    loading={!!originalPath && !original.source && !original.error}
-                    error={original.error}
-                    onClose={() => setExpanded(false)}
-                />
+                <span className={`image-placeholder ${className}`} aria-label={alt} />
             )}
         </span>
     );
