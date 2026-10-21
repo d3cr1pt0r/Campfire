@@ -16,8 +16,7 @@ import type { useCall } from './useCall';
 import { Avatar } from './Avatar';
 import { Emoji } from './ChatContent';
 import { displayName } from './profiles';
-import { MicrophoneMeter } from './MicrophoneMeter';
-import { openMicrophone, formatMicrophoneError } from './media';
+import { AudioVideoSettings } from './AudioVideoSettings';
 import { Toggle } from './forms';
 import type { AvatarFrame } from '../shared/frames.js';
 // None leads the static frames so "no frame" stays the first choice.
@@ -517,150 +516,15 @@ export function SettingsPanel({
                     </>
                 )}
                 {settingsTab === 'audio' && (
-                    <>
-                        <p className="muted">
-                            Device and quality changes apply to your next call or video start.
-                        </p>
-                        <button
-                            className="secondary"
-                            onClick={() =>
-                                void act(async () => {
-                                    try {
-                                        const { stream } = await openMicrophone({
-                                            input: '',
-                                            noise: prefs.noise,
-                                        });
-                                        stream.getTracks().forEach((t) => t.stop());
-                                        setDevices(await navigator.mediaDevices.enumerateDevices());
-                                        notify(
-                                            'Microphone access works. Choose an input device below, or keep System default.',
-                                        );
-                                    } catch (error) {
-                                        throw new Error(formatMicrophoneError(error));
-                                    }
-                                })
-                            }
-                        >
-                            Allow microphone & refresh devices
-                        </button>
-                        <label>
-                            Input device
-                            <select
-                                value={prefs.input}
-                                onChange={(e) =>
-                                    setPrefs({
-                                        ...prefs,
-                                        input: e.target.value,
-                                        inputLabel:
-                                            devices.find(
-                                                (d) =>
-                                                    d.deviceId === e.target.value &&
-                                                    d.kind === 'audioinput',
-                                            )?.label || '',
-                                    })
-                                }
-                            >
-                                <option value="">System default</option>
-                                {prefs.input &&
-                                    !devices.some(
-                                        (d) =>
-                                            d.kind === 'audioinput' && d.deviceId === prefs.input,
-                                    ) && (
-                                        <option value={prefs.input}>
-                                            {prefs.inputLabel || 'Saved microphone'} (unavailable)
-                                        </option>
-                                    )}
-                                {devices
-                                    .filter((d) => d.kind === 'audioinput' && d.deviceId)
-                                    .map((d, i) => (
-                                        <option value={d.deviceId} key={d.deviceId}>
-                                            {d.label || `Microphone ${i + 1}`}
-                                        </option>
-                                    ))}
-                            </select>
-                        </label>
-                        <MicrophoneMeter
-                            preferences={prefs}
-                            activeStream={call.channel ? call.microphone : null}
-                            onInputFallback={() =>
-                                notify(
-                                    'Saved microphone unavailable; testing System default. Your selection is kept.',
-                                )
-                            }
-                        />
-                        <label>
-                            Output device
-                            <select
-                                value={prefs.output}
-                                onChange={(e) =>
-                                    setPrefs({
-                                        ...prefs,
-                                        output: e.target.value,
-                                        outputLabel:
-                                            devices.find(
-                                                (d) =>
-                                                    d.deviceId === e.target.value &&
-                                                    d.kind === 'audiooutput',
-                                            )?.label || '',
-                                    })
-                                }
-                            >
-                                <option value="">System default</option>
-                                {prefs.output &&
-                                    !devices.some(
-                                        (d) =>
-                                            d.kind === 'audiooutput' && d.deviceId === prefs.output,
-                                    ) && (
-                                        <option value={prefs.output}>
-                                            {prefs.outputLabel || 'Saved speaker'} (unavailable)
-                                        </option>
-                                    )}
-                                {devices
-                                    .filter((d) => d.kind === 'audiooutput' && d.deviceId)
-                                    .map((d, i) => (
-                                        <option value={d.deviceId} key={d.deviceId}>
-                                            {d.label || `Speaker ${i + 1}`}
-                                        </option>
-                                    ))}
-                            </select>
-                        </label>
-                        <label>
-                            Streaming resolution
-                            <select
-                                value={prefs.quality}
-                                onChange={(e) => setPrefs({ ...prefs, quality: e.target.value })}
-                            >
-                                <option value="360">360p · Save bandwidth</option>
-                                <option value="720">720p · Balanced</option>
-                                <option value="1080">1080p · Higher quality</option>
-                            </select>
-                        </label>
-                        <Toggle
-                            title="Built-in noise suppression, echo cancellation & auto gain"
-                            value={prefs.noise}
-                            set={(v) => setPrefs({ ...prefs, noise: v })}
-                        />
-                        <p className="muted">
-                            Uses Chromium’s built-in WebRTC audio processing. No separate RNNoise or
-                            AI denoiser is installed. Quality depends on your microphone and audio
-                            backend; rejoin the call after changing this setting.
-                        </p>
-                        <Toggle
-                            title="Push-to-talk (hold Space while app is focused)"
-                            value={prefs.pushToTalk}
-                            set={(v) => setPrefs({ ...prefs, pushToTalk: v })}
-                        />
-                        <Toggle
-                            title="Call connection sounds"
-                            value={prefs.sounds}
-                            set={(v) => setPrefs({ ...prefs, sounds: v })}
-                        />
-                        <p className="muted">
-                            Join a voice channel to preview your camera. Screen sharing replaces
-                            your outgoing camera while active. Windows screen sharing can include
-                            system audio when enabled in the picker.
-                        </p>
-                    </>
+                    <AudioVideoSettings
+                        prefs={prefs}
+                        setPrefs={setPrefs}
+                        devices={devices}
+                        setDevices={setDevices}
+                        notify={notify}
+                        inCall={!!call.channel}
+                        activeStream={call.channel ? call.microphonePreview : null}
+                    />
                 )}
                 {settingsTab === 'emojis' && (
                     <>

@@ -209,7 +209,7 @@ function soundFixture(t, { resume, sink } = {}) {
     const handlers = new Map();
     const originalDocument = globalThis.document,
         originalAudio = globalThis.AudioContext;
-    const counts = { created: 0, played: 0, closed: 0, resumed: 0, sinks: [] };
+    const counts = { created: 0, played: 0, closed: 0, resumed: 0, sinks: [], ramps: [] };
     let context;
     class Context {
         state = 'suspended';
@@ -249,7 +249,9 @@ function soundFixture(t, { resume, sink } = {}) {
             return {
                 gain: {
                     setValueAtTime() {},
-                    linearRampToValueAtTime() {},
+                    linearRampToValueAtTime(value) {
+                        counts.ramps.push(value);
+                    },
                     exponentialRampToValueAtTime() {},
                 },
                 connect() {},
@@ -383,4 +385,36 @@ test('emoji completion uses the caret, avoids URLs and resolves standard and cus
     assert.equal(emojiMatches('camp', [{ name: 'campfire' }])[0].value, ':campfire:');
     assert.equal(emojiMatches('smile', [{ name: 'smile' }])[0].value, ':smile:');
     assert.equal(emojiMatches('', []).length, 8);
+});
+
+test('sound-effects volume scales call and message sounds independently of call output', async (t) => {
+    const fixture = soundFixture(t);
+    const sound = createNotificationSound(() => ({
+        output: '',
+        outputVolume: 0,
+        soundEffectsVolume: 0.25,
+    }));
+    assert.equal(await sound.play('call'), true);
+    assert.equal(fixture.counts.played, 1);
+    assert.equal(fixture.counts.ramps[0], 0.035 * 0.25);
+    sound.close();
+});
+test('speaker test uses output volume even when sound effects are muted', async (t) => {
+    const fixture = soundFixture(t);
+    const sound = createNotificationSound(() => ({
+        output: '',
+        outputVolume: 0.6,
+        soundEffectsVolume: 0,
+    }));
+    assert.equal(await sound.play('test'), true);
+    assert.equal(fixture.counts.played, 2);
+    assert.equal(fixture.counts.ramps[0], 0.035 * 0.6);
+    sound.close();
+});
+test('muted sound effects create no tones', async (t) => {
+    const fixture = soundFixture(t);
+    const sound = createNotificationSound(() => ({ output: '', soundEffectsVolume: 0 }));
+    assert.equal(await sound.play(), false);
+    assert.equal(fixture.counts.played, 0);
+    sound.close();
 });

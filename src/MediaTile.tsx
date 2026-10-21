@@ -1,5 +1,6 @@
+import { ParticipantAudioContext } from './ParticipantAudio';
 import { VolumeControl } from './VolumeControl';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { HeadphoneOff, Maximize2, MicOff, PictureInPicture2 } from 'lucide-react';
 import { AuthImage } from './ChatContent';
 import { ExpandedVideo } from './ExpandedVideo';
@@ -9,6 +10,7 @@ import { initials } from './profiles';
 import { PopoutVideo } from './PopoutVideo';
 
 export function MediaTile({
+    participant,
     stream,
     streamAudio = null,
     sharing = false,
@@ -29,6 +31,7 @@ export function MediaTile({
     onOutputFallback,
     onPopoutBlocked,
 }: {
+    participant?: string;
     stream: MediaStream | null;
     streamAudio?: MediaStream | null;
     sharing?: boolean;
@@ -52,8 +55,20 @@ export function MediaTile({
     const voice = useRef<AudioPlaybackHandle>(null),
         program = useRef<AudioPlaybackHandle>(null),
         videoRef = useRef<HTMLVideoElement>(null);
-    const [voiceVolume, setVoiceVolume] = useState(1),
-        [streamVolume, setStreamVolume] = useState(1);
+    const audioPreferences = useContext(ParticipantAudioContext);
+    const [localVoiceVolume, setLocalVoiceVolume] = useState(1),
+        [localStreamVolume, setLocalStreamVolume] = useState(1);
+    const saved = participant ? audioPreferences.levels(participant) : null;
+    const voiceVolume = saved?.voice ?? localVoiceVolume;
+    const streamVolume = saved?.stream ?? localStreamVolume;
+    const setVoiceVolume = (value: number) =>
+        participant
+            ? audioPreferences.change(participant, 'voice', value)
+            : setLocalVoiceVolume(value);
+    const setStreamVolume = (value: number) =>
+        participant
+            ? audioPreferences.change(participant, 'stream', value)
+            : setLocalStreamVolume(value);
     const [voiceError, setVoiceError] = useState(''),
         [streamError, setStreamError] = useState('');
     const [hasVideo, setHasVideo] = useState(false),
@@ -233,7 +248,7 @@ export function MediaTile({
                         ref={voice}
                         stream={audible}
                         muted={muted}
-                        volume={voiceVolume}
+                        volume={voiceVolume * audioPreferences.outputVolume}
                         output={output}
                         outputLabel={outputLabel}
                         label="Voice"
@@ -244,7 +259,7 @@ export function MediaTile({
                         ref={program}
                         stream={sharing && watching ? streamAudio : null}
                         muted={muted || !watching}
-                        volume={streamVolume}
+                        volume={streamVolume * audioPreferences.outputVolume}
                         output={output}
                         outputLabel={outputLabel}
                         label="Stream"

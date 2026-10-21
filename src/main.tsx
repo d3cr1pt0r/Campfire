@@ -1,3 +1,5 @@
+import { ParticipantAudio, MediaContexts } from './ParticipantAudio';
+import { audioLevel, participantLevels, participantVolumeKey } from './audioPreferences';
 import {
     hasPermission,
     roleColor,
@@ -71,7 +73,7 @@ import { PresenceDot } from './PresenceDot';
 import { userStatus } from './presence';
 import { usePresence } from './usePresence';
 
-import { AssetContext, Emoji } from './ChatContent';
+import { Emoji } from './ChatContent';
 import { resizeImage } from './images';
 import { rememberedDevice } from './devices';
 import { useSpeaking } from './useSpeaking';
@@ -107,6 +109,11 @@ const defaultPrefs: Preferences = {
     input: '',
     output: '',
     quality: '720',
+    microphoneVolume: 1,
+    outputVolume: 1,
+    soundEffectsVolume: 1,
+    voiceActivation: false,
+    voiceThreshold: -45,
     noise: true,
     pushToTalk: false,
     sounds: true,
@@ -1338,7 +1345,28 @@ function App() {
             </div>
         );
     return (
-        <AssetContext.Provider value={{ url, token }}>
+        <MediaContexts
+            assets={{ url, token }}
+            audio={{
+                outputVolume: audioLevel(prefs.outputVolume),
+                levels: (id) =>
+                    participantLevels(prefs, participantVolumeKey(url, state.me.id, id)),
+                change: (id, kind, value) =>
+                    setPrefs((previous) => {
+                        const key = participantVolumeKey(url, state.me.id, id);
+                        return {
+                            ...previous,
+                            participantVolumes: {
+                                ...previous.participantVolumes,
+                                [key]: {
+                                    ...participantLevels(previous, key),
+                                    [kind]: audioLevel(value),
+                                },
+                            },
+                        };
+                    }),
+            }}
+        >
             <div
                 className="app-shell"
                 onDragOver={(e) => {
@@ -1443,7 +1471,10 @@ function App() {
                                 color={color}
                                 dm={dm}
                                 close={(destination) => {
-                                    setUnread((previous) => ({ ...previous, [destination]: 0 }));
+                                    setUnread((previous) => ({
+                                        ...previous,
+                                        [destination]: 0,
+                                    }));
                                     if (room === destination)
                                         selectRoom(
                                             state.channels.find(
@@ -1530,7 +1561,12 @@ function App() {
                                         {state.calls
                                             .filter((p) => p.channel === c.id)
                                             .map((p) => (
-                                                <div className="voice-member" key={p.socket}>
+                                                <ParticipantAudio
+                                                    key={p.socket}
+                                                    user={p.user}
+                                                    name={displayName(user(p.user))}
+                                                    self={p.user === state.me.id}
+                                                >
                                                     <Avatar
                                                         user={user(p.user)}
                                                         color={color(user(p.user))}
@@ -1606,7 +1642,7 @@ function App() {
                                                             <MonitorPlay size={14} /> LIVE
                                                         </button>
                                                     )}
-                                                </div>
+                                                </ParticipantAudio>
                                             ))}
                                     </React.Fragment>
                                 ))}
@@ -2344,7 +2380,7 @@ function App() {
                 )}
                 {showError}
             </div>
-        </AssetContext.Provider>
+        </MediaContexts>
     );
 }
 createRoot(document.getElementById('root')!).render(<App />);

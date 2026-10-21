@@ -65,6 +65,7 @@ export function MicrophoneMeter({
         try {
             const current = createMicrophoneMonitor({
                 preferences,
+                activeStream,
                 context: context.current,
                 onReading: (value) => {
                     if (active) setReading(value);
@@ -90,7 +91,16 @@ export function MicrophoneMeter({
             stopTest();
         }
         // Restart an active test when its selected input or processing changes.
-    }, [testing, preferences.input, preferences.inputLabel, preferences.noise, activeStream]);
+    }, [
+        testing,
+        preferences.input,
+        preferences.inputLabel,
+        preferences.noise,
+        preferences.echoCancellation,
+        preferences.autoGainControl,
+        preferences.microphoneVolume,
+        activeStream,
+    ]);
     const level = testing ? reading?.percent || 0 : 0;
     const status = !testing
         ? 'Test stopped'
@@ -143,8 +153,8 @@ export function MicrophoneMeter({
             </div>
             <p className="muted">
                 {activeStream
-                    ? 'This local test uses the selected microphone independently of call mute, deafen and push-to-talk. Rejoin the call to apply a different input selection.'
-                    : 'Start the test and speak to check the selected input. Audio stays local and is not played back.'}
+                    ? 'Shows your call microphone before voice activation, independently of mute and push-to-talk. Rejoin to apply a different input device.'
+                    : 'Test the selected input after microphone volume, before voice activation. Audio stays local and is not played back.'}
             </p>
             {testing && reading && <small className="microphone-device">{reading.device}</small>}
             <div className="microphone-test-actions">

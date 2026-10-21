@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AppSocket } from './types';
 import type { CallMember, Preferences } from './types';
-import { openMicrophone, formatMicrophoneError } from './media';
+import { formatMicrophoneError } from './media';
+import { openProcessedMicrophone } from './microphoneProcessing';
+import { createNotificationSound } from './notifications';
 import { createPeerSignaling } from './signaling';
 import {
     createPeerMedia,
@@ -94,24 +96,35 @@ export function useCall(
     prefsRef.current = prefs;
     const iceRef = useRef(iceServers);
     iceRef.current = iceServers;
+    const processedInput = useRef<Awaited<ReturnType<typeof openProcessedMicrophone>> | null>(null);
+    const soundPlayer = useRef<ReturnType<typeof createNotificationSound> | null>(null);
+    useEffect(() => {
+        const player = createNotificationSound(() => prefsRef.current);
+        soundPlayer.current = player;
+        return () => {
+            player.close();
+            soundPlayer.current = null;
+        };
+    }, []);
     const sound = () => {
-        if (!prefsRef.current.sounds) return;
-        try {
-            const c = new AudioContext();
-            const o = c.createOscillator(),
-                g = c.createGain();
-            o.connect(g);
-            g.connect(c.destination);
-            g.gain.setValueAtTime(0.06, c.currentTime);
-            g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.18);
-            o.frequency.value = 660;
-            o.start();
-            o.stop(c.currentTime + 0.2);
-            o.onended = () => void c.close();
-        } catch {
-            /* optional sound */
-        }
+        if (prefsRef.current.sounds) void soundPlayer.current?.play('call');
     };
+    useEffect(() => {
+        void processedInput.current
+            ?.update(prefs)
+            .catch((error) =>
+                report(`Microphone settings could not be applied: ${formatMicrophoneError(error)}`),
+            );
+    }, [
+        prefs.noise,
+        prefs.echoCancellation,
+        prefs.autoGainControl,
+        prefs.microphoneVolume,
+        prefs.voiceActivation,
+        prefs.voiceThreshold,
+        prefs.pushToTalk,
+        channel,
+    ]);
     const updateRemote = () =>
         setRemote(
             [...peers.current].map(([id, p]) => ({
@@ -154,6 +167,8 @@ export function useCall(
         [audio.current, video.current, screen.current].forEach((s) =>
             s?.getTracks().forEach((t) => t.stop()),
         );
+        processedInput.current?.stop();
+        processedInput.current = null;
         audio.current = null;
         video.current = null;
         screen.current = null;
@@ -541,10 +556,15 @@ export function useCall(
         if (target) queueWatch({ ...target, channel: id });
         const attempt = operation.current;
         try {
-            const { stream, usedDefault } = permissionRef.current('calls.speak', id)
-                ? await openMicrophone(prefs)
-                : { stream: new MediaStream(), usedDefault: false };
+            const input = permissionRef.current('calls.speak', id)
+                ? await openProcessedMicrophone(prefsRef.current)
+                : null;
+            const { stream, usedDefault } = input || {
+                stream: new MediaStream(),
+                usedDefault: false,
+            };
             if (attempt !== operation.current || !permissionRef.current('calls.join', id)) {
+                input?.stop();
                 stream.getTracks().forEach((t) => t.stop());
                 return;
             }
@@ -554,8 +574,10 @@ export function useCall(
                     'The saved microphone is unavailable. Using System default for this call; your saved selection is kept for next time.',
                 );
             }
-            if (!permissionRef.current('calls.speak', id))
+            if (!permissionRef.current('calls.speak', id)) {
+                input?.stop();
                 stream.getTracks().forEach((t) => t.stop());
+            } else processedInput.current = input;
             audio.current = stream;
             if (!permissionRef.current('calls.speak', id)) setMuted(true);
             callChannel.current = id;
@@ -605,24 +627,29 @@ export function useCall(
             captureBusy.current.microphone = true;
             const attempt = operation.current;
             let captured: MediaStream | null = null;
+            let input: Awaited<ReturnType<typeof openProcessedMicrophone>> | null = null;
             try {
-                const result = await openMicrophone(prefsRef.current);
+                const result = await openProcessedMicrophone(prefsRef.current);
+                input = result;
                 captured = result.stream;
                 if (
                     attempt !== operation.current ||
                     !permissionRef.current('calls.speak') ||
                     !permissionRef.current('calls.join')
                 ) {
-                    captured.getTracks().forEach((track) => track.stop());
+                    input.stop();
                     return;
                 }
                 captured.getAudioTracks().forEach((track) => {
                     track.enabled = false;
                 });
+                processedInput.current?.stop();
+                processedInput.current = input;
                 audio.current = captured;
                 if (result.usedDefault) onInputFallback();
                 await syncMedia();
             } catch (error) {
+                input?.stop();
                 captured?.getTracks().forEach((track) => track.stop());
                 report(`Cannot open microphone: ${formatMicrophoneError(error)}`);
                 return;
@@ -786,6 +813,8 @@ export function useCall(
         }
         let changed = false;
         if (!canSpeak && audio.current?.getAudioTracks().length) {
+            processedInput.current?.stop();
+            processedInput.current = null;
             audio.current.getTracks().forEach((track) => track.stop());
             audio.current = null;
             setMuted(true);
@@ -812,6 +841,7 @@ export function useCall(
         watchStream,
         watch,
         microphone: audio.current,
+        microphonePreview: processedInput.current?.monitorStream ?? null,
         showDetails,
         setShowDetails,
         details,

@@ -1,7 +1,11 @@
 import type { Preferences } from './types';
 import { openMicrophone } from './media.ts';
+import { audioLevel } from './audioPreferences.ts';
 
-type InputPreferences = Pick<Preferences, 'input' | 'inputLabel' | 'noise'>;
+type InputPreferences = Pick<
+    Preferences,
+    'input' | 'inputLabel' | 'noise' | 'echoCancellation' | 'autoGainControl' | 'microphoneVolume'
+>;
 export type MicrophoneLevel = {
     percent: number;
     decibels: number | null;
@@ -141,6 +145,10 @@ export function createMicrophoneMonitor({
                     if (!paused && !muted)
                         for (const analyser of analysers) {
                             analyser.getFloatTimeDomainData(samples);
+                            if (owned) {
+                                const gain = audioLevel(preferences.microphoneVolume, 1, 2);
+                                for (let i = 0; i < samples.length; i++) samples[i] *= gain;
+                            }
                             const measured = microphoneLevel(samples);
                             if ((measured.decibels ?? -Infinity) > (level.decibels ?? -Infinity))
                                 level = measured;

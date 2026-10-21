@@ -4150,3 +4150,196 @@ body.stream-popout-body {
     width: auto;
     flex: 0 0 auto;
 }
+
+/* Audio settings use short, consistent rows rather than one long device form. */
+.audio-video-settings {
+    display: grid;
+    gap: 16px;
+    min-width: 0;
+}
+.audio-settings-intro {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.audio-settings-intro p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+.audio-settings-intro .secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    white-space: nowrap;
+}
+.audio-settings-section {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    min-width: 0;
+}
+.audio-settings-section h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 14px;
+    font-size: 14px;
+}
+.settings-content .audio-settings-section label {
+    margin: 0;
+}
+.audio-settings-section select {
+    width: 100%;
+    min-width: 0;
+    margin-top: 6px;
+}
+.audio-slider {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 0 6px;
+}
+.audio-slider > span {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+.audio-slider output {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+.audio-slider input {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    accent-color: var(--accent);
+}
+.audio-slider:has(input:disabled) {
+    opacity: 0.55;
+}
+.audio-settings-section .audio-help {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+    margin: 6px 0 10px;
+}
+.audio-processing {
+    border-top: 1px solid var(--border);
+    margin-top: 12px;
+    padding-top: 4px;
+}
+.settings-content .audio-settings-section .toggle-label {
+    padding: 6px 0;
+    min-height: 40px;
+    gap: 12px;
+}
+.audio-output-row {
+    display: flex;
+    align-items: end;
+    gap: 10px;
+}
+.audio-device {
+    display: block;
+    flex: 1;
+    min-width: 0;
+}
+.audio-output-row .secondary {
+    margin: 0;
+    min-height: 38px;
+    white-space: nowrap;
+}
+.audio-settings-section .microphone-test {
+    margin: 12px 0 0;
+    padding: 12px;
+    background: transparent;
+}
+.audio-settings-section .microphone-test-heading {
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+.audio-settings-section .microphone-test .muted {
+    font-size: 12px;
+    margin-top: 8px;
+}
+.audio-settings-error {
+    color: #d65b64;
+    font-size: 12px;
+    line-height: 1.5;
+    margin: 0;
+}
+.voice-member.has-audio-controls {
+    cursor: context-menu;
+    border-radius: 5px;
+}
+.voice-member.has-audio-controls:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.participant-audio-popup {
+    position: fixed;
+    z-index: 1500;
+    width: 250px;
+    max-width: calc(100vw - 16px);
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel);
+    color: var(--ink);
+    box-shadow: 0 12px 36px #0005;
+}
+.participant-audio-popup strong {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    overflow-wrap: anywhere;
+}
+.participant-audio-popup p {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 6px 0 12px;
+}
+.participant-audio-popup label {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin: 12px 0;
+    font-size: 13px;
+}
+.participant-audio-popup label span {
+    display: flex;
+    justify-content: space-between;
+}
+.participant-audio-popup input {
+    width: 100%;
+    padding: 0;
+    accent-color: var(--accent);
+}
+.participant-audio-popup .secondary {
+    width: 100%;
+    margin: 6px 0 0;
+}
+.volume-slider label > span {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+@media (max-width: 600px) {
+    .audio-settings-intro {
+        align-items: start;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .audio-settings-section {
+        padding: 12px;
+    }
+    .audio-output-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+    .audio-output-row .secondary {
+        align-self: flex-start;
+    }
+}

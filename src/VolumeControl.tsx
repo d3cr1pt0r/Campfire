@@ -13,7 +13,9 @@ export function VolumeControl({
 }) {
     return (
         <label>
-            {label}
+            <span>
+                {label} <output>{Math.round(value * 100)}%</output>
+            </span>
             <input
                 type="range"
                 min="0"

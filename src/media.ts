@@ -1,7 +1,18 @@
 import { rememberedDevice } from './devices.ts';
 import type { Preferences } from './types';
 
-type CapturePreferences = Pick<Preferences, 'input' | 'inputLabel' | 'noise'>;
+type CapturePreferences = Pick<
+    Preferences,
+    'input' | 'inputLabel' | 'noise' | 'echoCancellation' | 'autoGainControl'
+>;
+export function microphoneConstraints(preferences: CapturePreferences) {
+    return {
+        noiseSuppression: preferences.noise,
+        // Preserve the old combined switch until each option has been saved.
+        echoCancellation: preferences.echoCancellation ?? preferences.noise,
+        autoGainControl: preferences.autoGainControl ?? preferences.noise,
+    };
+}
 type MicrophoneResult = { stream: MediaStream; usedDefault: boolean };
 
 function errorDetails(error: unknown): { name: string; message: string; constraint: string } {
@@ -72,11 +83,7 @@ export async function openMicrophone(
     if (!devices?.getUserMedia) {
         throw Object.assign(new Error(''), { name: 'MediaDevicesUnavailable' });
     }
-    const processing = {
-        noiseSuppression: preferences.noise,
-        echoCancellation: preferences.noise,
-        autoGainControl: preferences.noise,
-    };
+    const processing = microphoneConstraints(preferences);
     const selected = preferences.input && preferences.input !== 'default';
     try {
         const stream = await devices.getUserMedia({

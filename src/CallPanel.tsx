@@ -228,6 +228,7 @@ export function CallPanel({
                                         }
                                     >
                                         <MediaTile
+                                            participant={p.user}
                                             stream={p.stream}
                                             streamAudio={p.streamAudio}
                                             sharing={p.sharing}

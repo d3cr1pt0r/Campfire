@@ -114,6 +114,14 @@ export type Preferences = {
     outputLabel?: string;
     quality: string;
     noise: boolean;
+    echoCancellation?: boolean;
+    autoGainControl?: boolean;
+    microphoneVolume?: number;
+    outputVolume?: number;
+    soundEffectsVolume?: number;
+    voiceActivation?: boolean;
+    voiceThreshold?: number;
+    participantVolumes?: Record<string, { voice: number; stream: number }>;
     pushToTalk: boolean;
     sounds: boolean;
 };

@@ -2,6 +2,7 @@ import type { ChannelNotificationMode, Message, Preferences, User } from './type
 import { mentionSegments } from './mentions.ts';
 import { messageParts } from './messageText.ts';
 import { rememberedDevice } from './devices.ts';
+import { audioLevel } from './audioPreferences.ts';
 
 // Keyed by host so notification choices survive the http:// to https:// upgrade.
 const serverKey = (server: string) => {
@@ -50,7 +51,10 @@ export function shouldNotify(
 // Reuse one context, but initialize on playback too: saved sessions can receive DMs
 // before the user has interacted with the document (including while hidden in the tray).
 export function createNotificationSound(
-    output: () => Pick<Preferences, 'output' | 'outputLabel'> = () => ({ output: '' }),
+    output: () => Pick<
+        Preferences,
+        'output' | 'outputLabel' | 'soundEffectsVolume' | 'outputVolume'
+    > = () => ({ output: '' }),
 ) {
     let context:
         | (AudioContext & {
@@ -76,13 +80,17 @@ export function createNotificationSound(
     document.addEventListener('pointerdown', unlock, true);
     document.addEventListener('keydown', unlock, true);
     return {
-        async play(): Promise<boolean> {
+        async play(kind: 'message' | 'call' | 'test' = 'message'): Promise<boolean> {
             const requestedAt = Date.now();
             try {
                 const current = ensureContext();
                 if (!current || requestedAt - lastPlayed < 700) return false;
                 if (current.state !== 'running') await current.resume();
                 const selected = output();
+                const volume = audioLevel(
+                    kind === 'test' ? selected.outputVolume : selected.soundEffectsVolume,
+                );
+                if (volume === 0) return false;
                 if (typeof current.setSinkId === 'function') {
                     let sink = selected.output === 'default' ? '' : selected.output;
                     try {
@@ -116,16 +124,18 @@ export function createNotificationSound(
                     return false;
                 lastPlayed = Date.now();
                 const now = current.currentTime;
-                for (const [frequency, offset] of [
-                    [660, 0],
-                    [880, 0.12],
-                ]) {
+                for (const [frequency, offset] of kind === 'call'
+                    ? [[660, 0]]
+                    : [
+                          [660, 0],
+                          [880, 0.12],
+                      ]) {
                     const tone = current.createOscillator();
                     const gain = current.createGain();
                     tone.type = 'sine';
                     tone.frequency.value = frequency;
                     gain.gain.setValueAtTime(0, now + offset);
-                    gain.gain.linearRampToValueAtTime(0.035, now + offset + 0.015);
+                    gain.gain.linearRampToValueAtTime(0.035 * volume, now + offset + 0.015);
                     gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.22);
                     tone.connect(gain);
                     gain.connect(current.destination);

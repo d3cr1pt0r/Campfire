@@ -321,3 +321,29 @@ test('capture failure disconnects analysis without closing a caller-owned audio 
     assert.equal(f.context.closes, 0);
     assert.equal(f.frames.size, 0);
 });
+
+test('standalone meter applies microphone volume to its measured level', async () => {
+    const f = fixture();
+    const monitor = createMicrophoneMonitor({
+        ...f.options,
+        preferences: { ...f.options.preferences, microphoneVolume: 0.5 },
+    });
+    await monitor.ready;
+    f.advance();
+    assert.ok(Math.abs(f.readings[0].decibels - 20 * Math.log10(0.05)) < 0.00001);
+    monitor.stop();
+});
+test('in-call meter measures the processed stream without applying volume twice', async () => {
+    const f = fixture();
+    const monitor = createMicrophoneMonitor({
+        ...f.options,
+        activeStream: f.stream,
+        preferences: { ...f.options.preferences, microphoneVolume: 0.5 },
+    });
+    await monitor.ready;
+    f.advance();
+    assert.ok(Math.abs(f.readings[0].decibels + 20) < 0.00001);
+    assert.equal(f.opened, 0);
+    monitor.stop();
+    assert.equal(f.track.stops, 0);
+});
