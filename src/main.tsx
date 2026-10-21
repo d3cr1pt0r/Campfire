@@ -1,3 +1,4 @@
+import { VoiceChannelInvite } from './VoiceChannelInvite';
 import { ParticipantAudio, MediaContexts } from './ParticipantAudio';
 import { audioLevel, participantLevels, participantVolumeKey } from './audioPreferences';
 import {
@@ -1539,25 +1540,42 @@ function App() {
                                 .filter((c) => c.kind === 'voice')
                                 .map((c) => (
                                     <React.Fragment key={c.id}>
-                                        <button
-                                            className={`nav-item channel ${call.channel === c.id ? 'in-call' : ''}`}
+                                        <VoiceChannelInvite
+                                            channel={c}
+                                            state={state}
+                                            api={api}
+                                            color={color}
                                             disabled={
+                                                !connected ||
                                                 !hasPermission(
                                                     state.me,
                                                     state.roles,
                                                     'calls.join',
                                                     c,
-                                                )
+                                                ) ||
+                                                !permission('calls.start')
                                             }
-                                            onClick={() => {
-                                                if (call.channel !== c.id) void call.join(c.id);
-                                                else toggleCallPanel();
-                                            }}
                                         >
-                                            <Volume2 size={20} />
-                                            {c.name}
-                                            {call.channel === c.id && <Radio size={15} />}
-                                        </button>
+                                            <button
+                                                className={`nav-item channel ${call.channel === c.id ? 'in-call' : ''}`}
+                                                disabled={
+                                                    !hasPermission(
+                                                        state.me,
+                                                        state.roles,
+                                                        'calls.join',
+                                                        c,
+                                                    )
+                                                }
+                                                onClick={() => {
+                                                    if (call.channel !== c.id) void call.join(c.id);
+                                                    else toggleCallPanel();
+                                                }}
+                                            >
+                                                <Volume2 size={20} />
+                                                {c.name}
+                                                {call.channel === c.id && <Radio size={15} />}
+                                            </button>
+                                        </VoiceChannelInvite>
                                         {state.calls
                                             .filter((p) => p.channel === c.id)
                                             .map((p) => (
@@ -1944,6 +1962,8 @@ function App() {
                                     </div>
                                 )}
                                 <ChatMessages
+                                    currentVoiceChannel={call.channel}
+                                    onJoinVoice={(channel) => void call.join(channel)}
                                     key={`${url}:${state.me.id}:${room}:${search}:${pins}`}
                                     scrollMemory={chatScrollMemory.current}
                                     scrollKey={JSON.stringify([
@@ -2005,6 +2025,8 @@ function App() {
                             </section>
                             {thread && thread.room === room && roomVisible && (
                                 <ThreadPanel
+                                    currentVoiceChannel={call.channel}
+                                    onJoinVoice={(channel) => void call.join(channel)}
                                     focusRequest={threadFocus}
                                     key={`${url}:${state.me.id}:${room}:${thread.id}`}
                                     parent={thread}

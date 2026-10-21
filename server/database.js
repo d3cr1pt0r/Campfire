@@ -135,6 +135,12 @@ export function messageViews(all, messages) {
             ...ids,
         ).map(({ thread, count }) => [thread, count]),
     );
+    const voiceInvitations = new Map(
+        all(
+            `SELECT message,channel,name FROM voice_channel_invitations WHERE message IN (${placeholders})`,
+            ...ids,
+        ).map(({ message, ...invite }) => [message, invite]),
+    );
     const polls = loadPolls(all, ids);
     return messages.map((m) => {
         const view = {
@@ -143,6 +149,7 @@ export function messageViews(all, messages) {
             attachments: attachments.get(m.id) || [],
             reactions: reactions.get(m.id) || [],
         };
+        if (voiceInvitations.has(m.id)) view.voiceInvite = voiceInvitations.get(m.id);
         if (polls.has(m.id)) view[pollData] = polls.get(m.id);
         return view;
     });

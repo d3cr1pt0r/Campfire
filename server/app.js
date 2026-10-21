@@ -18,6 +18,7 @@ import { forViewer } from './poll-view.js';
 import { registerProfiles } from './profiles.js';
 import { registerAdministration } from './administration.js';
 import { registerCalls } from './calls.js';
+import { registerVoiceInvitations } from './voice-invitations.js';
 import { registerPresence } from './presence.js';
 import { loadCertificateFiles, loadIdentity } from './identity.js';
 
@@ -136,6 +137,7 @@ export function createApp({
     );
     const presence = registerPresence(context);
     const calls = registerCalls(context);
+    registerVoiceInvitations(context);
     app.get(
         '/api/state',
         route((req, res) => {

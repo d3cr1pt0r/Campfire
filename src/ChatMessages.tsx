@@ -1,3 +1,4 @@
+import { VoiceInviteCard } from './VoiceInviteCard';
 import { ReactionChip } from './ReactionChip';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
@@ -85,12 +86,16 @@ function ChatMessageList({
     setEdit,
     clearFilters,
     onReply,
+    currentVoiceChannel,
+    onJoinVoice,
     thread = false,
     saved,
     save,
 }: {
     saved?: ChatScrollPosition;
     save: (position: ChatScrollPosition) => void;
+    currentVoiceChannel?: string | null;
+    onJoinVoice?: (channel: string) => void;
     onReply?: (message: Message) => void;
     thread?: boolean;
     permission: (permission: string) => boolean;
@@ -332,6 +337,8 @@ function ChatMessageList({
                                         setEdit={setEdit}
                                         onReply={onReply}
                                         thread={thread}
+                                        currentVoiceChannel={currentVoiceChannel}
+                                        onJoinVoice={onJoinVoice}
                                     />
                                 </div>
                             );
@@ -370,9 +377,13 @@ export function ChatMessage({
     setModal,
     setEdit,
     onReply,
+    currentVoiceChannel,
+    onJoinVoice,
     thread = false,
 }: Pick<
     React.ComponentProps<typeof ChatMessageList>,
+    | 'currentVoiceChannel'
+    | 'onJoinVoice'
     | 'permission'
     | 'state'
     | 'user'
@@ -412,7 +423,7 @@ export function ChatMessage({
                         </button>
                         {Boolean(m.pinned) && <Pin size={12} />}
                     </span>
-                    {!m.poll && (
+                    {!m.poll && !m.voiceInvite && (
                         <span className="message-text">
                             <ChatContent
                                 users={state.users}
@@ -423,6 +434,14 @@ export function ChatMessage({
                         </span>
                     )}
                 </div>
+                {m.voiceInvite && (
+                    <VoiceInviteCard
+                        invite={m.voiceInvite}
+                        state={state}
+                        currentChannel={currentVoiceChannel}
+                        onJoin={onJoinVoice}
+                    />
+                )}
                 {m.poll && (
                     <PollCard
                         message={{ ...m, poll: m.poll }}
@@ -528,7 +547,7 @@ export function ChatMessage({
                             <TimerOff size={16} />
                         </button>
                     )}
-                {m.author === state.me.id && !m.poll && (
+                {m.author === state.me.id && !m.poll && !m.voiceInvite && (
                     <button
                         title="Edit"
                         onClick={() => {

@@ -110,6 +110,13 @@ CREATE TABLE IF NOT EXISTS messages(
     pinned INTEGER DEFAULT 0,
     thread TEXT REFERENCES messages(id) ON DELETE CASCADE
 );
+-- Keep the original name so a deleted channel still has a readable invitation.
+CREATE TABLE IF NOT EXISTS voice_channel_invitations(
+    message TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+    channel TEXT NOT NULL,
+    name TEXT NOT NULL,
+    recipient TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE
+);
 CREATE INDEX IF NOT EXISTS messages_room_created ON messages(room,created);
 CREATE INDEX IF NOT EXISTS messages_room_cursor ON messages(room,created,id);
 CREATE INDEX IF NOT EXISTS messages_thread_cursor ON messages(thread,room,created,id);

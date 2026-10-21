@@ -11,6 +11,8 @@ import { validateFileSelection } from '../shared/uploads.js';
 import { emojis } from '../shared/emojis.js';
 
 type Props = {
+    currentVoiceChannel?: string | null;
+    onJoinVoice?: (channel: string) => void;
     focusRequest: number;
     parent: Message;
     api: ApiClient;
@@ -256,6 +258,8 @@ export function ThreadPanel(props: Props) {
                 </p>
             )}
             <ChatMessages
+                currentVoiceChannel={props.currentVoiceChannel}
+                onJoinVoice={props.onJoinVoice}
                 {...props}
                 key={`${search}:${pins}`}
                 thread

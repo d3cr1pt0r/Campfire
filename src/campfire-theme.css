@@ -979,7 +979,7 @@ label,
     background: #b65e3415;
 }
 :root[data-theme='canvas'] .message-body a,
-:root[data-theme='canvas'] .message-body button {
+:root[data-theme='canvas'] .message-body button:not(.primary) {
     color: var(--accent);
 }
 @media (max-width: 1100px) {

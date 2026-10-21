@@ -208,6 +208,10 @@ export function registerMessages({
             if ('body' in req.body) {
                 check(m.author === req.user.id, 'Only the author can edit this message', 403);
                 check(
+                    !get('SELECT 1 FROM voice_channel_invitations WHERE message=?', m.id),
+                    'Voice invitations cannot be edited. Delete the message to remove the invitation.',
+                );
+                check(
                     !get('SELECT 1 FROM polls WHERE message=?', m.id),
                     'Polls can’t be edited. Delete it and post a new one instead.',
                 );

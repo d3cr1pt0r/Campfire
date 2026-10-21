@@ -84,6 +84,7 @@ export type Message = {
     }[];
     // The question is the message body.
     poll?: Poll;
+    voiceInvite?: { channel: string; name: string };
 };
 // Shaped per member: counts appear once they have voted or voting has closed, and
 // voters only in public polls.
