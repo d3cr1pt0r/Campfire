@@ -67,6 +67,8 @@ export function serverConfig(env = process.env, argv = []) {
         iceServers: JSON.parse(env.ICE_SERVERS || '[]'),
         // Optional: a KLIPY API key turns on GIF search for members.
         klipyKey: (env.KLIPY_API_KEY || '').trim(),
+        // LINK_PREVIEWS=off stops the server fetching linked pages for preview cards.
+        linkPreviews: (env.LINK_PREVIEWS || 'on').trim().toLowerCase() !== 'off',
         trustProxy,
         maxStoredUploadBytes: Number(env.MAX_STORED_UPLOAD_BYTES || 1073741824),
         publicAddress: publicAddress(env.PUBLIC_ADDRESS),

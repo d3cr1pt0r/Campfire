@@ -3596,3 +3596,115 @@ label,
         transition: none;
     }
 }
+
+/* Link previews: a compact card per link, under the message text. */
+.link-previews {
+    display: grid;
+    gap: 6px;
+    margin: 6px 0 4px;
+}
+.link-preview {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    width: min(100%, 440px);
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+}
+.link-preview.large {
+    grid-template-columns: minmax(0, 1fr);
+}
+.link-preview-text {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    padding-right: 18px;
+}
+.link-preview-site {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+}
+.message-body .link-preview-title {
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.35;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+.message-body .link-preview-title:hover {
+    text-decoration: underline;
+}
+.link-preview-description {
+    display: -webkit-box;
+    margin: 2px 0 0;
+    overflow: hidden;
+    color: var(--ink);
+    font-size: 13px;
+    line-height: 1.45;
+    opacity: 0.85;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+}
+.link-preview-image {
+    position: relative;
+    display: block;
+    width: 80px;
+    height: 80px;
+    overflow: hidden;
+    border-radius: 8px;
+    background: var(--field);
+}
+.link-preview.large .link-preview-image {
+    width: 100%;
+    height: auto;
+}
+.link-preview-image img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.link-preview-play {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin: -22px 0 0 -22px;
+    border-radius: 999px;
+    background: #000000b3;
+    color: #fff;
+}
+.link-preview-play svg {
+    fill: currentColor;
+}
+.link-preview-hide {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    justify-content: center;
+    border-radius: 6px;
+    color: var(--muted);
+    opacity: 0;
+    transition: opacity 120ms;
+}
+.link-preview:hover .link-preview-hide,
+.link-preview-hide:focus-visible {
+    opacity: 1;
+}
+:root[data-theme='canvas'] .message-body .link-preview-hide {
+    color: var(--muted);
+}
+@media (prefers-reduced-motion: reduce) {
+    .link-preview-hide {
+        transition: none;
+    }
+}

@@ -26,6 +26,7 @@ import {
 import { PollCard } from './PollCard';
 import { ChatContent } from './ChatContent';
 import { ImageAttachment } from './ImageAttachment';
+import { LinkPreviews } from './LinkPreviews';
 import { needsScrollHistory, restoredScrollOffset, type ChatScrollPosition } from './chatScroll';
 
 export function ChatMessages(
@@ -449,6 +450,17 @@ export function ChatMessage({
                         </div>
                     )}
                 </div>
+                {!!m.previews?.length && (
+                    <LinkPreviews
+                        previews={m.previews}
+                        onHide={
+                            m.author === state.me.id ||
+                            (!m.room.startsWith('dm:') && permission('messages.deleteOthers'))
+                                ? () => void act(() => api(`/messages/${m.id}/previews`, 'DELETE'))
+                                : undefined
+                        }
+                    />
+                )}
                 {m.voiceInvite && (
                     <VoiceInviteCard
                         invite={m.voiceInvite}

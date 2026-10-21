@@ -145,6 +145,26 @@ CREATE TABLE IF NOT EXISTS attachment_images(
     height INTEGER NOT NULL,
     animated INTEGER NOT NULL CHECK(animated IN (0,1))
 );
+-- Link previews the server fetched, shared by every message that links the same page.
+-- failed marks pages that gave no card, so they are not fetched again for an hour.
+CREATE TABLE IF NOT EXISTS link_previews(
+    id TEXT PRIMARY KEY,
+    url TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    site TEXT NOT NULL DEFAULT '',
+    image BLOB,
+    image_width INTEGER NOT NULL DEFAULT 0,
+    image_height INTEGER NOT NULL DEFAULT 0,
+    large INTEGER NOT NULL DEFAULT 0,
+    video INTEGER NOT NULL DEFAULT 0,
+    fetched INTEGER NOT NULL,
+    failed INTEGER NOT NULL DEFAULT 0
+);
+-- Messages whose author removed their link previews.
+CREATE TABLE IF NOT EXISTS hidden_link_previews(
+    message TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE
+);
 -- GIFs a member starred in the GIF picker. Only KLIPY's links are kept, not the media.
 CREATE TABLE IF NOT EXISTS gif_favorites(
     id TEXT PRIMARY KEY,

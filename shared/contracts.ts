@@ -91,6 +91,22 @@ export type Message = {
     // The question is the message body.
     poll?: Poll;
     voiceInvite?: { channel: string; name: string };
+    // Cards the server made for links in the body, once it has fetched them.
+    previews?: LinkPreview[];
+};
+export type LinkPreview = {
+    id: string;
+    url: string;
+    title: string;
+    description: string;
+    site: string;
+    // Whether the server has an image for the card, and its size.
+    image: boolean;
+    width: number;
+    height: number;
+    // Large cards show the image under the text; videos get a play badge.
+    large: boolean;
+    video: boolean;
 };
 // Shaped per member: counts appear once they have voted or voting has closed, and
 // voters only in public polls.

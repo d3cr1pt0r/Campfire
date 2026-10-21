@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { loadPolls, pollData } from './poll-view.js';
+import { previewLinks } from './link-previews.js';
 
 export function transaction(db, action) {
     db.exec('BEGIN IMMEDIATE');
@@ -154,6 +155,33 @@ export function messageViews(all, messages, describeImage = () => null) {
         ).map(({ message, ...invite }) => [message, invite]),
     );
     const polls = loadPolls(all, ids);
+    // Link cards cost queries only when some of these messages contain links.
+    const linked = new Map();
+    for (const m of messages) {
+        const links = previewLinks(m.body);
+        if (links.length) linked.set(m.id, links);
+    }
+    const cards = new Map(),
+        hidden = new Set();
+    if (linked.size) {
+        const urls = [...new Set([...linked.values()].flat())];
+        for (const row of all(
+            `SELECT id,url,title,description,site,image IS NOT NULL image,image_width width,image_height height,large,video FROM link_previews WHERE failed=0 AND url IN (${urls.map(() => '?').join(',')})`,
+            ...urls,
+        ))
+            cards.set(row.url, {
+                ...row,
+                image: !!row.image,
+                large: !!row.large,
+                video: !!row.video,
+            });
+        const linking = [...linked.keys()];
+        for (const { message } of all(
+            `SELECT message FROM hidden_link_previews WHERE message IN (${linking.map(() => '?').join(',')})`,
+            ...linking,
+        ))
+            hidden.add(message);
+    }
     return messages.map((m) => {
         const view = {
             ...m,
@@ -163,6 +191,10 @@ export function messageViews(all, messages, describeImage = () => null) {
         };
         if (voiceInvitations.has(m.id)) view.voiceInvite = voiceInvitations.get(m.id);
         if (polls.has(m.id)) view[pollData] = polls.get(m.id);
+        const previews = hidden.has(m.id)
+            ? []
+            : (linked.get(m.id) || []).map((url) => cards.get(url)).filter(Boolean);
+        if (previews.length) view.previews = previews;
         return view;
     });
 }

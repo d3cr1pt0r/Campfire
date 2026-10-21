@@ -20,6 +20,7 @@ export function registerMessages({
     emitRoom,
     maxStoredUploadBytes,
     polls,
+    previews,
 }) {
     const thumbnails = createThumbnails({ get, all, run });
     const requireAction = (user, room, permission) =>
@@ -34,6 +35,15 @@ export function registerMessages({
         check(!parent.thread, 'Replies cannot have nested threads');
         return parent;
     };
+    // Cards arrive after the message: the server fetches the links, then updates it.
+    const unfurl = (id) =>
+        void previews
+            ?.unfurl(get('SELECT * FROM messages WHERE id=?', id))
+            .then((changed) => {
+                const message = changed && get('SELECT * FROM messages WHERE id=?', id);
+                if (message) emitRoom(message.room, 'message:update', messageView(message));
+            })
+            .catch(() => {});
     const updateParent = (thread) => {
         if (!thread) return;
         const parent = get('SELECT * FROM messages WHERE id=?', thread);
@@ -210,6 +220,7 @@ export function registerMessages({
             if (poll) polls.schedule(id, poll.ends);
             emitRoom(room, 'message', m);
             updateParent(thread);
+            if (!poll) unfurl(id);
             res.json(forViewer(m, req.user.id));
         }),
     );
@@ -252,6 +263,7 @@ export function registerMessages({
                 'message:update',
                 messageView(get('SELECT * FROM messages WHERE id=?', m.id)),
             );
+            if ('body' in req.body) unfurl(m.id);
             res.json({ ok: true });
         }),
     );

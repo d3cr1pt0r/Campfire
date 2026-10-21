@@ -22,6 +22,7 @@ import { registerCalls } from './calls.js';
 import { registerVoiceInvitations } from './voice-invitations.js';
 import { registerPresence } from './presence.js';
 import { registerGifs } from './gifs.js';
+import { createLinkPreviews, registerLinkPreviews } from './link-previews.js';
 import { klipyMediaHosts } from '../shared/klipy.js';
 import { loadCertificateFiles, loadIdentity } from './identity.js';
 
@@ -31,6 +32,9 @@ export function createApp({
     name = 'My Campfire server',
     iceServers = [],
     klipyKey = '',
+    linkPreviews = true,
+    // Tests replace the network fetcher so they never contact real sites.
+    linkPreviewFetcher,
     trustProxy = false,
     maxStoredUploadBytes = 1024 * 1024 * 1024,
     setupCode,
@@ -128,6 +132,12 @@ export function createApp({
             if (user && hasRoom(user, room)) socket.emit(event, forViewer(data, user.id));
         }
     };
+    const previews = createLinkPreviews({
+        get,
+        run,
+        enabled: linkPreviews,
+        ...(linkPreviewFetcher ? { fetcher: linkPreviewFetcher } : {}),
+    });
     const context = {
         ...database,
         ...sessions,
@@ -136,6 +146,7 @@ export function createApp({
         io,
         hasRoom,
         messageView,
+        previews,
         messageViews: views,
         emitRoom,
         maxStoredUploadBytes,
@@ -159,6 +170,7 @@ export function createApp({
     const calls = registerCalls(context);
     registerVoiceInvitations(context);
     registerGifs(context);
+    registerLinkPreviews(context);
     app.get(
         '/api/state',
         route((req, res) => {
@@ -250,10 +262,12 @@ export function createApp({
         http,
         io,
         db,
+        previews,
         close: () => {
             closing ??= (async () => {
                 clearInterval(renewal);
                 await messages.close();
+                await previews.close();
                 polls.close();
                 calls.close();
                 sessions.close();

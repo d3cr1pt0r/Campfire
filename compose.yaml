@@ -12,6 +12,8 @@ services:
       TRUST_PROXY: "${TRUST_PROXY:-}"
       MAX_STORED_UPLOAD_BYTES: "${MAX_STORED_UPLOAD_BYTES:-1073741824}"
       ICE_SERVERS: "${ICE_SERVERS:-[]}"
+      KLIPY_API_KEY: "${KLIPY_API_KEY:-}"
+      LINK_PREVIEWS: "${LINK_PREVIEWS:-on}"
     volumes:
       - campfire-data:/data
 volumes:
