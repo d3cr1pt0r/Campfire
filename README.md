@@ -74,6 +74,8 @@ The fingerprint, server link and owner setup link appear in `docker compose logs
 
 This version does not upgrade databases from earlier versions. For an existing installation, read [database upgrades](REWORK.md#configuration-and-database-upgrades) before starting it.
 
+To rebuild a clean database while retaining accounts, passwords, roles, and server settings, see [save and restore the server setup](Docs/ServerSetupReset.md).
+
 ## Run the desktop app from source
 
 With the dependencies installed, open another terminal in the project folder and run:

@@ -25,7 +25,8 @@ import { registerGifs } from './gifs.js';
 import { createLinkPreviews, registerLinkPreviews } from './link-previews.js';
 import { klipyMediaHosts } from '../shared/klipy.js';
 import { defaultUploadBytes, isUploadLimit } from '../shared/uploads.js';
-import { loadCertificateFiles, loadIdentity } from './identity.js';
+import { loadCertificateFiles, loadIdentity, recordIdentity } from './identity.js';
+import { mountSetupRestore } from './setup-restore.js';
 
 export function createApp({
     dataDir = 'data',
@@ -39,6 +40,7 @@ export function createApp({
     trustProxy = false,
     maxStoredUploadBytes = 1024 * 1024 * 1024,
     setupCode,
+    setupRestoreToken,
     sessionLifetimeMs = 30 * 86400000,
     // null: plain HTTP (development, TLS proxy, or explicitly enabled direct HTTP).
     // { directory, address, allowNew }: self-managed identity. { certFile, keyFile }: host files.
@@ -48,8 +50,17 @@ export function createApp({
         throw new Error('Invalid upload storage limit');
     if (!Number.isSafeInteger(sessionLifetimeMs) || sessionLifetimeMs <= 0)
         throw new Error('Invalid session lifetime');
+    if (
+        setupRestoreToken !== undefined &&
+        (typeof setupRestoreToken !== 'string' || !/^[a-f0-9]{64}$/.test(setupRestoreToken))
+    )
+        throw new Error('Invalid restore token');
     const database = openDatabase(dataDir, name);
     const { db, get, all, run } = database;
+    if (setupRestoreToken !== undefined && (tls || get('SELECT 1 FROM users LIMIT 1'))) {
+        db.close();
+        throw new Error('Setup restore requires a fresh database without TLS');
+    }
     let identity = null;
     try {
         if (tls?.directory) {
@@ -57,10 +68,7 @@ export function createApp({
                 ...tls,
                 recorded: get("SELECT value FROM settings WHERE key='identity'")?.value || null,
             });
-            run(
-                "INSERT INTO settings(key,value) VALUES('identity',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                identity.fingerprint,
-            );
+            recordIdentity(run, identity.fingerprint);
         } else if (tls) identity = loadCertificateFiles(tls);
     } catch (error) {
         db.close();
@@ -165,9 +173,12 @@ export function createApp({
     };
     const registration = createRegistration({ ...context, setupCode });
     context.registration = registration;
+    if (setupRestoreToken !== undefined) mountSetupRestore(context, setupRestoreToken);
     // Public registration/login must precede the authenticated feature routes.
     const accounts = registerAccounts(context);
-    app.use('/api', sessions.auth);
+    app.use('/api', (req, res, next) =>
+        req.setupRestore ? next() : sessions.auth(req, res, next),
+    );
     registration.mount();
     accounts.mount();
     app.post(

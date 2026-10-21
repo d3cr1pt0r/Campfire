@@ -1,4 +1,5 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
+import { checkUsername, createAccount } from './account-store.js';
 import { createPassword, verifyPassword, tokenHash } from './security.js';
 import { check, route, createRateLimit } from './policies.js';
 import { transaction } from './database.js';
@@ -34,17 +35,13 @@ export function registerAccounts({
             check(['login', 'register', 'reset'].includes(req.params.action), 'Unknown action');
             limit(req.ip || req.socket.remoteAddress);
             const { username, password } = req.body;
-            check(
-                typeof username === 'string' && /^[a-zA-Z0-9_ -]{2,32}$/.test(username),
-                'Username must be 2–32 letters, numbers, spaces, underscores or hyphens',
-            );
+            checkUsername(username);
             checkPassword(password);
             let u = get('SELECT * FROM users WHERE username=?', username);
             if (req.params.action === 'register') {
                 registration.authorize(req.body);
                 check(!u, 'That username is already taken', 409);
                 const passwordHash = await createPassword(password);
-                const id = randomUUID();
                 transaction(db, () => {
                     check(
                         !get('SELECT id FROM users WHERE username=?', username),
@@ -52,20 +49,14 @@ export function registerAccounts({
                         409,
                     );
                     const role = registration.authorize(req.body);
-                    run(
-                        'INSERT INTO users(id,username,password,role,owner) VALUES(?,?,?,?,?)',
-                        id,
-                        username,
-                        passwordHash,
-                        'everyone',
-                        Number(role === 'owner'),
+                    u = createAccount(
+                        { get, run },
+                        { username, passwordHash, owner: role === 'owner' },
                     );
-                    run('INSERT INTO profiles(user,nickname) VALUES(?,?)', id, username);
                     // Check/consume within the same transaction as account creation.
                     // The owner insert changes needsSetup(), so only members redeem invitations.
-                    if (role === 'member') registration.authorize(req.body, true, id);
+                    if (role === 'member') registration.authorize(req.body, true, u.id);
                 });
-                u = get('SELECT * FROM users WHERE id=?', id);
             } else if (req.params.action === 'reset') {
                 const code = req.body.resetToken;
                 const invalid = 'Invalid or expired password reset token';

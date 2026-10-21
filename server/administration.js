@@ -212,7 +212,8 @@ export function registerAdministration({
             res.json({ ok: true });
         }),
     );
-    const roleFor = (id) => get("SELECT * FROM roles WHERE id=? AND id<>'owner'", id);
+    const roleFor = (id, restoring = false) =>
+        get("SELECT * FROM roles WHERE id=? AND (? OR id<>'owner')", id, Number(restoring));
     const mayManageRole = (actor, role) =>
         !!role && (actor.owner || (role.id !== 'everyone' && highest(actor) > role.position));
     const mayManageMember = (actor, target) =>
@@ -344,10 +345,16 @@ export function registerAdministration({
         '/api/roles/:id',
         route((req, res) => {
             requirePermission(req.user, 'roles.manage');
-            const role = roleFor(req.params.id);
+            const role = roleFor(req.params.id, req.setupRestore === true);
             check(role, 'Role not found', 404);
             check(mayManageRole(req.user, role), 'You can only edit lower roles', 403);
-            const { name, color, permissions } = validateRole(req.body);
+            // Ownership grants every current permission independently of this legacy
+            // role row. Restore its appearance but rebuild that list from the server.
+            const { name, color, permissions } = validateRole(
+                req.setupRestore && role.id === 'owner'
+                    ? { ...req.body, permissions: permissionsFor(req.user) }
+                    : req.body,
+            );
             validateGrants(req, permissions);
             check(req.body.channelAccess === undefined, 'Use targeted channel overrides');
             if (req.body.overrides) validateOverrides(req, role, req.body.overrides);

@@ -16,6 +16,13 @@ const day = 86400000;
 const lifetime = 820 * day;
 const renewBefore = 30 * day;
 
+export function recordIdentity(run, fingerprint) {
+    run(
+        "INSERT INTO settings(key,value) VALUES('identity',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        fingerprint,
+    );
+}
+
 // Minimal DER encoding for the one fixed certificate shape Campfire issues itself.
 const length = (n) => {
     if (n < 128) return Buffer.from([n]);

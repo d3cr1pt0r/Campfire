@@ -20,6 +20,7 @@ test-results/
 
 # Local server/client state (accounts, tokens, messages, uploads)
 /data/
+/.private/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
