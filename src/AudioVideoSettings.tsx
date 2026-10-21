@@ -276,13 +276,16 @@ export function AudioVideoSettings({
                     change={(value) => change('soundEffectsVolume', value)}
                 />
                 <Toggle
-                    title="Call connection sounds"
+                    title="Call sounds"
                     value={prefs.sounds}
                     set={(value) => change('sounds', value)}
                 />
                 <p className="audio-help">
                     Sound-effects volume controls call and message sounds independently of output
-                    volume. Message alerts are configured in Notifications.
+                    volume. Call sounds cover joining and leaving, mute and deafen, screen sharing,
+                    and the ringback while you call someone. Incoming calls always ring unless you
+                    are in Do Not Disturb or have muted the server. Message alerts are configured in
+                    Notifications.
                 </p>
             </section>
             <section className="audio-settings-section" aria-labelledby="audio-video-title">

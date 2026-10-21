@@ -6,6 +6,10 @@ import {
     shouldNotify,
     createNotificationSound,
     channelNotificationMode,
+    notificationSound,
+    callRinging,
+    callDeclined,
+    callsRing,
 } from '../src/notifications.ts';
 
 const me = {
@@ -205,16 +209,20 @@ test('all-message channels remain scoped and respect server mute, DND, and self-
     );
 });
 
+// Two marimba notes with three partials each.
+const messageTones = 6;
+const node = () => ({ connect() {}, disconnect() {} });
 function soundFixture(t, { resume, sink } = {}) {
     const handlers = new Map();
     const originalDocument = globalThis.document,
         originalAudio = globalThis.AudioContext;
-    const counts = { created: 0, played: 0, closed: 0, resumed: 0, sinks: [], ramps: [] };
+    const counts = { created: 0, played: 0, closed: 0, resumed: 0, sinks: [], levels: [] };
     let context;
     class Context {
         state = 'suspended';
         sinkId = '';
         currentTime = 0;
+        sampleRate = 48000;
         destination = {};
         constructor() {
             counts.created++;
@@ -236,7 +244,10 @@ function soundFixture(t, { resume, sink } = {}) {
         }
         createOscillator() {
             return {
-                frequency: {},
+                frequency: {
+                    setValueAtTime() {},
+                    exponentialRampToValueAtTime() {},
+                },
                 connect() {},
                 disconnect() {},
                 start() {
@@ -246,17 +257,33 @@ function soundFixture(t, { resume, sink } = {}) {
             };
         }
         createGain() {
+            let value = 1;
             return {
+                context: this,
                 gain: {
-                    setValueAtTime() {},
-                    linearRampToValueAtTime(value) {
-                        counts.ramps.push(value);
+                    get value() {
+                        return value;
                     },
+                    set value(next) {
+                        value = next;
+                        counts.levels.push(next);
+                    },
+                    setValueAtTime() {},
+                    linearRampToValueAtTime() {},
                     exponentialRampToValueAtTime() {},
                 },
                 connect() {},
                 disconnect() {},
             };
+        }
+        createDynamicsCompressor() {
+            return { ...node(), threshold: {}, knee: {}, ratio: {}, attack: {}, release: {} };
+        }
+        createDelay() {
+            return { ...node(), delayTime: {} };
+        }
+        createBiquadFilter() {
+            return { ...node(), frequency: {} };
         }
     }
     globalThis.document = {
@@ -280,7 +307,7 @@ test('first message initializes audio without an earlier gesture, reuses context
     assert.equal(await sound.play(), false);
     assert.equal(fixture.counts.created, 1);
     assert.equal(fixture.counts.resumed, 1);
-    assert.equal(fixture.counts.played, 2);
+    assert.equal(fixture.counts.played, messageTones);
     fixture.handlers.get('pointerdown')();
     fixture.handlers.get('keydown')();
     assert.equal(fixture.counts.created, 1);
@@ -299,7 +326,7 @@ test('notification playback resumes a context suspended after initial interactio
     fixture.context().state = 'suspended';
     assert.equal(await sound.play(), true);
     assert.equal(fixture.counts.resumed, 2);
-    assert.equal(fixture.counts.played, 2);
+    assert.equal(fixture.counts.played, messageTones);
     sound.close();
 });
 
@@ -354,7 +381,7 @@ test('failed audio startup is contained and a later attempt can recover', async 
     assert.equal(await sound.play(), false);
     blocked = false;
     assert.equal(await sound.play(), true);
-    assert.equal(fixture.counts.played, 2);
+    assert.equal(fixture.counts.played, messageTones);
     sound.close();
 });
 
@@ -394,9 +421,10 @@ test('sound-effects volume scales call and message sounds independently of call 
         outputVolume: 0,
         soundEffectsVolume: 0.25,
     }));
-    assert.equal(await sound.play('call'), true);
-    assert.equal(fixture.counts.played, 1);
-    assert.equal(fixture.counts.ramps[0], 0.035 * 0.25);
+    assert.equal(await sound.play('memberJoined'), true);
+    // Two soft notes with two partials each; the first level set is the sound's bus.
+    assert.equal(fixture.counts.played, 4);
+    assert.equal(fixture.counts.levels[0], 0.42 * 0.25);
     sound.close();
 });
 test('speaker test uses output volume even when sound effects are muted', async (t) => {
@@ -407,8 +435,8 @@ test('speaker test uses output volume even when sound effects are muted', async 
         soundEffectsVolume: 0,
     }));
     assert.equal(await sound.play('test'), true);
-    assert.equal(fixture.counts.played, 2);
-    assert.equal(fixture.counts.ramps[0], 0.035 * 0.6);
+    assert.equal(fixture.counts.played, messageTones);
+    assert.equal(fixture.counts.levels[0], 0.42 * 0.6);
     sound.close();
 });
 test('muted sound effects create no tones', async (t) => {
@@ -417,4 +445,64 @@ test('muted sound effects create no tones', async (t) => {
     assert.equal(await sound.play(), false);
     assert.equal(fixture.counts.played, 0);
     sound.close();
+});
+
+test('each sound is bounded separately, so quick toggles all play', async (t) => {
+    const fixture = soundFixture(t);
+    const sound = createNotificationSound();
+    assert.equal(await sound.play('mute'), true);
+    assert.equal(await sound.play('unmute'), true);
+    assert.equal(await sound.play('mute'), false);
+    assert.equal(fixture.counts.created, 1);
+    sound.close();
+});
+
+test('ringing repeats every period until stopped, and starting it twice rings once', async (t) => {
+    const fixture = soundFixture(t);
+    const sound = createNotificationSound();
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    assert.equal(await sound.startLoop('incomingCall'), true);
+    assert.equal(await sound.startLoop('incomingCall'), false);
+    const perRing = fixture.counts.played;
+    assert.ok(perRing > 0);
+    t.mock.timers.tick(2600);
+    assert.equal(fixture.counts.played, perRing * 2);
+    sound.stopLoop('incomingCall');
+    t.mock.timers.tick(10000);
+    assert.equal(fixture.counts.played, perRing * 2);
+    assert.equal(await sound.startLoop('message'), false, 'only looping sounds can ring');
+    sound.close();
+});
+
+test('direct messages and mentions have their own sounds', () => {
+    const dm = { room: 'dm:bob:me' };
+    assert.equal(notificationSound(message('hello', dm), me, users), 'message');
+    assert.equal(notificationSound(message('@d3cr1pt0r look'), me, users), 'mention');
+    assert.equal(notificationSound(message('@d3cr1pt0r', dm), me, users), 'message');
+    assert.equal(notificationSound(message('everyone hi'), me, users), 'message');
+    assert.equal(notificationSound(message('`@d3cr1pt0r`'), me, users), 'message');
+});
+
+test('invitations ring only outside a call, and your own call waits for its invitees', () => {
+    const invite = { id: 'private:a', creator: 'bob', invited: ['me'], members: ['bob'] };
+    assert.deepEqual(callRinging([invite], 'me', null), {
+        incoming: ['private:a'],
+        outgoing: null,
+    });
+    assert.deepEqual(callRinging([invite], 'me', 'lounge'), { incoming: [], outgoing: null });
+    const own = { id: 'private:b', creator: 'me', invited: ['bob'], members: ['me'] };
+    assert.deepEqual(callRinging([own], 'me', 'private:b'), {
+        incoming: [],
+        outgoing: 'private:b',
+    });
+    const answered = { ...own, invited: [], members: ['me', 'bob'] };
+    assert.deepEqual(callRinging([answered], 'me', 'private:b'), { incoming: [], outgoing: null });
+    assert.equal(callDeclined([own], [{ ...own, invited: [] }], 'private:b'), true);
+    assert.equal(callDeclined([own], [answered], 'private:b'), false);
+    assert.equal(callDeclined([own], [{ ...own, invited: [] }], null), false);
+    const server = 'https://chat.example';
+    const muted = { serverNotifications: { [notificationKey(server, me.id, '*')]: false } };
+    assert.equal(callsRing(me, {}, server), true);
+    assert.equal(callsRing({ ...me, status: 'dnd' }, {}, server), false);
+    assert.equal(callsRing(me, muted, server), false);
 });

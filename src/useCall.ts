@@ -4,6 +4,7 @@ import type { CallMember, Preferences } from './types';
 import { formatMicrophoneError } from './media';
 import { openProcessedMicrophone } from './microphoneProcessing';
 import { createNotificationSound } from './notifications';
+import type { SoundName } from './sounds';
 import { createPeerSignaling } from './signaling';
 import {
     createPeerMedia,
@@ -106,9 +107,11 @@ export function useCall(
             soundPlayer.current = null;
         };
     }, []);
-    const sound = () => {
-        if (prefsRef.current.sounds) void soundPlayer.current?.play('call');
+    const sound = (name: SoundName) => {
+        if (prefsRef.current.sounds) void soundPlayer.current?.play(name);
     };
+    // Other members of the current call; null until joining has finished.
+    const joinedMembers = useRef<Set<string> | null>(null);
     useEffect(() => {
         void processedInput.current
             ?.update(prefs)
@@ -176,7 +179,8 @@ export function useCall(
         setRemote([]);
         setCamera(false);
         setSharing(false);
-        if (wasInCall) sound();
+        joinedMembers.current = null;
+        if (wasInCall) sound('callLeft');
     };
     const currentVideo = () =>
         screen.current?.getVideoTracks()[0] || video.current?.getVideoTracks()[0] || null;
@@ -318,9 +322,13 @@ export function useCall(
                 );
                 return;
             }
+            const existing = peers.current.has(from);
             const peer = makePeer(from, user);
             try {
                 if (validMediaState(data.media)) {
+                    // Shares that were already running when you joined start silently.
+                    if (existing && data.media.sharing !== peer.media.sharing)
+                        sound(data.media.sharing ? 'shareStarted' : 'shareStopped');
                     if (data.media.shareId !== peer.media.shareId || !data.media.sharing) {
                         peer.watching = false;
                         peer.watchPending = false;
@@ -391,6 +399,13 @@ export function useCall(
             const ids = new Set(
                 members.filter((c) => c.channel === callChannel.current).map((c) => c.socket),
             );
+            const known = joinedMembers.current;
+            if (known) {
+                const others = new Set([...ids].filter((id) => id !== socket.id));
+                if ([...others].some((id) => !known.has(id))) sound('memberJoined');
+                else if ([...known].some((id) => !others.has(id))) sound('memberLeft');
+                joinedMembers.current = others;
+            }
             let changed = false;
             peers.current.forEach((p, id) => {
                 if (!ids.has(id)) {
@@ -398,10 +413,7 @@ export function useCall(
                     changed = true;
                 }
             });
-            if (changed) {
-                sound();
-                updateRemote();
-            }
+            if (changed) updateRemote();
         };
         const revoked = (reason?: string) => {
             leave();
@@ -605,7 +617,8 @@ export function useCall(
                                         !prefsRef.current.pushToTalk),
                             );
                         result.peers.forEach((p) => makePeer(p.socket, p.user, true));
-                        sound();
+                        joinedMembers.current = new Set(result.peers.map((p) => p.socket));
+                        sound('callJoined');
                     },
                 );
         } catch (e) {
@@ -616,6 +629,7 @@ export function useCall(
     };
     const setMicrophoneMuted = async (value: boolean) => {
         if (value) {
+            if (!audioFlags.current.muted) sound('mute');
             setMuted(true);
             return;
         }
@@ -657,7 +671,12 @@ export function useCall(
                 captureBusy.current.microphone = false;
             }
         }
+        if (audioFlags.current.muted) sound('unmute');
         setMuted(false);
+    };
+    const setSpeakersDeafened = (value: boolean) => {
+        if (value !== audioFlags.current.deafened) sound(value ? 'deafen' : 'undeafen');
+        setDeafened(value);
     };
     const toggleCamera = async () => {
         if (
@@ -851,7 +870,7 @@ export function useCall(
         muted,
         setMuted: setMicrophoneMuted,
         deafened,
-        setDeafened,
+        setDeafened: setSpeakersDeafened,
         camera,
         sharing,
         toggleCamera,

@@ -709,7 +709,7 @@ export function SettingsPanel({
                             }
                         />
                         <Toggle
-                            title="Soft message notification sound"
+                            title="Message notification sound"
                             value={prefs.messageSounds !== false}
                             set={(value) =>
                                 setPrefs((previous) => ({ ...previous, messageSounds: value }))

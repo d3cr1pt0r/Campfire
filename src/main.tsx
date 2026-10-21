@@ -7,7 +7,14 @@ import {
     channelPermissionIds,
     canManageRole,
 } from '../shared/permissions.js';
-import { shouldNotify, createNotificationSound } from './notifications';
+import {
+    shouldNotify,
+    createNotificationSound,
+    notificationSound,
+    callsRing,
+    callRinging,
+    callDeclined,
+} from './notifications';
 import {
     formatFingerprint,
     isLoopbackHost,
@@ -485,6 +492,57 @@ function App() {
         },
     );
     activeCallChannel.current = call.channel;
+    // Invitations ring and your own unanswered call plays a ringback, each for up to 45
+    // seconds; an invitation someone declines plays its own cue.
+    const ringStarted = useRef(new Map<string, number>());
+    const [ringCheck, setRingCheck] = useState(0);
+    const directCalls = state?.directCalls;
+    useEffect(() => {
+        const player = messageSoundRef.current;
+        if (!player) return;
+        if (!state) {
+            player.stopLoop('incomingCall');
+            player.stopLoop('outgoingCall');
+            return;
+        }
+        const now = Date.now();
+        const rings = callRinging(directCalls || [], state.me.id, call.channel);
+        const ringing = [...rings.incoming, ...(rings.outgoing ? [rings.outgoing] : [])];
+        for (const id of ringStarted.current.keys())
+            if (!ringing.includes(id)) ringStarted.current.delete(id);
+        for (const id of ringing)
+            if (!ringStarted.current.has(id)) ringStarted.current.set(id, now);
+        const fresh = (id: string) => now - (ringStarted.current.get(id) ?? now) < 45000;
+        if (rings.incoming.some(fresh) && callsRing(state.me, prefs, url))
+            void player.startLoop('incomingCall');
+        else player.stopLoop('incomingCall');
+        if (rings.outgoing && fresh(rings.outgoing) && prefs.sounds)
+            void player.startLoop('outgoingCall');
+        else player.stopLoop('outgoingCall');
+        const expiry = Math.min(
+            ...[...ringStarted.current.values()]
+                .map((at) => at + 45000 - now)
+                .filter((ms) => ms > 0),
+        );
+        if (!Number.isFinite(expiry)) return;
+        const timer = setTimeout(() => setRingCheck((count) => count + 1), expiry + 50);
+        return () => clearTimeout(timer);
+    }, [
+        directCalls,
+        state?.me,
+        call.channel,
+        prefs.serverNotifications,
+        prefs.sounds,
+        url,
+        ringCheck,
+    ]);
+    const previousCalls = useRef<NonNullable<typeof directCalls>>([]);
+    useEffect(() => {
+        const calls = directCalls || [];
+        if (prefs.sounds && callDeclined(previousCalls.current, calls, call.channel))
+            void messageSoundRef.current?.play('callDeclined');
+        previousCalls.current = calls;
+    }, [directCalls]);
     const callCan = (p: string) =>
         !!state &&
         (!call.channel ||
@@ -562,14 +620,33 @@ function App() {
             setState((previous) => (previous ? { ...previous, channels } : previous));
             void refresh();
         });
-        s.on('call:invite', ({ from }: { from: string }) =>
-            notify(
-                `${displayName(
-                    stateRef.current?.users.find((u) => u.id === from),
-                    'A member',
-                )} invited you to a call. Open the call invitation to join.`,
-            ),
-        );
+        s.on('call:invite', ({ from }: { from: string }) => {
+            const caller = displayName(
+                stateRef.current?.users.find((u) => u.id === from),
+                'A member',
+            );
+            notify(`${caller} invited you to a call. Open the call invitation to join.`);
+            const me = stateRef.current?.me;
+            const preferences = prefsRef.current;
+            if (
+                me &&
+                callsRing(me, preferences, url) &&
+                preferences.notifications &&
+                (document.visibilityState === 'hidden' || !document.hasFocus()) &&
+                'Notification' in window &&
+                Notification.permission === 'granted'
+            ) {
+                try {
+                    // The ringtone is the sound; the system notification stays silent.
+                    new Notification(stateRef.current?.name || 'Campfire', {
+                        body: `${caller} is calling you`,
+                        silent: true,
+                    });
+                } catch {
+                    /* OS notifications are optional. */
+                }
+            }
+        });
         s.on('calls', (calls) => setState((prev) => (prev ? { ...prev, calls } : null)));
         const messageSound = createNotificationSound(() => prefsRef.current);
         messageSoundRef.current = messageSound;
@@ -594,7 +671,7 @@ function App() {
                     document.visibilityState !== 'visible' ||
                     !document.hasFocus())
             )
-                void messageSound.play();
+                void messageSound.play(notificationSound(m, me, stateRef.current?.users));
             if (
                 preferences.notifications &&
                 (document.visibilityState === 'hidden' || !document.hasFocus()) &&
