@@ -61,11 +61,18 @@ test('the main thread keeps serving while a slow query runs in the background', 
 });
 
 test('a query that runs too long is stopped, and the next one still works', async (t) => {
-    const f = fixture(t, { timeoutMs: 50 });
-    await assert.rejects(
-        f.reader.all(slow(200_000_000), []),
+    const f = fixture(t);
+    // Start the worker before testing its deadline, so startup speed is irrelevant.
+    await f.reader.all('SELECT 1', []);
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const timedOut = assert.rejects(
+        f.reader.all(slow(3_000_000), []),
         (error) => error.status === 503 && /too long/.test(error.message),
     );
+    t.mock.timers.tick(10000);
+    t.mock.timers.reset();
+    await timedOut;
+    // The replacement worker gets the normal deadline, including on slower CI hosts.
     assert.deepEqual(
         (await f.reader.all('SELECT 1 x', [])).map((row) => ({ ...row })),
         [{ x: 1 }],
