@@ -48,6 +48,8 @@ export type State = {
     icon?: string | null;
     reactionAuthors?: boolean;
     profileFrames?: boolean;
+    // Combined size allowed for one message's attachments, set in Server settings.
+    maxUploadBytes?: number;
     removedUsers?: User[];
     users: User[];
     roles: Role[];

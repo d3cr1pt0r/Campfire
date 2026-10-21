@@ -250,6 +250,12 @@ test('clipboard attachment reads are bounded, copy-only, and ignore ordinary pat
             clipboardAttachments(clipboard(`copy\n${pathToFileURL(filename)}\n`)),
             /5 MB/,
         );
+        // The renderer passes the server's limit; values beyond the ceiling fall back to 5 MB.
+        const copied = clipboard(`copy\n${pathToFileURL(filename)}\n`);
+        const raised = await clipboardAttachments(copied, 6 * 1024 * 1024);
+        assert.equal(raised.files[0].data.length, 5 * 1024 * 1024 + 1);
+        await assert.rejects(clipboardAttachments(copied, 1024 * 1024), /1 MB/);
+        await assert.rejects(clipboardAttachments(copied, 1024 * 1024 * 1024), /5 MB/);
         const plain = await clipboardAttachments({
             read: async () => [],
             readText: async () => filename,

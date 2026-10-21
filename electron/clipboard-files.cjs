@@ -1,7 +1,9 @@
 const { open, constants } = require('node:fs/promises');
 const path = require('node:path');
 const { fileURLToPath } = require('node:url');
-const MAX_BYTES = 5 * 1024 * 1024;
+// Mirrors shared/uploads.js: the server's limit, within the setting's 100 MB ceiling.
+const DEFAULT_BYTES = 5 * 1024 * 1024;
+const CEILING_BYTES = 100 * 1024 * 1024;
 const MAX_FILES = 10;
 
 function pathsFromFormat(format, bytes) {
@@ -31,9 +33,12 @@ function pathsFromFormat(format, bytes) {
         });
 }
 
-async function clipboardAttachments(clipboard) {
+async function clipboardAttachments(clipboard, limit) {
     // Only paths supplied by an OS file-copy clipboard format are accepted.
     // The IPC caller cannot supply paths or request arbitrary filesystem reads.
+    const maxBytes =
+        Number.isSafeInteger(limit) && limit > 0 && limit <= CEILING_BYTES ? limit : DEFAULT_BYTES;
+    const megabytes = `${Math.round((maxBytes / 1048576) * 10) / 10} MB`;
     const items = await clipboard.read();
     const formats = [
         'CF_HDROP',
@@ -63,19 +68,19 @@ async function clipboardAttachments(clipboard) {
         try {
             const stat = await handle.stat();
             if (!stat.isFile()) throw Error('Folders cannot be attached. Select files instead.');
-            if (total + stat.size > MAX_BYTES)
-                throw Error('Attachments must total 5 MB or less per message');
+            if (total + stat.size > maxBytes)
+                throw Error(`Attachments must total ${megabytes} or less per message`);
             const chunks = [];
             const stream = handle.createReadStream({
                 start: 0,
-                end: MAX_BYTES - total,
+                end: maxBytes - total,
                 autoClose: false,
             });
             for await (const chunk of stream) {
                 total += chunk.length;
-                if (total > MAX_BYTES) {
+                if (total > maxBytes) {
                     stream.destroy();
-                    throw Error('Attachments must total 5 MB or less per message');
+                    throw Error(`Attachments must total ${megabytes} or less per message`);
                 }
                 chunks.push(chunk);
             }
@@ -93,7 +98,7 @@ async function clipboardAttachments(clipboard) {
     const image = items.find((item) => item.types.includes('image/png'));
     if (image) {
         const blob = await image.getType('image/png');
-        if (blob.size > MAX_BYTES) throw Error('Files must be 5 MB or smaller');
+        if (blob.size > maxBytes) throw Error(`Files must be ${megabytes} or smaller`);
         return {
             files: [
                 {

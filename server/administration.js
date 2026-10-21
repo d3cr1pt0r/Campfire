@@ -3,6 +3,7 @@ import { boundedPng, channelName } from './images.js';
 import { check, route, validateRole } from './policies.js';
 import { transaction } from './database.js';
 import { channelPermissionIds } from '../shared/permissions.js';
+import { formatUploadLimit, isUploadLimit, uploadLimitCeiling } from '../shared/uploads.js';
 export function registerAdministration({
     app,
     io,
@@ -570,12 +571,13 @@ export function registerAdministration({
         '/api/settings',
         route((req, res) => {
             requirePermission(req.user, 'server.edit');
-            const { name, icon, reactionAuthors, profileFrames } = req.body;
+            const { name, icon, reactionAuthors, profileFrames, maxUploadBytes } = req.body;
             check(
                 name !== undefined ||
                     icon !== undefined ||
                     reactionAuthors !== undefined ||
-                    profileFrames !== undefined,
+                    profileFrames !== undefined ||
+                    maxUploadBytes !== undefined,
                 'No settings provided',
             );
             if (name !== undefined)
@@ -587,6 +589,11 @@ export function registerAdministration({
                 check(typeof reactionAuthors === 'boolean', 'Invalid reaction setting');
             if (profileFrames !== undefined)
                 check(typeof profileFrames === 'boolean', 'Invalid profile frame setting');
+            if (maxUploadBytes !== undefined)
+                check(
+                    isUploadLimit(maxUploadBytes),
+                    `Maximum upload size must be a whole number of MB from 1 to ${formatUploadLimit(uploadLimitCeiling)}`,
+                );
             let image;
             if (icon !== undefined && icon !== null) {
                 try {
@@ -606,6 +613,7 @@ export function registerAdministration({
                 if (icon !== undefined) save('icon', image || '');
                 if (reactionAuthors !== undefined) save('reactionAuthors', String(reactionAuthors));
                 if (profileFrames !== undefined) save('profileFrames', String(profileFrames));
+                if (maxUploadBytes !== undefined) save('maxUploadBytes', String(maxUploadBytes));
             });
             publishChannels();
             res.json({ ok: true });

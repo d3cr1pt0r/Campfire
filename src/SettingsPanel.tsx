@@ -5,6 +5,7 @@ import { RegistrationSettings } from './RegistrationSettings';
 import { notificationKey, channelNotificationMode } from './notifications';
 import { ChannelNotificationSelect } from './ChannelNotificationSelect';
 import { canonicalRoom } from '../shared/rooms.js';
+import { formatUploadLimit, uploadLimitCeiling } from '../shared/uploads.js';
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { formatFingerprint, serverLink } from './serverLink';
 import { pinsFor } from './serverTrust';
@@ -842,7 +843,18 @@ export function SettingsPanel({
                                 e.preventDefault();
                                 const f = new FormData(e.currentTarget);
                                 void act(async () => {
-                                    await api('/settings', 'PATCH', { name: f.get('name') });
+                                    await api('/settings', 'PATCH', {
+                                        name: f.get('name'),
+                                        // Servers from before the setting do not report a limit.
+                                        ...(state.maxUploadBytes === undefined
+                                            ? {}
+                                            : {
+                                                  maxUploadBytes:
+                                                      Number(f.get('maxUploadMegabytes')) *
+                                                      1024 *
+                                                      1024,
+                                              }),
+                                    });
                                     notify('Server settings saved.');
                                 });
                             }}
@@ -857,6 +869,27 @@ export function SettingsPanel({
                                     disabled={!permission('server.edit')}
                                 />
                             </label>
+                            {state.maxUploadBytes !== undefined && (
+                                <label>
+                                    Maximum upload size (MB)
+                                    <input
+                                        key={state.maxUploadBytes}
+                                        name="maxUploadMegabytes"
+                                        type="number"
+                                        min={1}
+                                        max={uploadLimitCeiling / (1024 * 1024)}
+                                        step={1}
+                                        required
+                                        defaultValue={state.maxUploadBytes / (1024 * 1024)}
+                                        disabled={!permission('server.edit')}
+                                    />
+                                    <small className="field-help">
+                                        Combined size of the files in one message, up to{' '}
+                                        {formatUploadLimit(uploadLimitCeiling)}. Larger uploads use
+                                        more server memory and storage.
+                                    </small>
+                                </label>
+                            )}
                             <button
                                 className="primary"
                                 disabled={!permission('server.edit') || busy}

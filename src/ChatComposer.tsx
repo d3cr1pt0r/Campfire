@@ -12,6 +12,7 @@ import { GifPicker } from './GifPicker';
 import type { Gif } from './klipy';
 import { inCodeBlock } from './richText';
 import type { User } from './types';
+import { formatUploadLimit } from '../shared/uploads.js';
 
 // The text around the caret, for mention and emoji suggestions.
 type Caret = { text: string; offset: number; start: number; head: number; code: boolean };
@@ -35,6 +36,7 @@ type Props = {
     busy: boolean;
     canPost: boolean;
     canAttach: boolean;
+    uploadLimit: number;
     connected: boolean;
     fileInput: React.RefObject<HTMLInputElement | null>;
     lastTyping: React.RefObject<number>;
@@ -66,6 +68,7 @@ export function ChatComposer({
     busy,
     canPost,
     canAttach,
+    uploadLimit,
     connected,
     fileInput,
     lastTyping,
@@ -369,7 +372,7 @@ export function ChatComposer({
                         disabled={!canAttach}
                         title={
                             canAttach
-                                ? 'Up to 10 files, 5 MB total'
+                                ? `Up to 10 files, ${formatUploadLimit(uploadLimit)} total`
                                 : 'You do not have permission to attach files'
                         }
                         onClick={() => {

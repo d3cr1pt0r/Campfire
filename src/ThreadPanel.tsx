@@ -9,7 +9,7 @@ import type { AppSocket, Message, State, User } from './types';
 import type { MessageAvatarMode } from './messageAppearance';
 import type { PollTarget } from './PollDialog';
 import { appendText } from './richText';
-import { validateFileSelection } from '../shared/uploads.js';
+import { defaultUploadBytes, validateFileSelection } from '../shared/uploads.js';
 import { emojis } from '../shared/emojis.js';
 
 type Props = {
@@ -132,7 +132,7 @@ export function ThreadPanel(props: Props) {
         if (!mounted.current || !canPost || !permission('files.attach') || sending.current) return;
         try {
             const next = [...selectedFiles.current, ...files];
-            validateFileSelection(next);
+            validateFileSelection(next, state.maxUploadBytes);
             selectedFiles.current = next;
             setAttachments(next);
         } catch (e) {
@@ -142,7 +142,7 @@ export function ThreadPanel(props: Props) {
     const pasteDesktop = async (target: HTMLElement, insertText: (text: string) => void) => {
         if (!window.campfire?.readClipboardAttachments || !canPost) return;
         try {
-            const clipboard = await window.campfire.readClipboardAttachments();
+            const clipboard = await window.campfire.readClipboardAttachments(state.maxUploadBytes);
             if (
                 !mounted.current ||
                 !target.isConnected ||
@@ -172,7 +172,7 @@ export function ThreadPanel(props: Props) {
         const text = draft;
         const files = [...attachments];
         try {
-            validateFileSelection(files);
+            validateFileSelection(files, state.maxUploadBytes);
             const payload = await Promise.all(
                 files.map(async (file) => {
                     const data = await new Promise<string>((resolve, reject) => {
@@ -308,6 +308,7 @@ export function ThreadPanel(props: Props) {
             <ChatComposer
                 focusRequest={props.focusRequest}
                 canAttach={canPost && permission('files.attach')}
+                uploadLimit={state.maxUploadBytes ?? defaultUploadBytes}
                 users={state.users}
                 emojis={state.emojis}
                 attachments={attachments}

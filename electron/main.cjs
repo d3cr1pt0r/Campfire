@@ -97,12 +97,12 @@ else {
                 },
             });
             let readingClipboard = false;
-            ipcMain.handle('clipboard:attachments', async (event) => {
+            ipcMain.handle('clipboard:attachments', async (event, limit) => {
                 if (!trusted(event.senderFrame?.url)) throw Error('Untrusted clipboard request');
                 if (readingClipboard) throw Error('Wait for the previous paste to finish');
                 readingClipboard = true;
                 try {
-                    return await clipboardAttachments(clipboard);
+                    return await clipboardAttachments(clipboard, limit);
                 } finally {
                     readingClipboard = false;
                 }

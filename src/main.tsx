@@ -89,7 +89,7 @@ import { Emoji } from './ChatContent';
 import { resizeImage } from './images';
 import { rememberedDevice } from './devices';
 import { useSpeaking } from './useSpeaking';
-import { validateFileSelection } from '../shared/uploads.js';
+import { defaultUploadBytes, formatUploadLimit, validateFileSelection } from '../shared/uploads.js';
 import { emojis as standardEmojis } from '../shared/emojis.js';
 import campfireIcon from './assets/campfire-icon.png';
 import './style.css';
@@ -443,6 +443,7 @@ function App() {
     const gifFavoritesRef = useRef(gifFavorites);
     gifFavoritesRef.current = gifFavorites;
     const klipyKey = state?.klipyKey || null;
+    const uploadLimit = state?.maxUploadBytes ?? defaultUploadBytes;
     useEffect(() => {
         setGifFavorites([]);
         if (!klipyKey) return;
@@ -979,7 +980,7 @@ function App() {
         }
         try {
             const selected = [...attachmentsRef.current, ...files];
-            validateFileSelection(selected);
+            validateFileSelection(selected, stateRef.current?.maxUploadBytes);
             attachmentsRef.current = selected;
             setAttachments(selected);
         } catch (error) {
@@ -991,7 +992,9 @@ function App() {
         const targetRoom = room;
         const account = state?.me.id;
         try {
-            const clipboard = await window.campfire.readClipboardAttachments();
+            const clipboard = await window.campfire.readClipboardAttachments(
+                stateRef.current?.maxUploadBytes,
+            );
             if (
                 !target.isConnected ||
                 document.activeElement !== target ||
@@ -1023,7 +1026,7 @@ function App() {
             files = [...attachments],
             targetRoom = room;
         await act(async () => {
-            validateFileSelection(files);
+            validateFileSelection(files, stateRef.current?.maxUploadBytes);
             const payload = await Promise.all(
                 files.map(async (file) => {
                     const data = await new Promise<string>((resolve, reject) => {
@@ -2080,7 +2083,8 @@ function App() {
                                                 : 'This conversation is read-only'}
                                         </strong>
                                         <span>
-                                            Up to 10 files · 5 MB total · Review before sending
+                                            Up to 10 files · {formatUploadLimit(uploadLimit)} total
+                                            · Review before sending
                                         </span>
                                     </div>
                                 )}
@@ -2125,6 +2129,7 @@ function App() {
                                 <ChatComposer
                                     focusRequest={composerFocus}
                                     canAttach={canPost && conversationPermission('files.attach')}
+                                    uploadLimit={uploadLimit}
                                     users={state.users}
                                     emojis={state.emojis}
                                     attachments={attachments}

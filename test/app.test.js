@@ -262,6 +262,43 @@ test('profiles, previews, custom reactions, channel names, and private-call auth
             );
         },
     );
+    await t.test('server settings choose the upload limit that message posts enforce', async () => {
+        const megabyte = 1024 * 1024;
+        const post = (user, bytes, status) =>
+            api(
+                user,
+                '/messages',
+                'POST',
+                {
+                    room: 'general',
+                    attachments: [
+                        { name: 'file.bin', data: Buffer.alloc(bytes).toString('base64') },
+                    ],
+                },
+                status,
+            );
+        assert.equal((await api(bob, '/state')).data.maxUploadBytes, 5 * megabyte);
+        // Large message bodies are only read after sign-in.
+        await post(null, 9 * megabyte, 401);
+        await post(alice, 6 * megabyte, 413);
+        await api(bob, '/settings', 'PATCH', { maxUploadBytes: 10 * megabyte }, 403);
+        for (const bad of [0, 101 * megabyte, 10 * megabyte + 1, String(10 * megabyte), null])
+            await api(alice, '/settings', 'PATCH', { maxUploadBytes: bad }, 400);
+        await api(alice, '/settings', 'PATCH', { maxUploadBytes: 10 * megabyte });
+        assert.equal((await api(bob, '/state')).data.maxUploadBytes, 10 * megabyte);
+        const raised = (await post(alice, 6 * megabyte)).data;
+        assert.equal(
+            service.db.prepare('SELECT bytes FROM attachments WHERE message=?').get(raised.id)
+                .bytes,
+            6 * megabyte,
+        );
+        assert.match((await post(alice, 10 * megabyte + 1, 400)).data.error, /10 MB/);
+        await api(alice, '/settings', 'PATCH', { maxUploadBytes: megabyte });
+        assert.match((await post(alice, megabyte + 1, 400)).data.error, /1 MB/);
+        assert.match((await post(alice, 3 * megabyte, 413)).data.error, /1 MB/);
+        await api(alice, '/settings', 'PATCH', { maxUploadBytes: 5 * megabyte });
+        await api(alice, `/messages/${raised.id}`, 'DELETE');
+    });
     await t.test(
         'custom emojis and expanded reactions toggle, count users, and enforce ownership',
         async () => {

@@ -89,15 +89,26 @@ test('expanded standard emoji catalog contains no duplicates and includes comple
 });
 
 test('file picker and drop selection share count, per-file and combined limits', async () => {
-    const { validateFileSelection, maxUploadBytes } = await import('../shared/uploads.js');
+    const { validateFileSelection, defaultUploadBytes, isUploadLimit, uploadLimitCeiling } =
+        await import('../shared/uploads.js');
     validateFileSelection([{ size: 1 }, { size: 2 }]);
-    validateFileSelection([{ size: maxUploadBytes }]);
+    validateFileSelection([{ size: defaultUploadBytes }]);
     assert.throws(
         () => validateFileSelection(Array.from({ length: 11 }, () => ({ size: 1 }))),
         /10 files/,
     );
-    assert.throws(() => validateFileSelection([{ size: maxUploadBytes + 1 }]), /5 MB/);
-    assert.throws(() => validateFileSelection([{ size: maxUploadBytes }, { size: 1 }]), /total/);
+    assert.throws(() => validateFileSelection([{ size: defaultUploadBytes + 1 }]), /5 MB/);
+    assert.throws(
+        () => validateFileSelection([{ size: defaultUploadBytes }, { size: 1 }]),
+        /total/,
+    );
+    // The server's configured limit replaces the default, in both directions.
+    const megabyte = 1024 * 1024;
+    validateFileSelection([{ size: 20 * megabyte }], 25 * megabyte);
+    assert.throws(() => validateFileSelection([{ size: 2 * megabyte }], megabyte), /1 MB/);
+    assert.ok(isUploadLimit(megabyte) && isUploadLimit(uploadLimitCeiling));
+    for (const bad of [0, megabyte + 1, uploadLimitCeiling + megabyte, '5242880', NaN])
+        assert.equal(isUploadLimit(bad), false, String(bad));
 });
 
 test('display names prefer nicknames while preserving the permanent username as fallback', async () => {

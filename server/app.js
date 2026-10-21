@@ -24,6 +24,7 @@ import { registerPresence } from './presence.js';
 import { registerGifs } from './gifs.js';
 import { createLinkPreviews, registerLinkPreviews } from './link-previews.js';
 import { klipyMediaHosts } from '../shared/klipy.js';
+import { defaultUploadBytes, isUploadLimit } from '../shared/uploads.js';
 import { loadCertificateFiles, loadIdentity } from './identity.js';
 
 export function createApp({
@@ -98,7 +99,12 @@ export function createApp({
         if (req.method === 'OPTIONS') return res.sendStatus(204);
         next();
     });
-    app.use(express.json({ limit: '8mb' }));
+    const json = express.json({ limit: '8mb' });
+    // Message posts carry attachments up to the owner's limit, so registerMessages
+    // parses them after sign-in instead of buffering large bodies from anyone.
+    app.use((req, res, next) =>
+        req.method === 'POST' && req.path === '/api/messages' ? next() : json(req, res, next),
+    );
     const io = new Server(http, {
         cors: { origin: true },
         allowRequest: (req, callback) =>
@@ -123,6 +129,10 @@ export function createApp({
         return size;
     };
     const views = (messages) => messageViews(all, messages, describeImage);
+    const uploadLimit = () => {
+        const bytes = Number(get("SELECT value FROM settings WHERE key='maxUploadBytes'")?.value);
+        return isUploadLimit(bytes) ? bytes : defaultUploadBytes;
+    };
     const messageView = (message) => views([message])[0];
     const emitRoom = (rawRoom, event, data) => {
         const room = canonicalRoom(rawRoom);
@@ -150,6 +160,7 @@ export function createApp({
         messageViews: views,
         emitRoom,
         maxStoredUploadBytes,
+        uploadLimit,
         sessionLifetimeMs,
     };
     const registration = createRegistration({ ...context, setupCode });
@@ -185,6 +196,7 @@ export function createApp({
                     get("SELECT value FROM settings WHERE key='reactionAuthors'")?.value !==
                     'false',
                 profileFrames: sessions.profileFramesEnabled(),
+                maxUploadBytes: uploadLimit(),
                 removedUsers:
                     sessions.can(req.user, 'members.ban') ||
                     sessions.can(req.user, 'members.restore') ||

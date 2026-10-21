@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import express from 'express';
 import { imageInfo, imageMime } from './images.js';
-import { maxUploadBytes, maxUploadFiles } from '../shared/uploads.js';
+import { formatUploadLimit, maxUploadFiles } from '../shared/uploads.js';
 import { canonicalRoom } from '../shared/rooms.js';
 import { emojis } from '../shared/emojis.js';
 import { check, route } from './policies.js';
@@ -19,6 +20,7 @@ export function registerMessages({
     messageViews,
     emitRoom,
     maxStoredUploadBytes,
+    uploadLimit,
     polls,
     previews,
 }) {
@@ -118,8 +120,25 @@ export function registerMessages({
             res.json(req.query.page === '1' ? { messages, next } : messages);
         }),
     );
+    // Base64 grows attachments by a third; the rest covers text, names and a poll.
+    const parseMessage = (req, res, next) => {
+        const limit = uploadLimit();
+        express.json({ limit: Math.ceil(limit / 3) * 4 + 1024 * 1024 })(req, res, (error) =>
+            next(
+                error?.type === 'entity.too.large'
+                    ? Object.assign(
+                          new Error(
+                              `Attachments must total ${formatUploadLimit(limit)} or less per message`,
+                          ),
+                          { status: 413 },
+                      )
+                    : error,
+            ),
+        );
+    };
     app.post(
         '/api/messages',
+        parseMessage,
         route((req, res) => {
             const { body = '', attachment, attachments } = req.body;
             const room = canonicalRoom(req.body.room);
@@ -151,6 +170,7 @@ export function registerMessages({
                     'A poll is posted on its own, without text or attachments',
                 );
             check(body.trim() || files.length || poll, 'Write a message or attach a file');
+            const limit = uploadLimit();
             let total = 0;
             const validated = files.map((file) => {
                 check(
@@ -160,13 +180,16 @@ export function registerMessages({
                         file.name.length <= 200 &&
                         typeof file.data === 'string' &&
                         /^[A-Za-z0-9+/]*={0,2}$/.test(file.data) &&
-                        file.data.length <= 7000000,
-                    'Invalid attachment (maximum 5 MB)',
+                        file.data.length <= Math.ceil(limit / 3) * 4,
+                    `Invalid attachment (maximum ${formatUploadLimit(limit)})`,
                 );
                 const bytes = Buffer.from(file.data, 'base64');
                 const mime = imageMime(bytes);
                 total += bytes.length;
-                check(total <= maxUploadBytes, 'Attachments must total 5 MB or less per message');
+                check(
+                    total <= limit,
+                    `Attachments must total ${formatUploadLimit(limit)} or less per message`,
+                );
                 return {
                     ...file,
                     bytes: bytes.length,

@@ -5,7 +5,7 @@ contextBridge.exposeInMainWorld('campfire', {
         read: (key) => ipcRenderer.invoke('avatars:read', key),
         write: (key, bytes) => ipcRenderer.invoke('avatars:write', key, bytes),
     },
-    readClipboardAttachments: () => ipcRenderer.invoke('clipboard:attachments'),
+    readClipboardAttachments: (limit) => ipcRenderer.invoke('clipboard:attachments', limit),
     getIdleState: () => ipcRenderer.invoke('presence:idle-state'),
     insecureHttp: {
         isAllowed: (origin) => ipcRenderer.sendSync('http:is-allowed', origin),
