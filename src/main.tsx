@@ -105,7 +105,7 @@ const defaultServerUrl =
           : window.location.origin);
 const defaultPrefs: Preferences = {
     theme: 'system',
-    messageAvatars: 'normal',
+    messageAvatars: 'compact',
     autoIdle: false,
     idleMinutes: 5,
     notifications: false,
