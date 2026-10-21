@@ -4,7 +4,9 @@ import type { Preferences } from './types';
 import { Toggle } from './forms';
 import { MicrophoneMeter } from './MicrophoneMeter';
 import { formatMicrophoneError, openMicrophone } from './media';
-import { audioLevel, voiceThreshold } from './audioPreferences';
+import { audioLevel } from './audioPreferences';
+import { ActivationThreshold } from './ActivationThreshold';
+import type { MicrophoneReading } from './microphoneMonitor';
 import { createNotificationSound } from './notifications';
 
 function AudioSlider({
@@ -68,6 +70,7 @@ export function AudioVideoSettings({
     inCall: boolean;
     activeStream: MediaStream | null;
 }) {
+    const [microphoneReading, setMicrophoneReading] = useState<MicrophoneReading | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [testing, setTesting] = useState(false);
     const [error, setError] = useState('');
@@ -212,25 +215,15 @@ export function AudioVideoSettings({
                     set={(value) => change('voiceActivation', value)}
                 />
                 {prefs.voiceActivation && (
-                    <>
-                        <AudioSlider
-                            label="Activation threshold"
-                            value={voiceThreshold(prefs.voiceThreshold)}
-                            min={-60}
-                            max={-15}
-                            step={1}
-                            suffix=" dBFS"
-                            disabled={prefs.pushToTalk}
-                            change={(value) => change('voiceThreshold', value)}
-                        />
-                        <p className="audio-help">
-                            {prefs.pushToTalk
-                                ? 'Bypassed while push-to-talk is enabled.'
-                                : 'Lower values pick up quieter voices. Audio fades out after 200 ms below the threshold; noise while speaking can still pass through.'}
-                        </p>
-                    </>
+                    <ActivationThreshold
+                        value={prefs.voiceThreshold}
+                        reading={microphoneReading}
+                        disabled={prefs.pushToTalk}
+                        onChange={(value) => change('voiceThreshold', value)}
+                    />
                 )}
                 <MicrophoneMeter
+                    onReading={setMicrophoneReading}
                     preferences={prefs}
                     activeStream={activeStream}
                     onInputFallback={() =>

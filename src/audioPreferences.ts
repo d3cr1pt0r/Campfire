@@ -7,8 +7,14 @@ export function audioLevel(value: number | undefined, fallback = 1, maximum = 1)
 }
 export function voiceThreshold(value: number | undefined) {
     return typeof value === 'number' && Number.isFinite(value)
-        ? Math.max(-60, Math.min(-15, value))
+        ? Math.max(-60, Math.min(0, value))
         : -45;
+}
+// The live marker and the activation slider share the same -60 to 0 dBFS scale.
+export function voiceThresholdPercent(decibels: number | null | undefined) {
+    return typeof decibels === 'number' && Number.isFinite(decibels)
+        ? Math.max(0, Math.min(100, ((decibels + 60) / 60) * 100))
+        : 0;
 }
 export function participantVolumeKey(server: string, account: string, participant: string) {
     let host = server;

@@ -7,6 +7,7 @@ import {
     participantLevels,
     participantVolumeKey,
     voiceThreshold,
+    voiceThresholdPercent,
 } from '../src/audioPreferences.ts';
 import { microphoneConstraints, openMicrophone } from '../src/media.ts';
 
@@ -37,7 +38,18 @@ test('audio levels reject invalid persisted numbers and bound boost and threshol
     assert.equal(audioLevel(1.5, 1, 2), 1.5);
     assert.equal(voiceThreshold(NaN), -45);
     assert.equal(voiceThreshold(-100), -60);
-    assert.equal(voiceThreshold(0), -15);
+    assert.equal(voiceThreshold(0), 0);
+    assert.equal(voiceThreshold(-5), -5);
+    assert.equal(voiceThreshold(10), 0);
+});
+test('live threshold marker uses the slider scale and clamps silence and out-of-range levels', () => {
+    assert.equal(voiceThresholdPercent(-60), 0);
+    assert.equal(voiceThresholdPercent(-30), 50);
+    assert.equal(voiceThresholdPercent(0), 100);
+    assert.equal(voiceThresholdPercent(-80), 0);
+    assert.equal(voiceThresholdPercent(5), 100);
+    for (const value of [null, undefined, NaN, Infinity])
+        assert.equal(voiceThresholdPercent(value), 0);
 });
 test('participant volumes are isolated by server and account and survive transport upgrades', () => {
     const key = participantVolumeKey('https://chat.example', 'alice', 'bob');

@@ -41,7 +41,7 @@ export function formatMicrophoneError(error: unknown): string {
         case 'NotFoundError':
         case 'DevicesNotFoundError':
             explanation =
-                'No microphone is available. Check your system input device, then select System default in Settings → Voice & video.';
+                'No microphone is available. Check your system input device, then select System default in Settings → Audio & Video.';
             break;
         case 'NotReadableError':
         case 'TrackStartError':
@@ -50,7 +50,7 @@ export function formatMicrophoneError(error: unknown): string {
             break;
         case 'OverconstrainedError':
         case 'ConstraintNotSatisfiedError':
-            explanation = `The microphone cannot satisfy the requested settings${constraint ? ` (${constraint})` : ''}. Select System default in Settings → Voice & video and retry.`;
+            explanation = `The microphone cannot satisfy the requested settings${constraint ? ` (${constraint})` : ''}. Select System default in Settings → Audio & Video and retry.`;
             break;
         case 'SecurityError':
             explanation =
@@ -67,7 +67,7 @@ export function formatMicrophoneError(error: unknown): string {
         default:
             explanation =
                 message ||
-                'The audio system did not provide an error description. Check your microphone and its permissions in Settings → Voice & video.';
+                'The audio system did not provide an error description. Check your microphone and its permissions in Settings → Audio & Video.';
     }
     const detail = name && name !== 'Error' ? ` [${name}]` : '';
     const nativeMessage = message && !explanation.includes(message) ? ` Details: ${message}` : '';

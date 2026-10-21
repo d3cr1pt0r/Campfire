@@ -130,7 +130,7 @@ export function SettingsPanel({
     const sections = [
         ['account', 'My account'],
         ['appearance', 'Appearance'],
-        ['audio', 'Voice & video'],
+        ['audio', 'Audio & Video'],
         ['notifications', 'Notifications'],
         ['server', 'Server settings'],
         ['roles', 'Roles & permissions'],

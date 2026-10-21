@@ -106,7 +106,7 @@ export const AudioPlayback = forwardRef<
                 } catch (reason) {
                     if (!cancelled)
                         setNotice(
-                            `Cannot select ${label.toLowerCase()} output [${(reason as Error).name || 'Error'}]. Choose System default in Settings → Voice & video.`,
+                            `Cannot select ${label.toLowerCase()} output [${(reason as Error).name || 'Error'}]. Choose System default in Settings → Audio & Video.`,
                         );
                 }
             });

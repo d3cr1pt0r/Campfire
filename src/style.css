@@ -4584,3 +4584,106 @@ body.stream-popout-body {
         font-size: 8px;
     }
 }
+
+.activation-threshold {
+    --live-level-color: var(--muted);
+}
+.activation-threshold.above-threshold {
+    --live-level-color: #83c5a2;
+}
+:root[data-theme='canvas'] .activation-threshold.above-threshold {
+    --live-level-color: #39734e;
+}
+.audio-slider > .threshold-slider {
+    position: relative;
+    display: block;
+    height: 28px;
+}
+.threshold-live-track {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    top: 10px;
+    height: 8px;
+    border-radius: 5px;
+    background: var(--field);
+    border: 1px solid var(--border);
+    pointer-events: none;
+}
+.threshold-live-track i {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    border-radius: inherit;
+    background: var(--live-level-color);
+    opacity: 0.45;
+}
+.threshold-live-track b {
+    position: absolute;
+    top: -5px;
+    width: 2px;
+    height: 16px;
+    background: var(--live-level-color);
+    transform: translateX(-1px);
+    border-radius: 1px;
+}
+.threshold-slider input[type='range'] {
+    position: relative;
+    z-index: 1;
+    display: block;
+    height: 28px;
+    appearance: none;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    cursor: pointer;
+}
+.threshold-slider input[type='range']:disabled {
+    cursor: not-allowed;
+}
+.threshold-slider input::-webkit-slider-runnable-track {
+    height: 8px;
+    background: transparent;
+}
+.threshold-slider input::-moz-range-track {
+    height: 8px;
+    background: transparent;
+}
+.threshold-slider input::-moz-range-progress {
+    background: transparent;
+}
+.threshold-slider input::-webkit-slider-thumb {
+    appearance: none;
+    height: 16px;
+    width: 16px;
+    margin-top: -4px;
+    border: 2px solid var(--content);
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+.threshold-slider input::-moz-range-thumb {
+    height: 12px;
+    width: 12px;
+    border: 2px solid var(--content);
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+.threshold-reading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px 12px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--muted);
+}
+.threshold-live-value {
+    font-variant-numeric: tabular-nums;
+}
+.threshold-comparison {
+    color: var(--live-level-color);
+}

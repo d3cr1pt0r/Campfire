@@ -46,7 +46,7 @@ const slider = (win, label, value) =>
 const prefs = (win) => js(win, `JSON.parse(localStorage.getItem('preferences'))`);
 const openSettings = async (win) => {
     await click(win, 'Settings');
-    await click(win, 'Voice & video');
+    await click(win, 'Audio & Video');
     await wait(
         win,
         process.env.AUDIO_BASELINE
@@ -224,6 +224,30 @@ app.whenReady()
             true,
         );
         await click(alice, 'Push-to-talk');
+        assert.equal(
+            await js(alice, "document.querySelector('.settings-header h2').textContent"),
+            'Audio & Video',
+        );
+        await click(alice, 'Start microphone test');
+        await wait(
+            alice,
+            "document.querySelector('.activation-threshold').classList.contains('is-measuring') && document.querySelector('.threshold-live-value').textContent.includes('dBFS')",
+            'live microphone reading is shown on the activation slider',
+        );
+        await slider(alice, 'Microphone volume', 0);
+        await wait(
+            alice,
+            "document.querySelector('.threshold-live-value').textContent.includes('Silent') && document.querySelector('.threshold-live-track b').style.left==='0%' && document.querySelector('.threshold-comparison').textContent==='Below threshold'",
+            'silence moves the live marker below the cutoff',
+        );
+        await slider(alice, 'Microphone volume', 1.5);
+        await slider(alice, 'Activation threshold', -60);
+        await wait(
+            alice,
+            "document.querySelector('.threshold-comparison').textContent==='Above threshold' && parseFloat(document.querySelector('.threshold-live-track b').style.left)>0",
+            'live microphone marker rises above a lower cutoff',
+        );
+        await slider(alice, 'Activation threshold', -35);
         await click(alice, 'Test speakers');
         await wait(
             alice,
@@ -244,6 +268,15 @@ app.whenReady()
             await pause(150);
             await fs.writeFile(
                 `${process.env.AUDIO_OUTPUT}/${theme}-settings-playback.png`,
+                (await alice.webContents.capturePage()).toPNG(),
+            );
+            await js(
+                alice,
+                "document.querySelector('.activation-threshold').scrollIntoView({block:'center'})",
+            );
+            await pause(150);
+            await fs.writeFile(
+                `${process.env.AUDIO_OUTPUT}/${theme}-activation-live.png`,
                 (await alice.webContents.capturePage()).toPNG(),
             );
         }
@@ -271,6 +304,12 @@ app.whenReady()
             (await alice.webContents.capturePage()).toPNG(),
         );
         alice.setContentSize(1280, 960);
+        await click(alice, 'Stop microphone test');
+        await wait(
+            alice,
+            "!document.querySelector('.threshold-live-track b') && document.querySelector('.threshold-live-value').textContent.includes('Start microphone test')",
+            'stopping the test clears the live marker',
+        );
         await closeSettings(alice);
         // Join a real two-client WebRTC call using the production composer and media pipeline.
         await js(

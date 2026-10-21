@@ -13,16 +13,24 @@ export function MicrophoneMeter({
     preferences,
     activeStream,
     onInputFallback,
+    onReading,
 }: {
     preferences: Preferences;
     activeStream: MediaStream | null;
     onInputFallback: () => void;
+    onReading?: (reading: MicrophoneReading | null) => void;
 }) {
     const [testing, setTesting] = useState(false),
         [reading, setReading] = useState<MicrophoneReading | null>(null),
         [error, setError] = useState('');
     const monitor = useRef<ReturnType<typeof createMicrophoneMonitor> | null>(null);
     const context = useRef<AudioContext | null>(null);
+    const readingCallback = useRef(onReading);
+    readingCallback.current = onReading;
+    const publishReading = (value: MicrophoneReading | null) => {
+        setReading(value);
+        readingCallback.current?.(value);
+    };
     const stopTest = () => {
         monitor.current?.stop();
         monitor.current = null;
@@ -30,7 +38,7 @@ export function MicrophoneMeter({
         context.current = null;
         if (previous) void previous.close().catch(() => {});
         setTesting(false);
-        setReading(null);
+        publishReading(null);
     };
     const startTest = () => {
         setError('');
@@ -60,7 +68,7 @@ export function MicrophoneMeter({
     useEffect(() => {
         if (!testing || !context.current) return;
         let active = true;
-        setReading(null);
+        publishReading(null);
         setError('');
         try {
             const current = createMicrophoneMonitor({
@@ -68,7 +76,7 @@ export function MicrophoneMeter({
                 activeStream,
                 context: context.current,
                 onReading: (value) => {
-                    if (active) setReading(value);
+                    if (active) publishReading(value);
                 },
                 onError: (reason) => {
                     if (active) {
