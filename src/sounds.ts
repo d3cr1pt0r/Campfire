@@ -19,7 +19,7 @@ export type SoundName =
     | 'shareStarted'
     | 'shareStopped';
 
-type Timbre = 'marimba' | 'kalimba' | 'bell' | 'soft';
+type Timbre = 'kalimba' | 'bell' | 'soft';
 // Pitches are MIDI note numbers (69 is A4, 440 Hz); times and decays are seconds.
 type Note = { at: number; pitch: number; decay: number; level: number; glide?: number };
 export type Sound = {
@@ -60,14 +60,6 @@ const timbres: Record<Timbre, { attack: number; partials: [number, number, numbe
             [2, 0.1, 0.6],
         ],
     },
-    marimba: {
-        attack: 0.002,
-        partials: [
-            [1, 1, 1],
-            [4, 0.28, 0.18],
-            [9.9, 0.06, 0.08],
-        ],
-    },
 };
 
 const trill = (start: number) =>
@@ -83,10 +75,11 @@ export const sounds: Record<SoundName, Sound> = {
         label: 'Direct message',
         when: 'A direct message arrives, or a message in a channel you follow for all messages.',
         group: 'Messages',
-        timbre: 'marimba',
+        timbre: 'kalimba',
+        // Low and short so a busy conversation stays easy to listen to.
         notes: [
-            { at: 0, pitch: 84, decay: 0.5, level: 0.9 },
-            { at: 0.09, pitch: 88, decay: 0.65, level: 1 },
+            { at: 0, pitch: 64, decay: 0.4, level: 1 },
+            { at: 0.1, pitch: 67, decay: 0.6, level: 1.2 },
         ],
     },
     mention: {
