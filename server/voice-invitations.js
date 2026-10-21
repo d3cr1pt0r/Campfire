@@ -46,6 +46,15 @@ export function registerVoiceInvitations({
         route((req, res) => {
             const channel = channelFor(req);
             check(typeof req.body.user === 'string', 'Choose a member');
+            const requestId = req.body.requestId;
+            check(
+                requestId === undefined ||
+                    (typeof requestId === 'string' &&
+                        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+                            requestId,
+                        )),
+                'Invalid invitation request',
+            );
             const target = get('SELECT * FROM users WHERE id=? AND banned=0', req.body.user);
             check(
                 target && target.id !== req.user.id && canJoin(target, channel),
@@ -58,19 +67,35 @@ export function registerVoiceInvitations({
                 'Cannot send a message to this member',
                 403,
             );
-            // Retried requests return the delivered message instead of sending a duplicate.
-            const existing = get(
-                `SELECT m.* FROM messages m JOIN voice_channel_invitations v ON v.message=m.id
+            // Each opening uses a new request ID. Retrying a send reuses its ID.
+            // Retain the old two-minute behavior for clients without request IDs.
+            const existing = requestId
+                ? get(
+                      `SELECT m.* FROM messages m JOIN voice_channel_invitations v ON v.message=m.id
+                WHERE m.id=? AND v.channel=? AND v.recipient=? AND m.author=?`,
+                      requestId,
+                      channel.id,
+                      target.id,
+                      req.user.id,
+                  )
+                : get(
+                      `SELECT m.* FROM messages m JOIN voice_channel_invitations v ON v.message=m.id
             WHERE v.channel=? AND v.recipient=? AND m.author=? AND m.created>? ORDER BY m.created DESC LIMIT 1`,
-                channel.id,
-                target.id,
-                req.user.id,
-                Date.now() - 120000,
-            );
+                      channel.id,
+                      target.id,
+                      req.user.id,
+                      Date.now() - 120000,
+                  );
             if (existing) {
                 res.json(messageView(existing));
                 return;
             }
+            if (requestId)
+                check(
+                    !get('SELECT id FROM messages WHERE id=?', requestId),
+                    'Invitation request already used',
+                    409,
+                );
             check(
                 ![...io.sockets.sockets.values()].some(
                     (socket) =>
@@ -79,7 +104,7 @@ export function registerVoiceInvitations({
                 'That member is already in this channel',
                 409,
             );
-            const id = randomUUID();
+            const id = requestId || randomUUID();
             transaction(db, () => {
                 run(
                     'INSERT INTO messages(id,room,author,body,created) VALUES(?,?,?,?,?)',

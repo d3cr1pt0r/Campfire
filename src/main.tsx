@@ -1,3 +1,4 @@
+import { CallInvite } from './CallInvite';
 import { VoiceChannelInvite } from './VoiceChannelInvite';
 import { ParticipantAudio, MediaContexts } from './ParticipantAudio';
 import { audioLevel, participantLevels, participantVolumeKey } from './audioPreferences';
@@ -783,13 +784,18 @@ function App() {
     }, [modal]);
     const modalContainer = useRef<HTMLElement>(null);
     const channelNameInput = useRef<HTMLInputElement>(null);
+    const inviteSearch = useRef<HTMLInputElement>(null);
     useDialog(
         modalContainer,
         () => {
             if (!busy) setModal(null);
         },
         !!modal,
-        modal?.startsWith('channel:') ? channelNameInput : undefined,
+        modal?.startsWith('channel:')
+            ? channelNameInput
+            : modal === 'invite-call'
+              ? inviteSearch
+              : undefined,
         modal || undefined,
     );
     const act = async (fn: () => Promise<unknown>) => {
@@ -2204,54 +2210,14 @@ function App() {
                                     permission={permission}
                                 />
                             ) : modal === 'invite-call' ? (
-                                <>
-                                    <h2 id="action-dialog-title">Invite a member to this call</h2>
-                                    <p>Members can accept or decline the invitation.</p>
-                                    {state.users
-                                        .filter((member) => member.id !== state.me.id)
-                                        .map((member) => {
-                                            const id = member.id;
-                                            const room = state.directCalls?.find(
-                                                (c) => c.id === call.channel,
-                                            );
-                                            return (
-                                                <button
-                                                    className="invite-member"
-                                                    key={id}
-                                                    disabled={
-                                                        busy ||
-                                                        !state.online.includes(id) ||
-                                                        !hasPermission(
-                                                            member,
-                                                            state.roles,
-                                                            'calls.join',
-                                                        ) ||
-                                                        room?.members.includes(id) ||
-                                                        room?.invited.includes(id)
-                                                    }
-                                                    onClick={() =>
-                                                        void act(async () => {
-                                                            await api(
-                                                                `/calls/${call.channel}/invite`,
-                                                                'POST',
-                                                                { user: id },
-                                                            );
-                                                            setModal(null);
-                                                        })
-                                                    }
-                                                >
-                                                    {displayName(user(id))} ·{' '}
-                                                    {room?.members.includes(id)
-                                                        ? 'In this call'
-                                                        : room?.invited.includes(id)
-                                                          ? 'Invited'
-                                                          : state.online.includes(id)
-                                                            ? 'Invite'
-                                                            : 'Offline'}
-                                                </button>
-                                            );
-                                        })}
-                                </>
+                                <CallInvite
+                                    state={state}
+                                    channel={call.channel}
+                                    api={api}
+                                    color={color}
+                                    disabled={busy}
+                                    searchRef={inviteSearch}
+                                />
                             ) : modal === 'switch' ? (
                                 <>
                                     <Server size={35} className="settings-hero" />

@@ -2111,13 +2111,13 @@ small {
 .call-invitations > div span {
     flex: 1;
 }
-.invite-member {
-    display: block;
-    width: 100%;
-    text-align: left;
-    padding: 12px;
-    margin: 6px 0;
-    background: #ffffff08;
+.call-invite-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.call-invite-picker > p {
+    margin: 0;
 }
 .chat-area {
     position: relative;

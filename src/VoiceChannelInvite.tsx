@@ -1,10 +1,17 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import {
+    useEffect,
+    useId,
+    useLayoutEffect,
+    useRef,
+    useState,
+    type ReactNode,
+    type RefObject,
+} from 'react';
 import { createPortal } from 'react-dom';
-import { Search, UserPlus, X, Check } from 'lucide-react';
+import { UserPlus, X } from 'lucide-react';
 import type { ApiClient } from './api';
 import type { Channel, State, User } from './types';
-import { Avatar } from './Avatar';
-import { displayName } from './profiles';
+import { InviteMembers } from './InviteMembers';
 import { useDialog } from './useDialog';
 
 export function VoiceChannelInvite({
@@ -22,13 +29,7 @@ export function VoiceChannelInvite({
     children: ReactNode;
     color: (user?: User) => string | undefined;
 }) {
-    const [open, setOpen] = useState(false),
-        [query, setQuery] = useState('');
-    const [eligible, setEligible] = useState<string[] | null>(null);
-    const [sent, setSent] = useState<Set<string>>(() => new Set());
-    const [sending, setSending] = useState<Set<string>>(() => new Set());
-    const [error, setError] = useState('');
-    const inFlight = useRef(new Set<string>());
+    const [open, setOpen] = useState(false);
     const trigger = useRef<HTMLButtonElement>(null),
         popup = useRef<HTMLDivElement>(null),
         search = useRef<HTMLInputElement>(null);
@@ -40,26 +41,6 @@ export function VoiceChannelInvite({
     }, [disabled]);
     useEffect(() => {
         if (!open) return;
-        const controller = new AbortController();
-        setQuery('');
-        setEligible(null);
-        setError('');
-        void api<{ users: string[]; sent: string[] }>(
-            `/voice-channels/${encodeURIComponent(channel.id)}/invitees`,
-            'GET',
-            undefined,
-            controller.signal,
-        )
-            .then((result) => {
-                if (!controller.signal.aborted) {
-                    setEligible(result.users);
-                    setSent((previous) => new Set([...previous, ...result.sent]));
-                }
-            })
-            .catch((reason) => {
-                if (!controller.signal.aborted)
-                    setError(reason.message || 'Could not load members.');
-            });
         const outside = (event: PointerEvent) => {
             if (
                 !popup.current?.contains(event.target as Node) &&
@@ -69,10 +50,9 @@ export function VoiceChannelInvite({
         };
         document.addEventListener('pointerdown', outside, true);
         return () => {
-            controller.abort();
             document.removeEventListener('pointerdown', outside, true);
         };
-    }, [open, channel.id, api]);
+    }, [open]);
     useLayoutEffect(() => {
         if (!open || !popup.current || !trigger.current) return;
         const place = () => {
@@ -95,37 +75,6 @@ export function VoiceChannelInvite({
             window.removeEventListener('scroll', scroll, true);
         };
     }, [open]);
-    const invite = async (user: string) => {
-        if (inFlight.current.has(user) || sent.has(user)) return;
-        inFlight.current.add(user);
-        setSending(new Set(inFlight.current));
-        setError('');
-        try {
-            await api(`/voice-channels/${encodeURIComponent(channel.id)}/invite`, 'POST', { user });
-            setSent((previous) => new Set([...previous, user]));
-        } catch (reason) {
-            setError(
-                reason instanceof Error
-                    ? reason.message
-                    : 'Invitation could not be sent. Try again.',
-            );
-        } finally {
-            inFlight.current.delete(user);
-            setSending(new Set(inFlight.current));
-        }
-    };
-    const term = query.trim().toLocaleLowerCase();
-    const users = state.users
-        .filter(
-            (user) =>
-                eligible?.includes(user.id) &&
-                `${displayName(user)} ${user.username}`.toLocaleLowerCase().includes(term),
-        )
-        .sort(
-            (a, b) =>
-                Number(state.online.includes(b.id)) - Number(state.online.includes(a.id)) ||
-                displayName(a).localeCompare(displayName(b)),
-        );
     return (
         <div className={`voice-channel-row ${open ? 'invite-open' : ''}`}>
             {children}
@@ -165,80 +114,71 @@ export function VoiceChannelInvite({
                                 <X size={17} />
                             </button>
                         </header>
-                        <label className="voice-invite-search">
-                            <Search size={16} />
-                            <input
-                                ref={search}
-                                type="search"
-                                value={query}
-                                placeholder="Search members"
-                                aria-label="Search members to invite"
-                                onChange={(event) => setQuery(event.target.value)}
-                            />
-                        </label>
-                        {error && (
-                            <p className="voice-invite-error" role="alert">
-                                {error}
-                            </p>
-                        )}
-                        <div className="voice-invite-list" aria-label="Members to invite">
-                            {eligible === null && !error ? (
-                                <p role="status">Loading members…</p>
-                            ) : !users.length ? (
-                                <p role="status">
-                                    {term
-                                        ? 'No matching members.'
-                                        : 'No members available to invite.'}
-                                </p>
-                            ) : (
-                                users.map((member) => {
-                                    const delivered = sent.has(member.id),
-                                        pending = sending.has(member.id),
-                                        joined = state.calls.some(
-                                            (call) =>
-                                                call.user === member.id &&
-                                                call.channel === channel.id,
-                                        );
-                                    return (
-                                        <div className="voice-invite-member" key={member.id}>
-                                            <Avatar user={member} color={color(member)} small />
-                                            <div className="voice-invite-identity">
-                                                <strong>{displayName(member)}</strong>
-                                                <small>
-                                                    @{member.username} ·{' '}
-                                                    {state.online.includes(member.id)
-                                                        ? 'Online'
-                                                        : 'Offline'}
-                                                </small>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                className={`secondary ${delivered ? 'invite-sent' : ''}`}
-                                                aria-label={`${delivered ? 'Invitation sent to' : 'Invite'} ${displayName(member)}`}
-                                                disabled={delivered || pending || joined}
-                                                onClick={() => void invite(member.id)}
-                                            >
-                                                {delivered ? (
-                                                    <>
-                                                        <Check size={13} />
-                                                        Sent
-                                                    </>
-                                                ) : pending ? (
-                                                    'Sending…'
-                                                ) : joined ? (
-                                                    'In channel'
-                                                ) : (
-                                                    'Invite'
-                                                )}
-                                            </button>
-                                        </div>
-                                    );
-                                })
-                            )}
-                        </div>
+                        <VoiceInviteMembers
+                            channel={channel}
+                            state={state}
+                            api={api}
+                            color={color}
+                            searchRef={search}
+                        />
                     </div>,
                     document.body,
                 )}
         </div>
+    );
+}
+
+function VoiceInviteMembers({
+    channel,
+    state,
+    api,
+    color,
+    searchRef,
+}: {
+    channel: Channel;
+    state: State;
+    api: ApiClient;
+    color: (user?: User) => string | undefined;
+    searchRef: RefObject<HTMLInputElement | null>;
+}) {
+    const [eligible, setEligible] = useState<string[] | null>(null);
+    const [error, setError] = useState('');
+    useEffect(() => {
+        const controller = new AbortController();
+        void api<{ users: string[] }>(
+            `/voice-channels/${encodeURIComponent(channel.id)}/invitees`,
+            'GET',
+            undefined,
+            controller.signal,
+        )
+            .then((result) => {
+                if (!controller.signal.aborted) setEligible(result.users);
+            })
+            .catch((reason) => {
+                if (!controller.signal.aborted)
+                    setError(reason.message || 'Could not load members.');
+            });
+        return () => controller.abort();
+    }, [channel.id, api]);
+    return (
+        <InviteMembers
+            state={state}
+            users={state.users.filter((user) => eligible?.includes(user.id))}
+            searchRef={searchRef}
+            color={color}
+            loading={eligible === null && !error}
+            error={error}
+            unavailable={(member) =>
+                state.calls.some((call) => call.user === member.id && call.channel === channel.id)
+                    ? 'In channel'
+                    : undefined
+            }
+            onInvite={(user, requestId) =>
+                api(`/voice-channels/${encodeURIComponent(channel.id)}/invite`, 'POST', {
+                    user,
+                    requestId,
+                })
+            }
+        />
     );
 }

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
 
@@ -121,4 +122,46 @@ test('invite lists and sends enforce each target channel permission without gran
     await api(owner, `/channels/${channel.id}`, 'DELETE');
     assert.equal((await api(member, `/messages/${invite.id}`)).voiceInvite.name, 'Restricted');
     await api(owner, `/voice-channels/${channel.id}/invitees`, 'GET', undefined, 403);
+});
+
+test('new invitation actions can resend immediately while retries remain idempotent', async (t) => {
+    const { api, owner, member, other } = await fixture(t);
+    const requestId = randomUUID();
+    const first = await api(owner, '/voice-channels/lounge/invite', 'POST', {
+        user: member.user.id,
+        requestId,
+    });
+    const retry = await api(owner, '/voice-channels/lounge/invite', 'POST', {
+        user: member.user.id,
+        requestId,
+    });
+    assert.equal(retry.id, first.id);
+    const second = await api(owner, '/voice-channels/lounge/invite', 'POST', {
+        user: member.user.id,
+        requestId: randomUUID(),
+    });
+    assert.notEqual(second.id, first.id);
+    const room = `dm:${[owner.user.id, member.user.id].sort().join(':')}`;
+    assert.equal((await api(member, `/messages?room=${encodeURIComponent(room)}`)).length, 2);
+    await api(
+        owner,
+        '/voice-channels/lounge/invite',
+        'POST',
+        { user: other.user.id, requestId },
+        409,
+    );
+    await api(
+        other,
+        '/voice-channels/lounge/invite',
+        'POST',
+        { user: member.user.id, requestId },
+        409,
+    );
+    await api(
+        owner,
+        '/voice-channels/lounge/invite',
+        'POST',
+        { user: member.user.id, requestId: 'invalid' },
+        400,
+    );
 });
