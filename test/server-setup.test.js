@@ -97,6 +97,28 @@ async function fixture(t) {
         await api('/roles/everyone/access', owner.token, 'PUT', {
             overrides: [{ channel: 'general', permission: 'messages.send', effect: 'deny' }],
         });
+        const category = await api('/categories', owner.token, 'POST', { name: 'Staff category' });
+        await api(`/categories/${category.id}`, owner.token, 'PATCH', { private: true });
+        await api(`/categories/${category.id}/access`, owner.token, 'PUT', {
+            role: role.id,
+            overrides: [
+                { permission: 'channels.view', effect: 'allow' },
+                { permission: 'messages.send', effect: 'deny' },
+            ],
+        });
+        await api(`/channels/${privateChannel.id}/category`, owner.token, 'PUT', {
+            category: category.id,
+            synced: true,
+        });
+        await api('/channels/lounge/category', owner.token, 'PUT', {
+            category: category.id,
+            synced: false,
+        });
+        await api(`/channels/${privateChannel.id}/place`, owner.token, 'POST', {
+            category: category.id,
+            target: 'lounge',
+            placement: 'after',
+        });
         const baseline = captureSetup(data, snapshot);
         return { root, data, snapshot, baseline, owner, member, banned };
     } finally {
@@ -174,15 +196,26 @@ test('reset uses real HTTP APIs, regenerates IDs, retains account setup and back
         const semantics = (s) => ({
             server: s.server,
             retention: s.retention,
-            channels: s.channels.map(({ key, overrides, ...c }) => ({
-                ...c,
-                overrides: overrides
-                    .map((o) => ({
-                        ...o,
-                        role: s.roles.find((r) => r.key === o.role).name,
-                    }))
-                    .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+            categories: (s.categories || []).map(({ key, overrides, ...category }) => ({
+                ...category,
+                overrides: overrides.map((entry) => ({
+                    ...entry,
+                    role: s.roles.find((role) => role.key === entry.role).name,
+                })),
             })),
+            channels: s.channels
+                .map(({ key, overrides, ...c }) => ({
+                    ...c,
+                    category:
+                        s.categories?.find((category) => category.key === c.category)?.name || null,
+                    overrides: overrides
+                        .map((o) => ({
+                            ...o,
+                            role: s.roles.find((r) => r.key === o.role).name,
+                        }))
+                        .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+                }))
+                .sort((a, b) => (a.category || '').localeCompare(b.category || '')),
             roles: s.roles.map(({ key, ...role }) => ({
                 ...role,
                 permissions: key === 'owner' ? permissionIds : role.permissions,
@@ -308,6 +341,7 @@ test('legacy snapshots still restore default channels and malformed channel refe
     await assert.rejects(resetSetup(f.data, f.snapshot), /invalid channels/);
     assert.deepEqual(readFileSync(path.join(f.data, 'campfire.sqlite')), before);
     delete f.baseline.channels;
+    delete f.baseline.categories;
     f.baseline.version = 1;
     writeFileSync(f.snapshot, JSON.stringify(f.baseline));
     await resetSetup(f.data, f.snapshot);

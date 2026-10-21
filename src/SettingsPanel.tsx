@@ -67,6 +67,7 @@ export function SettingsPanel({
     prefs,
     setPrefs,
     settingsTab,
+    channelSettingsTarget,
     setSettingsTab,
     setModal,
     logout,
@@ -91,6 +92,7 @@ export function SettingsPanel({
     prefs: Preferences;
     setPrefs: Dispatch<SetStateAction<Preferences>>;
     settingsTab: string;
+    channelSettingsTarget?: string;
     setSettingsTab: (tab: string) => void;
     setModal: (modal: string | null) => void;
     logout: () => Promise<void>;
@@ -1080,7 +1082,7 @@ export function SettingsPanel({
                         'channels.reorder',
                     ].some(permission) && (
                         <ChannelSettings
-                            create={(kind) => setModal(`channel:${kind}`)}
+                            initialSelection={channelSettingsTarget}
                             permission={permission}
                             state={state}
                             api={api}

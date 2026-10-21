@@ -16,6 +16,7 @@ import { registerMessages } from './messages.js';
 import { registerPolls } from './polls.js';
 import { forViewer } from './poll-view.js';
 import { registerProfiles } from './profiles.js';
+import { registerCategories } from './categories.js';
 import { registerAdministration } from './administration.js';
 import { registerCalls } from './calls.js';
 import { registerVoiceInvitations } from './voice-invitations.js';
@@ -195,6 +196,8 @@ export function createApp({
         route((req, res) => {
             const channels = access.channelsFor(req.user);
             const users = sessions.users();
+            const categories = access.categoriesFor(req.user);
+            const categoryIds = new Set(categories.map((category) => category.id));
             const visible = new Set(channels.map((channel) => channel.id));
             res.json({
                 me: sessions.publicUser(req.user),
@@ -238,6 +241,14 @@ export function createApp({
                     }),
                 ),
                 channels,
+                categories,
+                categoryPermissions:
+                    sessions.can(req.user, 'channels.access') ||
+                    sessions.can(req.user, 'roles.manage')
+                        ? all('SELECT * FROM category_overrides').filter((entry) =>
+                              categoryIds.has(entry.category),
+                          )
+                        : [],
                 channelPermissions:
                     sessions.can(req.user, 'roles.manage') ||
                     sessions.can(req.user, 'channels.access')
@@ -264,6 +275,7 @@ export function createApp({
     const messages = registerMessages({ ...context, polls });
     registerProfiles(context);
     registerAdministration({ ...context, enforceCalls: calls.enforceCalls });
+    registerCategories({ ...context, enforceCalls: calls.enforceCalls });
     const dist = fileURLToPath(new URL('../dist', import.meta.url));
     if (existsSync(dist)) {
         app.use(express.static(dist));

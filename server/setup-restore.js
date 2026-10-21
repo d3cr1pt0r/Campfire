@@ -28,6 +28,7 @@ export function mountSetupRestore({ app, db, get, run }, token) {
                 'POST /roles',
                 'GET /state',
                 'POST /channels',
+                'POST /categories',
                 'PATCH /profile',
                 'PATCH /presence',
                 'PATCH /retention/server',
@@ -36,7 +37,10 @@ export function mountSetupRestore({ app, db, get, run }, token) {
             ].includes(endpoint) &&
             !/^PATCH \/(?:roles\/[^/]+|users\/[^/]+\/roles)$/.test(endpoint) &&
             !/^(?:PATCH|DELETE) \/channels\/[^/]+(?:\/privacy)?$/.test(endpoint) &&
-            !/^POST \/channels\/[^/]+\/drop$/.test(endpoint) &&
+            !/^PATCH \/categories\/[^/]+$/.test(endpoint) &&
+            !/^PUT \/categories\/[^/]+\/access$/.test(endpoint) &&
+            !/^PUT \/channels\/[^/]+\/category$/.test(endpoint) &&
+            !/^POST \/channels\/[^/]+\/(?:drop|place)$/.test(endpoint) &&
             !/^PATCH \/retention\/channels\/[^/]+$/.test(endpoint) &&
             !/^POST \/users\/[^/]+\/access$/.test(endpoint)
         )

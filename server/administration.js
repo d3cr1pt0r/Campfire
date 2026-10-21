@@ -19,6 +19,8 @@ export function registerAdministration({
     all,
     run,
     requirePermission,
+    categoriesFor,
+    categoryPermissions,
     enforceCalls,
     canInChannel,
     can,
@@ -44,18 +46,42 @@ export function registerAdministration({
                 req.body.private === undefined || typeof req.body.private === 'boolean',
                 'Invalid private channel setting',
             );
-            run(
-                'INSERT INTO channels(id,name,kind,position,description,private) VALUES(?,?,?,?,?,?)',
-                id,
-                name,
-                req.body.kind,
-                get(
-                    'SELECT COALESCE(MAX(position),0)+1 position FROM channels WHERE kind=?',
+            let category = null;
+            if (req.body.category !== undefined && req.body.category !== null) {
+                requirePermission(req.user, 'channels.access');
+                category = get('SELECT * FROM categories WHERE id=?', req.body.category);
+                check(
+                    category &&
+                        categoryPermissions(req.user, category).includes('channels.view') &&
+                        categoriesFor(req.user).some((entry) => entry.id === category.id),
+                    'Category not found',
+                    404,
+                );
+                if (!req.user.owner)
+                    check(
+                        all(
+                            'SELECT permission FROM category_overrides WHERE category=? AND effect=?',
+                            category.id,
+                            'allow',
+                        ).every((entry) =>
+                            categoryPermissions(req.user, category).includes(entry.permission),
+                        ),
+                        'You cannot grant category permissions you do not have',
+                        403,
+                    );
+            }
+            transaction(db, () => {
+                run(
+                    'INSERT INTO channels(id,name,kind,position,description,private) VALUES(?,?,?,?,?,?)',
+                    id,
+                    name,
                     req.body.kind,
-                ).position,
-                req.body.kind === 'text' ? 'A place for everyday conversations.' : '',
-                Number(req.body.private === true),
-            );
+                    get('SELECT COALESCE(MAX(position),0)+1 position FROM channels').position,
+                    req.body.kind === 'text' ? 'A place for everyday conversations.' : '',
+                    Number(req.body.private === true),
+                );
+                if (category) run('INSERT INTO category_channels VALUES(?,?,1)', id, category.id);
+            });
             publishChannels();
             res.json({ id });
         }),
@@ -194,6 +220,11 @@ export function registerAdministration({
         '/api/channels/:id/privacy',
         route((req, res) => {
             const channel = managedChannel(req, 'channels.access');
+            check(
+                !get('SELECT 1 FROM category_channels WHERE channel=? AND synced=1', channel.id),
+                'This channel uses category permissions. Customize it first.',
+                409,
+            );
             check(typeof req.body.private === 'boolean', 'Invalid private channel setting');
             run('UPDATE channels SET private=? WHERE id=?', Number(req.body.private), channel.id);
             enforceCalls();
@@ -244,6 +275,11 @@ export function registerAdministration({
                 channel && canInChannel(req.user, channel, 'channels.view'),
                 'Channel not found',
                 404,
+            );
+            check(
+                !get('SELECT 1 FROM category_channels WHERE channel=? AND synced=1', channel.id),
+                'This channel uses category permissions. Customize it first.',
+                409,
             );
             check(
                 channelPermissionIds(channel.kind).includes(entry.permission) &&

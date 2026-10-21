@@ -1,8 +1,12 @@
-import { Toggle } from './forms';
-import { useRef, useState } from 'react';
-import { GripVertical, ChevronDown, Hash, Plus, Volume2 } from 'lucide-react';
-import type { State, Channel } from './types';
+import { useDialog } from './useDialog';
+import { useState, useRef } from 'react';
+import { Plus, Hash, Volume2, Folder, ArrowLeft, Lock, ShieldCheck } from 'lucide-react';
+import type { State, Channel, Category } from './types';
 import type { ApiClient } from './api';
+import { Toggle } from './forms';
+import { ChannelTree } from './ChannelTree';
+import { CategoryEditor } from './CategorySettings';
+import { ScopePermissions } from './ScopePermissions';
 import { RetentionField } from './RetentionSettings';
 import { settlePolicy } from '../shared/retention.js';
 
@@ -13,198 +17,363 @@ type Props = {
     busy: boolean;
     permission: (name: string) => boolean;
     act: (fn: () => Promise<unknown>) => Promise<void>;
-    create: (kind: 'text' | 'voice') => void;
+    initialSelection?: string;
 };
 export function ChannelSettings(props: Props) {
-    const [expanded, setExpanded] = useState<string | null>(null);
-    const [dragged, setDragged] = useState<string | null>(null);
-    const source = useRef<string | null>(null);
-    const [destination, setDestination] = useState<{
-        id: string;
-        placement: 'before' | 'after';
+    const { state, api, refresh, busy, act, permission } = props;
+    const [selected, setSelected] = useState(
+        props.initialSelection ||
+            (state.categories?.[0]
+                ? `category:${state.categories[0].id}`
+                : state.channels[0]?.id || ''),
+    );
+    const [tab, setTab] = useState<'overview' | 'permissions'>('permissions');
+    const [creating, setCreating] = useState(false);
+    const [dirty, setDirty] = useState(false);
+    const [pending, setPending] = useState<{
+        id?: string;
+        tab?: 'overview' | 'permissions';
     } | null>(null);
-    const [reordering, setReordering] = useState(false);
-    const resetDrag = () => {
-        source.current = null;
-        setDragged(null);
-        setDestination(null);
+    const dialog = useRef<HTMLElement | null>(null);
+    useDialog(dialog, () => setPending(null), !!pending);
+    const chooseTab = (value: 'overview' | 'permissions') => {
+        if (dirty && value !== tab) setPending({ tab: value });
+        else setTab(value);
     };
-    const drop = (sourceId: string, target: string, placement: 'before' | 'after' = 'before') => {
-        resetDrag();
-        setReordering(true);
-        void props.act(async () => {
-            try {
-                await props.api(`/channels/${sourceId}/drop`, 'POST', { target, placement });
-                await props.refresh();
-            } finally {
-                setReordering(false);
-            }
-        });
+    const channel = state.channels.find((entry) => entry.id === selected);
+    const category = state.categories?.find((entry) => `category:${entry.id}` === selected);
+    const parent = state.categories?.find((entry) => entry.id === channel?.category);
+    const scope = channel || category;
+    const select = (id: string) => {
+        if (dirty && id !== selected) {
+            setPending({ id });
+            return;
+        }
+        setSelected(id);
+        setCreating(false);
     };
     return (
-        <div className="channel-settings-list" aria-busy={reordering}>
-            <span className="sr-only" role="status">
-                {reordering
-                    ? 'Saving channel order…'
-                    : destination
-                      ? `Move ${props.state.channels.find((c) => c.id === dragged)?.name} ${destination.placement} ${props.state.channels.find((c) => c.id === destination.id)?.name}`
-                      : ''}
-            </span>
-            <p className="muted">
-                Select a channel to edit it. Manage access in Roles & permissions. Reorder using the
-                handles or Alt + Arrow keys. Permanent channels can be renamed and reordered.
-            </p>
-            {(['text', 'voice'] as const).map((kind) => {
-                const channels = props.state.channels.filter((channel) => channel.kind === kind);
-                return (
-                    <section key={kind} aria-label={`${kind} channel settings`}>
-                        <div className="channel-settings-heading">
-                            <h3>{kind === 'text' ? 'Text channels' : 'Voice channels'}</h3>
-                            {props.permission('channels.create') && (
-                                <button
-                                    type="button"
-                                    className="channel-settings-create"
-                                    aria-label={`Create ${kind} channel`}
-                                    disabled={props.busy || reordering}
-                                    onClick={() => props.create(kind)}
-                                >
-                                    <Plus size={14} />
-                                    New channel
-                                </button>
-                            )}
-                        </div>
-                        {channels.map((channel, index) => (
+        <div className="channel-workspace">
+            {pending && (
+                <div className="move-policy-backdrop">
+                    <section
+                        ref={dialog}
+                        className="move-policy-dialog"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="unsaved-permissions-title"
+                    >
+                        <h3 id="unsaved-permissions-title">Unsaved permission changes</h3>
+                        <p>Save your changes before leaving, or discard them to continue.</p>
+                        <button className="primary" onClick={() => setPending(null)}>
+                            Keep editing
+                        </button>
+                        <button
+                            onClick={() => {
+                                if (pending.id) setSelected(pending.id);
+                                if (pending.tab) setTab(pending.tab);
+                                setDirty(false);
+                                setPending(null);
+                            }}
+                        >
+                            Discard changes
+                        </button>
+                    </section>
+                </div>
+            )}
+            <div className="organizer-toolbar">
+                <div>
+                    <h3>Channels & categories</h3>
+                    <p>Drag to reorder or move channels into a category.</p>
+                </div>
+                {permission('channels.create') && (
+                    <button className="secondary" onClick={() => setCreating(!creating)}>
+                        <Plus size={15} />
+                        New
+                    </button>
+                )}
+            </div>
+            {creating && (
+                <CreateItem
+                    {...props}
+                    category={category || parent}
+                    done={(id) => {
+                        setCreating(false);
+                        setSelected(id);
+                    }}
+                />
+            )}
+            <div className="organizer-layout">
+                <div className="organizer-outline">
+                    <ChannelTree {...props} mode="settings" selected={selected} select={select} />
+                </div>
+                <section className="organizer-inspector" aria-label="Selected channel or category">
+                    {scope ? (
+                        <>
+                            <header className="inspector-heading">
+                                <span className="inspector-kind">
+                                    {category ? 'Category' : parent?.name || 'Uncategorized'}
+                                </span>
+                                <h3>
+                                    {category ? (
+                                        <Folder size={19} />
+                                    ) : channel?.kind === 'voice' ? (
+                                        <Volume2 size={19} />
+                                    ) : (
+                                        <Hash size={19} />
+                                    )}
+                                    {scope.name}
+                                </h3>
+                            </header>
                             <div
-                                className={`channel-settings-item ${dragged === channel.id ? 'is-dragging' : ''} ${destination?.id === channel.id ? `drop-${destination.placement}` : ''}`}
-                                key={channel.id}
-                                onDragOver={(event) => {
-                                    const id = source.current;
-                                    if (
-                                        props.busy ||
-                                        reordering ||
-                                        !id ||
-                                        id === channel.id ||
-                                        !channels.some((c) => c.id === id)
-                                    )
-                                        return;
-                                    event.preventDefault();
-                                    event.dataTransfer.dropEffect = 'move';
-                                    const rect = event.currentTarget
-                                        .querySelector('.channel-settings-summary')!
-                                        .getBoundingClientRect();
-                                    const placement =
-                                        event.clientY < rect.top + rect.height / 2
-                                            ? 'before'
-                                            : 'after';
-                                    setDestination((previous) =>
-                                        previous?.id === channel.id &&
-                                        previous.placement === placement
-                                            ? previous
-                                            : { id: channel.id, placement },
-                                    );
-                                }}
-                                onDragLeave={(event) => {
-                                    if (
-                                        !(event.relatedTarget instanceof Node) ||
-                                        !event.currentTarget.contains(event.relatedTarget)
-                                    )
-                                        setDestination((previous) =>
-                                            previous?.id === channel.id ? null : previous,
-                                        );
-                                }}
-                                onDrop={(event) => {
-                                    const id = source.current;
-                                    if (
-                                        props.busy ||
-                                        reordering ||
-                                        !id ||
-                                        id === channel.id ||
-                                        !channels.some((c) => c.id === id)
-                                    )
-                                        return;
-                                    event.preventDefault();
-                                    event.stopPropagation();
-                                    const rect = event.currentTarget
-                                        .querySelector('.channel-settings-summary')!
-                                        .getBoundingClientRect();
-                                    drop(
-                                        id,
-                                        channel.id,
-                                        event.clientY < rect.top + rect.height / 2
-                                            ? 'before'
-                                            : 'after',
-                                    );
-                                }}
+                                className="inspector-tabs"
+                                role="tablist"
+                                aria-label="Channel settings section"
                             >
-                                <div className="channel-settings-summary">
-                                    <button
-                                        className="channel-settings-expand"
-                                        aria-expanded={expanded === channel.id}
-                                        aria-controls={`channel-editor-${channel.id}`}
-                                        onClick={() =>
-                                            setExpanded(expanded === channel.id ? null : channel.id)
-                                        }
-                                    >
-                                        {kind === 'text' ? (
-                                            <Hash size={17} />
-                                        ) : (
-                                            <Volume2 size={17} />
+                                <button
+                                    role="tab"
+                                    aria-selected={tab === 'overview'}
+                                    onClick={() => chooseTab('overview')}
+                                >
+                                    Overview
+                                </button>
+                                <button
+                                    role="tab"
+                                    aria-selected={tab === 'permissions'}
+                                    onClick={() => chooseTab('permissions')}
+                                >
+                                    Permissions
+                                </button>
+                            </div>
+                            <div className="inspector-body" key={`${selected}:${tab}`}>
+                                {tab === 'overview' ? (
+                                    category ? (
+                                        <CategoryEditor {...props} category={category} />
+                                    ) : (
+                                        channel && <ChannelEditor {...props} channel={channel} />
+                                    )
+                                ) : (
+                                    <>
+                                        {category && (
+                                            <div className="permission-source-card">
+                                                <ShieldCheck size={19} />
+                                                <div>
+                                                    <strong>Shared category permissions</strong>
+                                                    <p>
+                                                        Applies to{' '}
+                                                        {
+                                                            state.channels.filter(
+                                                                (entry) =>
+                                                                    entry.category ===
+                                                                        category.id && entry.synced,
+                                                            ).length
+                                                        }{' '}
+                                                        synced channels. Channels marked Custom keep
+                                                        their own permissions.
+                                                    </p>
+                                                </div>
+                                            </div>
                                         )}
-                                        <span>{channel.name}</span>
-                                        {channel.protected && <small>Permanent</small>}
-                                        <ChevronDown size={16} />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="channel-drag-handle"
-                                        title="Drag to reorder · Alt + Arrow keys"
-                                        aria-label={`Reorder ${channel.name}`}
-                                        disabled={
-                                            props.busy ||
-                                            reordering ||
-                                            !props.permission('channels.reorder')
-                                        }
-                                        draggable={
-                                            !props.busy &&
-                                            !reordering &&
-                                            props.permission('channels.reorder')
-                                        }
-                                        onDragStart={(event) => {
-                                            source.current = channel.id;
-                                            setDragged(channel.id);
-                                            setExpanded(null);
-                                            event.dataTransfer.setData('text/plain', channel.id);
-                                            event.dataTransfer.effectAllowed = 'move';
-                                        }}
-                                        onDragEnd={resetDrag}
-                                        onKeyDown={(event) => {
-                                            if (
-                                                !event.altKey ||
-                                                !['ArrowUp', 'ArrowDown'].includes(event.key)
-                                            )
-                                                return;
-                                            event.preventDefault();
-                                            const next = index + (event.key === 'ArrowUp' ? -1 : 1);
-                                            if (next < 0 || next >= channels.length) return;
-                                            if (event.key === 'ArrowUp')
-                                                drop(channel.id, channels[next].id);
-                                            else drop(channel.id, channels[next].id, 'after');
-                                        }}
-                                    >
-                                        <GripVertical size={18} />
-                                    </button>
-                                </div>
-                                {expanded === channel.id && (
-                                    <div id={`channel-editor-${channel.id}`}>
-                                        <ChannelEditor {...props} channel={channel} />
-                                    </div>
+                                        {channel && (
+                                            <div
+                                                className={`permission-source-card ${channel.synced ? '' : 'custom'}`}
+                                            >
+                                                <ShieldCheck size={19} />
+                                                <div>
+                                                    <strong>
+                                                        {channel.synced
+                                                            ? `Synced with ${parent?.name}`
+                                                            : 'This channel has its own permissions'}
+                                                    </strong>
+                                                    <p>
+                                                        {channel.synced
+                                                            ? 'Every permission below comes from the category. Changes to the category apply here automatically.'
+                                                            : parent
+                                                              ? `Changes to ${parent.name} do not affect this channel.`
+                                                              : 'Start with server roles, then choose exceptions for this channel.'}
+                                                    </p>
+                                                    {parent && channel.synced && (
+                                                        <button
+                                                            className="permission-link"
+                                                            onClick={() =>
+                                                                select(`category:${parent.id}`)
+                                                            }
+                                                        >
+                                                            Edit {parent.name} permissions →
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {channel?.synced && parent ? (
+                                            <>
+                                                <ScopePermissions
+                                                    onDirtyChange={setDirty}
+                                                    {...props}
+                                                    scope={parent}
+                                                    category
+                                                    readOnly
+                                                />
+                                                {permission('channels.access') &&
+                                                    permission('channels.edit') && (
+                                                        <button
+                                                            className="secondary"
+                                                            disabled={busy}
+                                                            onClick={() =>
+                                                                void act(async () => {
+                                                                    await api(
+                                                                        `/channels/${channel.id}/category`,
+                                                                        'PUT',
+                                                                        {
+                                                                            category: parent.id,
+                                                                            synced: false,
+                                                                        },
+                                                                    );
+                                                                    await refresh();
+                                                                })
+                                                            }
+                                                        >
+                                                            Customize this channel’s permissions
+                                                        </button>
+                                                    )}
+                                            </>
+                                        ) : (
+                                            <>
+                                                {scope && permission('channels.access') && (
+                                                    <Toggle
+                                                        title={
+                                                            category
+                                                                ? 'Private category'
+                                                                : 'Private channel'
+                                                        }
+                                                        value={scope.private}
+                                                        disabled={busy}
+                                                        set={(value) =>
+                                                            void act(async () => {
+                                                                await api(
+                                                                    category
+                                                                        ? `/categories/${scope.id}`
+                                                                        : `/channels/${scope.id}/privacy`,
+                                                                    'PATCH',
+                                                                    { private: value },
+                                                                );
+                                                                await refresh();
+                                                            })
+                                                        }
+                                                    />
+                                                )}
+                                                <p className="privacy-help">
+                                                    <Lock size={12} />
+                                                    Private{' '}
+                                                    {category
+                                                        ? 'categories hide synced channels'
+                                                        : 'channels are hidden'}{' '}
+                                                    until a role allows View channels.
+                                                </p>
+                                                <ScopePermissions
+                                                    onDirtyChange={setDirty}
+                                                    {...props}
+                                                    scope={scope}
+                                                    category={!!category}
+                                                    readOnly={!permission('channels.access')}
+                                                />
+                                                {channel &&
+                                                    parent &&
+                                                    permission('channels.access') &&
+                                                    permission('channels.edit') && (
+                                                        <button
+                                                            className="secondary"
+                                                            disabled={busy}
+                                                            onClick={() =>
+                                                                void act(async () => {
+                                                                    await api(
+                                                                        `/channels/${channel.id}/category`,
+                                                                        'PUT',
+                                                                        {
+                                                                            category: parent.id,
+                                                                            synced: true,
+                                                                        },
+                                                                    );
+                                                                    await refresh();
+                                                                })
+                                                            }
+                                                        >
+                                                            Replace with {parent.name} permissions
+                                                        </button>
+                                                    )}
+                                            </>
+                                        )}
+                                    </>
                                 )}
                             </div>
-                        ))}
-                    </section>
-                );
-            })}
+                        </>
+                    ) : (
+                        <div className="organizer-empty">
+                            <ArrowLeft size={22} />
+                            <h3>Select a channel or category</h3>
+                            <p>Organize the tree on the left, then edit the selected item here.</p>
+                        </div>
+                    )}
+                </section>
+            </div>
         </div>
+    );
+}
+function CreateItem({
+    category,
+    done,
+    ...props
+}: Props & { category?: Category; done: (id: string) => void }) {
+    const [kind, setKind] = useState<'text' | 'voice' | 'category'>('text');
+    return (
+        <form
+            className="organizer-create"
+            onSubmit={(event) => {
+                event.preventDefault();
+                const name = new FormData(event.currentTarget).get('name');
+                void props.act(async () => {
+                    const result = await props.api<{ id: string }>(
+                        kind === 'category' ? '/categories' : '/channels',
+                        'POST',
+                        {
+                            name,
+                            kind,
+                            ...(kind !== 'category' && category ? { category: category.id } : {}),
+                        },
+                    );
+                    await props.refresh();
+                    done(kind === 'category' ? `category:${result.id}` : result.id);
+                });
+            }}
+        >
+            <label>
+                Create
+                <select
+                    value={kind}
+                    onChange={(event) => setKind(event.target.value as typeof kind)}
+                >
+                    <option value="text">Text channel</option>
+                    <option value="voice">Voice channel</option>
+                    <option value="category">Category</option>
+                </select>
+            </label>
+            <label>
+                Name
+                <input
+                    name="name"
+                    autoFocus
+                    maxLength={32}
+                    required
+                    placeholder={kind === 'category' ? 'Community' : 'new-channel'}
+                />
+            </label>
+            {category && kind !== 'category' && (
+                <small>Inside {category.name} · Uses category permissions</small>
+            )}
+            <button className="primary" disabled={props.busy}>
+                Create {kind === 'category' ? 'category' : 'channel'}
+            </button>
+        </form>
     );
 }
 
@@ -267,26 +436,6 @@ function ChannelEditor({
                     Save channel
                 </button>
             </form>
-            {permission('channels.access') && (
-                <div className="channel-privacy">
-                    <Toggle
-                        title="Private channel"
-                        value={channel.private}
-                        set={(value) =>
-                            void act(async () => {
-                                await api(`/channels/${channel.id}/privacy`, 'PATCH', {
-                                    private: value,
-                                });
-                                await refresh();
-                            })
-                        }
-                    />
-                    <p className="muted">
-                        Private channels are hidden by default, including from newly created roles.
-                        Grant View channels explicitly in Roles & permissions.
-                    </p>
-                </div>
-            )}
             {channel.kind === 'text' && (
                 <RetentionField
                     key={JSON.stringify([

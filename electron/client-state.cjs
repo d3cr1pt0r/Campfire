@@ -6,7 +6,10 @@ const internalKeys = new Set(['pins', 'http-origins']);
 const isAllowedKey = (key) =>
     typeof key === 'string' &&
     (allowedKeys.has(key) ||
-        (key.startsWith('direct-messages:') && key.length > 16 && key.length <= 2048));
+        (['direct-messages:', 'categories:'].some(
+            (prefix) => key.startsWith(prefix) && key.length > prefix.length + 1,
+        ) &&
+            key.length <= 2048));
 
 // Keep client state independent of the ephemeral renderer HTTP port.
 // On Windows Electron safeStorage encrypts this with the current user's DPAPI key.

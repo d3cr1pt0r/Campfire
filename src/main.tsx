@@ -35,6 +35,7 @@ import type { ChatScrollPosition } from './chatScroll';
 import { CallPanel, type CallAreaMode } from './CallPanel';
 import { ConversationSection } from './ConversationSection';
 import { MemberList } from './MemberList';
+import { ChannelGroups } from './ChannelGroups';
 import { DirectMessages } from './DirectMessages';
 import { SettingsPanel } from './SettingsPanel';
 import { SimpleForm, RoleForm, MessageForm } from './forms';
@@ -431,6 +432,7 @@ function App() {
     const [edit, setEdit] = useState<Message | null>(null),
         [devices, setDevices] = useState<MediaDeviceInfo[]>([]),
         [settingsTab, setSettingsTab] = useState('account');
+    const [channelSettingsTarget, setChannelSettingsTarget] = useState('');
     const fileInput = useRef<HTMLInputElement>(null),
         roomRef = useRef(room),
         stateRef = useRef(state),
@@ -1148,7 +1150,8 @@ function App() {
             },
         }));
     };
-    const openSettings = (tab = 'account') => {
+    const openSettings = (tab = 'account', target = '') => {
+        setChannelSettingsTarget(target);
         setSettingsTab(tab);
         setModal('settings');
     };
@@ -1603,6 +1606,175 @@ function App() {
                             <ChevronDown size={18} />
                         </button>
                         <div className="sidebar-content">
+                            <ChannelGroups
+                                api={api}
+                                refresh={refresh}
+                                permission={permission}
+                                key={`categories:${url}:${state.me.id}`}
+                                state={state}
+                                unread={unread}
+                                storage={storage}
+                                storageKey={`categories:${url}:${state.me.id}`}
+                                manage={
+                                    [
+                                        'channels.create',
+                                        'channels.edit',
+                                        'channels.reorder',
+                                        'channels.delete',
+                                        'channels.access',
+                                    ].some(permission)
+                                        ? (id) => openSettings('channels', id)
+                                        : undefined
+                                }
+                                renderChannel={(c) =>
+                                    c.kind === 'text' ? (
+                                        <button
+                                            key={c.id}
+                                            className={`nav-item channel ${room === c.id ? 'selected' : ''}`}
+                                            aria-current={room === c.id ? 'page' : undefined}
+                                            onClick={() => selectRoom(c.id)}
+                                        >
+                                            <Hash size={20} />
+                                            {c.name}
+                                            {unread[c.id] > 0 && (
+                                                <span className="count">{unread[c.id]}</span>
+                                            )}
+                                        </button>
+                                    ) : (
+                                        <React.Fragment key={c.id}>
+                                            <VoiceChannelInvite
+                                                channel={c}
+                                                state={state}
+                                                api={api}
+                                                color={color}
+                                                disabled={
+                                                    !connected ||
+                                                    !hasPermission(
+                                                        state.me,
+                                                        state.roles,
+                                                        'calls.join',
+                                                        c,
+                                                    ) ||
+                                                    !permission('calls.start')
+                                                }
+                                            >
+                                                <button
+                                                    className={`nav-item channel ${call.channel === c.id ? 'in-call' : ''}`}
+                                                    disabled={
+                                                        !hasPermission(
+                                                            state.me,
+                                                            state.roles,
+                                                            'calls.join',
+                                                            c,
+                                                        )
+                                                    }
+                                                    onClick={() => {
+                                                        if (call.channel !== c.id)
+                                                            void call.join(c.id);
+                                                        else toggleCallPanel();
+                                                    }}
+                                                >
+                                                    <Volume2 size={20} />
+                                                    {c.name}
+                                                    {call.channel === c.id && <Radio size={15} />}
+                                                </button>
+                                            </VoiceChannelInvite>
+                                            {state.calls
+                                                .filter((p) => p.channel === c.id)
+                                                .map((p) => (
+                                                    <ParticipantAudio
+                                                        key={p.socket}
+                                                        user={p.user}
+                                                        name={displayName(user(p.user))}
+                                                        self={p.user === state.me.id}
+                                                    >
+                                                        <Avatar
+                                                            user={user(p.user)}
+                                                            color={color(user(p.user))}
+                                                            small
+                                                            speaking={speaking.has(p.user)}
+                                                        />
+                                                        <span>{displayName(user(p.user))}</span>
+                                                        {p.deafened ? (
+                                                            <span
+                                                                title="Deafened"
+                                                                aria-label="Deafened"
+                                                            >
+                                                                <HeadphoneOff size={14} />
+                                                            </span>
+                                                        ) : p.muted ? (
+                                                            <span
+                                                                title="Microphone muted"
+                                                                aria-label="Microphone muted"
+                                                            >
+                                                                <MicOff size={14} />
+                                                            </span>
+                                                        ) : null}
+                                                        {p.camera && (
+                                                            <button
+                                                                className="voice-stream-indicator"
+                                                                title="Open camera call"
+                                                                onClick={() => {
+                                                                    if (
+                                                                        callAreaMode ===
+                                                                        'conversation'
+                                                                    )
+                                                                        setCallAreaMode('split');
+                                                                    if (call.channel !== p.channel)
+                                                                        void call.join(p.channel);
+                                                                    else call.setPanelOpen(true);
+                                                                }}
+                                                            >
+                                                                <Video size={14} /> CAM
+                                                            </button>
+                                                        )}
+                                                        {p.shareId && (
+                                                            <button
+                                                                className="voice-stream-indicator"
+                                                                title={
+                                                                    p.user === state.me.id
+                                                                        ? 'Open your screen share'
+                                                                        : `Watch ${displayName(user(p.user))}’s stream`
+                                                                }
+                                                                aria-label={
+                                                                    p.user === state.me.id
+                                                                        ? 'Open your screen share'
+                                                                        : `Watch ${displayName(user(p.user))}’s stream`
+                                                                }
+                                                                disabled={
+                                                                    !hasPermission(
+                                                                        state.me,
+                                                                        state.roles,
+                                                                        'calls.join',
+                                                                        c,
+                                                                    )
+                                                                }
+                                                                onClick={() => {
+                                                                    if (
+                                                                        callAreaMode ===
+                                                                        'conversation'
+                                                                    )
+                                                                        setCallAreaMode('split');
+                                                                    if (p.socket === socket?.id)
+                                                                        call.setPanelOpen(true);
+                                                                    else
+                                                                        call.watchStream(
+                                                                            p.channel,
+                                                                            p.socket,
+                                                                            p.shareId!,
+                                                                        );
+                                                                    setNavigationOpen(false);
+                                                                }}
+                                                            >
+                                                                <MonitorPlay size={14} /> LIVE
+                                                            </button>
+                                                        )}
+                                                    </ParticipantAudio>
+                                                ))}
+                                        </React.Fragment>
+                                    )
+                                }
+                            />
                             <DirectMessages
                                 key={`${url}:${state.me.id}`}
                                 storageKey={`direct-messages:${url}:${state.me.id}`}
@@ -1626,186 +1798,6 @@ function App() {
                                         );
                                 }}
                             />
-                            <div className="category">
-                                <span>TEXT CHANNELS</span>
-                                {[
-                                    'channels.create',
-                                    'channels.edit',
-                                    'channels.reorder',
-                                    'channels.delete',
-                                    'channels.access',
-                                ].some(permission) && (
-                                    <button
-                                        title="Manage channels"
-                                        aria-label="Text channel settings"
-                                        onClick={() => openSettings('channels')}
-                                    >
-                                        <Settings size={15} />
-                                    </button>
-                                )}
-                            </div>
-                            {state.channels
-                                .filter((c) => c.kind === 'text')
-                                .map((c) => (
-                                    <button
-                                        key={c.id}
-                                        className={`nav-item channel ${room === c.id ? 'selected' : ''}`}
-                                        aria-current={room === c.id ? 'page' : undefined}
-                                        onClick={() => selectRoom(c.id)}
-                                    >
-                                        <Hash size={20} />
-                                        {c.name}
-                                        {unread[c.id] > 0 && (
-                                            <span className="count">{unread[c.id]}</span>
-                                        )}
-                                    </button>
-                                ))}
-                            <div className="category">
-                                <span>VOICE CHANNELS</span>
-                                {[
-                                    'channels.create',
-                                    'channels.edit',
-                                    'channels.reorder',
-                                    'channels.delete',
-                                    'channels.access',
-                                ].some(permission) && (
-                                    <button
-                                        title="Manage voice channels"
-                                        aria-label="Voice channel settings"
-                                        onClick={() => openSettings('channels')}
-                                    >
-                                        <Settings size={15} />
-                                    </button>
-                                )}
-                            </div>
-                            {state.channels
-                                .filter((c) => c.kind === 'voice')
-                                .map((c) => (
-                                    <React.Fragment key={c.id}>
-                                        <VoiceChannelInvite
-                                            channel={c}
-                                            state={state}
-                                            api={api}
-                                            color={color}
-                                            disabled={
-                                                !connected ||
-                                                !hasPermission(
-                                                    state.me,
-                                                    state.roles,
-                                                    'calls.join',
-                                                    c,
-                                                ) ||
-                                                !permission('calls.start')
-                                            }
-                                        >
-                                            <button
-                                                className={`nav-item channel ${call.channel === c.id ? 'in-call' : ''}`}
-                                                disabled={
-                                                    !hasPermission(
-                                                        state.me,
-                                                        state.roles,
-                                                        'calls.join',
-                                                        c,
-                                                    )
-                                                }
-                                                onClick={() => {
-                                                    if (call.channel !== c.id) void call.join(c.id);
-                                                    else toggleCallPanel();
-                                                }}
-                                            >
-                                                <Volume2 size={20} />
-                                                {c.name}
-                                                {call.channel === c.id && <Radio size={15} />}
-                                            </button>
-                                        </VoiceChannelInvite>
-                                        {state.calls
-                                            .filter((p) => p.channel === c.id)
-                                            .map((p) => (
-                                                <ParticipantAudio
-                                                    key={p.socket}
-                                                    user={p.user}
-                                                    name={displayName(user(p.user))}
-                                                    self={p.user === state.me.id}
-                                                >
-                                                    <Avatar
-                                                        user={user(p.user)}
-                                                        color={color(user(p.user))}
-                                                        small
-                                                        speaking={speaking.has(p.user)}
-                                                    />
-                                                    <span>{displayName(user(p.user))}</span>
-                                                    {p.deafened ? (
-                                                        <span
-                                                            title="Deafened"
-                                                            aria-label="Deafened"
-                                                        >
-                                                            <HeadphoneOff size={14} />
-                                                        </span>
-                                                    ) : p.muted ? (
-                                                        <span
-                                                            title="Microphone muted"
-                                                            aria-label="Microphone muted"
-                                                        >
-                                                            <MicOff size={14} />
-                                                        </span>
-                                                    ) : null}
-                                                    {p.camera && (
-                                                        <button
-                                                            className="voice-stream-indicator"
-                                                            title="Open camera call"
-                                                            onClick={() => {
-                                                                if (callAreaMode === 'conversation')
-                                                                    setCallAreaMode('split');
-                                                                if (call.channel !== p.channel)
-                                                                    void call.join(p.channel);
-                                                                else call.setPanelOpen(true);
-                                                            }}
-                                                        >
-                                                            <Video size={14} /> CAM
-                                                        </button>
-                                                    )}
-                                                    {p.shareId && (
-                                                        <button
-                                                            className="voice-stream-indicator"
-                                                            title={
-                                                                p.user === state.me.id
-                                                                    ? 'Open your screen share'
-                                                                    : `Watch ${displayName(user(p.user))}’s stream`
-                                                            }
-                                                            aria-label={
-                                                                p.user === state.me.id
-                                                                    ? 'Open your screen share'
-                                                                    : `Watch ${displayName(user(p.user))}’s stream`
-                                                            }
-                                                            disabled={
-                                                                !hasPermission(
-                                                                    state.me,
-                                                                    state.roles,
-                                                                    'calls.join',
-                                                                    c,
-                                                                )
-                                                            }
-                                                            onClick={() => {
-                                                                if (callAreaMode === 'conversation')
-                                                                    setCallAreaMode('split');
-                                                                if (p.socket === socket?.id)
-                                                                    call.setPanelOpen(true);
-                                                                else
-                                                                    call.watchStream(
-                                                                        p.channel,
-                                                                        p.socket,
-                                                                        p.shareId!,
-                                                                    );
-                                                                setNavigationOpen(false);
-                                                            }}
-                                                        >
-                                                            <MonitorPlay size={14} /> LIVE
-                                                        </button>
-                                                    )}
-                                                </ParticipantAudio>
-                                            ))}
-                                    </React.Fragment>
-                                ))}
                             {(state.directCalls || [])
                                 .filter((c) => c.members.includes(state.me.id))
                                 .map((c) => (
@@ -2292,6 +2284,7 @@ function App() {
                                             );
                                     }}
                                     setPrefs={setPrefs}
+                                    channelSettingsTarget={channelSettingsTarget}
                                     settingsTab={settingsTab}
                                     setSettingsTab={setSettingsTab}
                                     setModal={setModal}

@@ -74,6 +74,13 @@ CREATE TABLE IF NOT EXISTS invitations(
 );
 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
+-- Categories are additive: existing channels remain uncategorized with their current access.
+CREATE TABLE IF NOT EXISTS categories(
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    private INTEGER NOT NULL DEFAULT 0 CHECK(private IN (0,1))
+);
 CREATE TABLE IF NOT EXISTS channels(
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -104,6 +111,20 @@ CREATE TABLE IF NOT EXISTS channel_overrides(
     permission TEXT NOT NULL,
     effect TEXT NOT NULL CHECK(effect IN ('allow','deny')),
     PRIMARY KEY(channel,role,permission)
+);
+
+CREATE TABLE IF NOT EXISTS category_channels(
+    channel TEXT PRIMARY KEY REFERENCES channels(id) ON DELETE CASCADE,
+    category TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+    synced INTEGER NOT NULL DEFAULT 1 CHECK(synced IN (0,1))
+);
+CREATE INDEX IF NOT EXISTS category_membership ON category_channels(category);
+CREATE TABLE IF NOT EXISTS category_overrides(
+    category TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+    role TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    permission TEXT NOT NULL,
+    effect TEXT NOT NULL CHECK(effect IN ('allow','deny')),
+    PRIMARY KEY(category,role,permission)
 );
 
 -- since starts the retention period: when the message was posted, or last unpinned.

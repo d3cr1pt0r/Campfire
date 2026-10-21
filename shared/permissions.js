@@ -30,11 +30,11 @@ export const permissionGroups = [
     {
         name: 'Channels',
         permissions: [
-            ['channels.edit', 'Edit channel names and descriptions'],
-            ['channels.create', 'Create channels'],
-            ['channels.reorder', 'Reorder channels'],
-            ['channels.delete', 'Delete channels'],
-            ['channels.access', 'Manage channel permission overrides'],
+            ['channels.edit', 'Edit channels and categories'],
+            ['channels.create', 'Create channels and categories'],
+            ['channels.reorder', 'Reorder channels and categories'],
+            ['channels.delete', 'Delete channels and categories'],
+            ['channels.access', 'Manage channel and category permissions'],
         ],
     },
     {

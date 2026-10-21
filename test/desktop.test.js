@@ -78,6 +78,11 @@ test('desktop saves DM navigation separately for each server and account', () =>
         assert.equal(reopened.get('direct-messages:https://chat.example.com:bob'), null);
         assert.equal(reopened.get('direct-messages:https://other.example.com:alice'), null);
         assert.equal(reopened.set('direct-messages:', '{}'), false);
+        const categoryKey = 'categories:https://chat.example.com:alice';
+        assert.equal(reopened.set(categoryKey, '["community"]'), true);
+        assert.equal(createClientState(directory, plain).get(categoryKey), '["community"]');
+        assert.equal(reopened.get('categories:https://chat.example.com:bob'), null);
+        assert.equal(reopened.set('categories:', '[]'), false);
         assert.equal(reopened.set('unrecognized-key', '{}'), false);
         assert.equal(reopened.set(key, 'invalid-json'), false);
         assert.equal(reopened.set(key, 'x'.repeat(16385)), false);

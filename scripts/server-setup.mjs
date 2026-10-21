@@ -93,6 +93,28 @@ function validateSnapshot(value) {
         )
             throw new Error('Snapshot contains invalid channels or role references');
     }
+    if (value.categories !== undefined) {
+        const categories = value.categories;
+        if (
+            !Array.isArray(categories) ||
+            new Set(categories.map((c) => c.key)).size !== categories.length ||
+            categories.some(
+                (c) =>
+                    typeof c.key !== 'string' ||
+                    typeof c.name !== 'string' ||
+                    typeof c.private !== 'boolean' ||
+                    !Array.isArray(c.overrides) ||
+                    c.overrides.some((o) => !keys.includes(o.role)),
+            ) ||
+            value.channels?.some(
+                (c) =>
+                    c.category != null &&
+                    (!categories.some((entry) => entry.key === c.category) ||
+                        typeof c.synced !== 'boolean'),
+            )
+        )
+            throw new Error('Snapshot contains invalid categories or membership references');
+    }
     return value;
 }
 
@@ -138,8 +160,33 @@ export function captureSetup(dataDir, snapshotFile) {
             created: new Date().toISOString(),
             server,
             retention: captureRetention(get),
-            channels: all('SELECT * FROM channels ORDER BY kind,position,rowid').map((c) => ({
+            categories: get("SELECT 1 FROM sqlite_master WHERE type='table' AND name='categories'")
+                ? all('SELECT * FROM categories ORDER BY position,rowid').map((category) => ({
+                      key: category.id,
+                      name: category.name,
+                      private: !!category.private,
+                      overrides: all(
+                          'SELECT role,permission,effect FROM category_overrides WHERE category=? ORDER BY role,permission',
+                          category.id,
+                      ).map((row) => ({ ...row })),
+                  }))
+                : [],
+            channels: all('SELECT * FROM channels ORDER BY position,rowid').map((c) => ({
                 key: c.id,
+                ...(get(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='category_channels'",
+                )
+                    ? (() => {
+                          const membership = get(
+                              'SELECT * FROM category_channels WHERE channel=?',
+                              c.id,
+                          );
+                          return {
+                              category: membership?.category ?? null,
+                              synced: !!membership?.synced,
+                          };
+                      })()
+                    : { category: null, synced: false }),
                 name: c.name,
                 kind: c.kind,
                 protected: !!c.protected,
@@ -276,7 +323,40 @@ export async function populateSetup(snapshot, api) {
             }
         }
     }
-    return { accounts, roles, channels };
+    const categories = new Map();
+    for (const category of snapshot.categories || []) {
+        const { id } = await api('POST', '/categories', { name: category.name });
+        categories.set(category.key, id);
+        await api('PATCH', `/categories/${id}`, { private: category.private });
+        for (const role of snapshot.roles) {
+            const overrides = category.overrides
+                .filter((entry) => entry.role === role.key)
+                .map(({ role: ignored, ...entry }) => entry);
+            if (overrides.length)
+                await api('PUT', `/categories/${id}/access`, {
+                    role: roles.get(role.key),
+                    overrides,
+                });
+        }
+    }
+    for (const channel of snapshot.channels || [])
+        if (channel.category)
+            await api('PUT', `/channels/${channels.get(channel.key)}/category`, {
+                category: categories.get(channel.category),
+                synced: channel.synced,
+            });
+    // Restore the visible mixed text/voice order within each category (and the top level).
+    const previousInCategory = new Map();
+    for (const channel of snapshot.channels || []) {
+        const category = channel.category ? categories.get(channel.category) : null;
+        await api('POST', `/channels/${channels.get(channel.key)}/place`, {
+            category,
+            placement: 'after',
+            target: previousInCategory.get(category) ?? null,
+        });
+        previousInCategory.set(category, channels.get(channel.key));
+    }
+    return { accounts, roles, channels, categories };
 }
 
 function verifyDatabase(filename, snapshot) {
@@ -298,6 +378,11 @@ function verifyDatabase(filename, snapshot) {
             db.prepare('SELECT COUNT(*) n FROM channels').get().n !== snapshot.channels.length
         )
             throw new Error('Restored channel count does not match the snapshot');
+        if (
+            snapshot.categories &&
+            db.prepare('SELECT COUNT(*) n FROM categories').get().n !== snapshot.categories.length
+        )
+            throw new Error('Restored category count does not match the snapshot');
         for (const table of [
             'messages',
             'attachments',

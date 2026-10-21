@@ -18,7 +18,22 @@ export type Role = {
     position: number;
     permissions: string[];
 };
+export type Category = {
+    id: string;
+    name: string;
+    position: number;
+    private: boolean;
+    permissions: string[];
+};
+export type CategoryAccess = {
+    category: string;
+    role: string;
+    permission: string;
+    effect: 'allow' | 'deny';
+};
 export type Channel = {
+    category?: string | null;
+    synced?: boolean;
     id: string;
     name: string;
     kind: 'text' | 'voice';
@@ -57,6 +72,8 @@ export type State = {
     users: User[];
     roles: Role[];
     channels: Channel[];
+    categories?: Category[];
+    categoryPermissions?: CategoryAccess[];
     channelPermissions: ChannelAccess[];
     online: string[];
     presence: Record<string, PresenceStatus>;

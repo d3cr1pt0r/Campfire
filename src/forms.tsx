@@ -12,10 +12,12 @@ export function Toggle({
     title,
     value,
     set,
+    disabled = false,
 }: {
     title: string;
     value: boolean;
     set: (v: boolean) => void;
+    disabled?: boolean;
 }) {
     return (
         <label className="toggle-label">
@@ -23,6 +25,7 @@ export function Toggle({
             <button
                 type="button"
                 role="switch"
+                disabled={disabled}
                 aria-checked={value}
                 aria-label={title}
                 className={`toggle ${value ? 'on' : ''}`}
@@ -144,7 +147,9 @@ export function RoleForm({
                       .filter(
                           (entry) =>
                               entry.role === 'everyone' &&
-                              state.channels.some((channel) => channel.id === entry.channel),
+                              state.channels.some(
+                                  (channel) => channel.id === entry.channel && !channel.synced,
+                              ),
                       )
                       .map((entry) => [`${entry.channel}:${entry.permission}`, entry.effect]),
               ),
@@ -303,6 +308,11 @@ export function RoleForm({
                     hidden={tab !== 'channels'}
                 >
                     <h3>Channel overrides</h3>
+                    <p className="permission-sync-notice">
+                        Category permissions are managed in Channels settings. Synced channels
+                        follow their category; switch to custom permissions there to edit a channel
+                        separately.
+                    </p>
                     <p className="muted">
                         Inherit uses the selected roles’ server permissions. Default applies only
                         when no roles are selected. Role allows win over other role denies. Private
@@ -314,37 +324,42 @@ export function RoleForm({
                             <summary>
                                 {channel.kind === 'text' ? '#' : '◖'} {channel.name}
                                 {channel.private ? ' · Private' : ''}
+                                {channel.synced
+                                    ? ` · Synced with ${state.categories?.find((entry) => entry.id === channel.category)?.name}`
+                                    : ''}
                             </summary>
-                            {channelPermissionIds(channel.kind).map((id) => (
-                                <label className="override-row" key={id}>
-                                    <span>
-                                        {
-                                            permissionGroups
-                                                .flatMap((group) => group.permissions)
-                                                .find(([key]) => key === id)?.[1]
-                                        }
-                                    </span>
-                                    <select
-                                        aria-label={`${role?.name || 'New role'} ${id} in ${channel.name}`}
-                                        value={effect(channel.id, id)}
-                                        disabled={
-                                            busy ||
-                                            !mayAccess ||
-                                            (!state.me.owner && !channel.permissions.includes(id))
-                                        }
-                                        onChange={(event) =>
-                                            setOverrides({
-                                                ...overrides,
-                                                [`${channel.id}:${id}`]: event.target.value,
-                                            })
-                                        }
-                                    >
-                                        <option value="inherit">Inherit</option>
-                                        <option value="allow">Allow</option>
-                                        <option value="deny">Deny</option>
-                                    </select>
-                                </label>
-                            ))}
+                            {!channel.synced &&
+                                channelPermissionIds(channel.kind).map((id) => (
+                                    <label className="override-row" key={id}>
+                                        <span>
+                                            {
+                                                permissionGroups
+                                                    .flatMap((group) => group.permissions)
+                                                    .find(([key]) => key === id)?.[1]
+                                            }
+                                        </span>
+                                        <select
+                                            aria-label={`${role?.name || 'New role'} ${id} in ${channel.name}`}
+                                            value={effect(channel.id, id)}
+                                            disabled={
+                                                busy ||
+                                                !mayAccess ||
+                                                (!state.me.owner &&
+                                                    !channel.permissions.includes(id))
+                                            }
+                                            onChange={(event) =>
+                                                setOverrides({
+                                                    ...overrides,
+                                                    [`${channel.id}:${id}`]: event.target.value,
+                                                })
+                                            }
+                                        >
+                                            <option value="inherit">Inherit</option>
+                                            <option value="allow">Allow</option>
+                                            <option value="deny">Deny</option>
+                                        </select>
+                                    </label>
+                                ))}
                         </details>
                     ))}
                 </div>
