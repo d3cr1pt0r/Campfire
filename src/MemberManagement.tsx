@@ -55,7 +55,7 @@ export function MemberManagement({
         `${displayName(user)} ${user.username}`.toLowerCase().includes(query.trim().toLowerCase()),
     );
     return (
-        <section className="server-members">
+        <section className="account-section server-members" aria-label="Manage members">
             <h3>Manage members</h3>
             <p className="field-help">Select a member to manage their account and server access.</p>
             <label>

@@ -67,7 +67,7 @@ service and copying it, including WAL files.
 
 The attachment storage quota limits the total bytes of stored attachments, with
 accounting and checks inside message transactions. The owner sets it under
-Settings → Storage in whole gigabytes; until then `MAX_STORED_UPLOAD_BYTES`
+Settings → Server settings in whole gigabytes; until then `MAX_STORED_UPLOAD_BYTES`
 (default **1073741824**, 1 GiB) applies. Deleting a message, or its expiry under
 the retention period, releases its quota through attachment cascade triggers.
 Above the limit, existing uploads and downloads remain intact, text messages

@@ -136,7 +136,6 @@ export function SettingsPanel({
         ['audio', 'Audio & Video'],
         ['notifications', 'Notifications'],
         ['server', 'Server settings'],
-        ...(permission('server.edit') ? [['storage', 'Storage']] : []),
         ['roles', 'Roles & permissions'],
         ...([
             'channels.edit',
@@ -835,112 +834,124 @@ export function SettingsPanel({
                     </>
                 )}
                 {settingsTab === 'server' && (
-                    <>
+                    <div className="account-settings server-settings">
                         <p className="muted">
                             Server management follows your combined role permissions. Role
                             assignments and member moderation can be delegated independently.
                         </p>
-                        <form
-                            onSubmit={(e) => {
-                                e.preventDefault();
-                                const f = new FormData(e.currentTarget);
-                                void act(async () => {
-                                    await api('/settings', 'PATCH', {
-                                        name: f.get('name'),
-                                        maxUploadBytes:
-                                            Number(f.get('maxUploadMegabytes')) * 1024 * 1024,
+                        <section className="account-section" aria-label="General">
+                            <h3>General</h3>
+                            <form
+                                className="server-general-form"
+                                onSubmit={(e) => {
+                                    e.preventDefault();
+                                    const f = new FormData(e.currentTarget);
+                                    void act(async () => {
+                                        await api('/settings', 'PATCH', {
+                                            name: f.get('name'),
+                                            maxUploadBytes:
+                                                Number(f.get('maxUploadMegabytes')) * 1024 * 1024,
+                                        });
+                                        notify('Server settings saved.');
                                     });
-                                    notify('Server settings saved.');
-                                });
-                            }}
-                        >
-                            <label>
-                                Server name
-                                <input
-                                    name="name"
-                                    defaultValue={state.name}
-                                    required
-                                    maxLength={64}
-                                    disabled={!permission('server.edit')}
-                                />
-                            </label>
-                            <label>
-                                Maximum upload size (MB)
-                                <input
-                                    key={state.maxUploadBytes}
-                                    name="maxUploadMegabytes"
-                                    type="number"
-                                    min={1}
-                                    max={uploadLimitCeiling / (1024 * 1024)}
-                                    step={1}
-                                    required
-                                    defaultValue={state.maxUploadBytes / (1024 * 1024)}
-                                    disabled={!permission('server.edit')}
-                                />
-                                <small className="field-help">
-                                    Combined size of the files in one message, up to{' '}
-                                    {formatUploadLimit(uploadLimitCeiling)}. Larger uploads use more
-                                    server memory and storage.
-                                </small>
-                            </label>
-                            <button
-                                className="primary"
-                                disabled={!permission('server.edit') || busy}
+                                }}
                             >
-                                Save changes
-                            </button>
-                        </form>
-                        {permission('server.edit') && (
-                            <>
                                 <label>
-                                    Server icon
+                                    Server name
                                     <input
-                                        type="file"
-                                        accept="image/png,image/jpeg,image/webp,image/gif"
-                                        disabled={busy}
-                                        onChange={(event) => {
-                                            const file = event.target.files?.[0];
-                                            event.target.value = '';
-                                            if (file) setServerIconFile(file);
-                                        }}
+                                        name="name"
+                                        defaultValue={state.name}
+                                        required
+                                        maxLength={64}
+                                        disabled={!permission('server.edit')}
                                     />
                                 </label>
-                                {state.icon && (
-                                    <>
-                                        <img
-                                            className="server-icon-preview"
-                                            src={`data:image/png;base64,${state.icon}`}
-                                            alt="Server icon"
-                                        />
-                                        <button
+                                <label>
+                                    Maximum upload size (MB)
+                                    <input
+                                        key={state.maxUploadBytes}
+                                        name="maxUploadMegabytes"
+                                        type="number"
+                                        min={1}
+                                        max={uploadLimitCeiling / (1024 * 1024)}
+                                        step={1}
+                                        required
+                                        defaultValue={state.maxUploadBytes / (1024 * 1024)}
+                                        disabled={!permission('server.edit')}
+                                    />
+                                    <small className="field-help">
+                                        Combined size of the files in one message, up to{' '}
+                                        {formatUploadLimit(uploadLimitCeiling)}. Larger uploads use
+                                        more server memory and storage.
+                                    </small>
+                                </label>
+                                <button
+                                    className="primary"
+                                    disabled={!permission('server.edit') || busy}
+                                >
+                                    Save changes
+                                </button>
+                            </form>
+                            {permission('server.edit') && (
+                                <div className="server-icon-settings">
+                                    <label>
+                                        Server icon
+                                        <input
+                                            type="file"
+                                            accept="image/png,image/jpeg,image/webp,image/gif"
                                             disabled={busy}
-                                            onClick={() => {
-                                                const bytes = Uint8Array.from(
-                                                    atob(state.icon!),
-                                                    (character) => character.charCodeAt(0),
-                                                );
-                                                setServerIconFile(
-                                                    new File([bytes], 'server-icon.png', {
-                                                        type: 'image/png',
-                                                    }),
-                                                );
+                                            onChange={(event) => {
+                                                const file = event.target.files?.[0];
+                                                event.target.value = '';
+                                                if (file) setServerIconFile(file);
                                             }}
-                                        >
-                                            Adjust server icon
-                                        </button>
-                                        <button
-                                            disabled={busy}
-                                            onClick={() =>
-                                                void act(async () => {
-                                                    await api('/settings', 'PATCH', { icon: null });
-                                                    await refresh();
-                                                })
-                                            }
-                                        >
-                                            Remove icon
-                                        </button>
-                                    </>
-                                )}
+                                        />
+                                    </label>
+                                    {state.icon && (
+                                        <div className="account-picture-actions">
+                                            <img
+                                                className="server-icon-preview"
+                                                src={`data:image/png;base64,${state.icon}`}
+                                                alt="Server icon"
+                                            />
+                                            <button
+                                                className="secondary"
+                                                disabled={busy}
+                                                onClick={() => {
+                                                    const bytes = Uint8Array.from(
+                                                        atob(state.icon!),
+                                                        (character) => character.charCodeAt(0),
+                                                    );
+                                                    setServerIconFile(
+                                                        new File([bytes], 'server-icon.png', {
+                                                            type: 'image/png',
+                                                        }),
+                                                    );
+                                                }}
+                                            >
+                                                Adjust server icon
+                                            </button>
+                                            <button
+                                                className="secondary"
+                                                disabled={busy}
+                                                onClick={() =>
+                                                    void act(async () => {
+                                                        await api('/settings', 'PATCH', {
+                                                            icon: null,
+                                                        });
+                                                        await refresh();
+                                                    })
+                                                }
+                                            >
+                                                Remove icon
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </section>
+                        {permission('server.edit') && (
+                            <section className="account-section" aria-label="Features">
                                 <h3>Features</h3>
                                 <Toggle
                                     title="Show who reacted to messages"
@@ -976,7 +987,17 @@ export function SettingsPanel({
                                     this off for a more formal server. Members keep their choice,
                                     and it returns if you turn frames back on.
                                 </p>
-                            </>
+                            </section>
+                        )}
+                        {permission('server.edit') && (
+                            <StorageSettings
+                                state={state}
+                                api={api}
+                                act={act}
+                                busy={busy}
+                                refresh={refresh}
+                                notify={notify}
+                            />
                         )}
                         {(state.me.owner ||
                             permission('invitations.create') ||
@@ -1006,55 +1027,49 @@ export function SettingsPanel({
                                 notify={notify}
                             />
                         )}
-                        <label>
-                            Server address
-                            <input readOnly value={url} />
-                        </label>
-                        {(pin || reportedPin) && (
-                            <div className="server-identity">
-                                <span className="field-help">
-                                    {pin
-                                        ? 'Server fingerprint, verified by this device'
-                                        : 'Server fingerprint reported by the server. Compare it with the server console before sharing it.'}
-                                </span>
-                                <code className="fingerprint">
-                                    {formatFingerprint(pin || reportedPin!)}
-                                </code>
-                            </div>
-                        )}
-                        {pin && reportedPin && pin !== reportedPin && (
-                            <p role="alert">
-                                The server reports a different fingerprint than the one this device
-                                verified. Don’t share links until the owner has checked the server.
+                        <section className="account-section" aria-label="Server address">
+                            <h3>Server address</h3>
+                            <label>
+                                Address
+                                <input readOnly value={url} />
+                            </label>
+                            {(pin || reportedPin) && (
+                                <div className="server-identity">
+                                    <span className="field-help">
+                                        {pin
+                                            ? 'Server fingerprint, verified by this device'
+                                            : 'Server fingerprint reported by the server. Compare it with the server console before sharing it.'}
+                                    </span>
+                                    <code className="fingerprint">
+                                        {formatFingerprint(pin || reportedPin!)}
+                                    </code>
+                                </div>
+                            )}
+                            {pin && reportedPin && pin !== reportedPin && (
+                                <p role="alert">
+                                    The server reports a different fingerprint than the one this
+                                    device verified. Don’t share links until the owner has checked
+                                    the server.
+                                </p>
+                            )}
+                            <button className="secondary" disabled={busy} onClick={copyServerLink}>
+                                Copy server link
+                            </button>
+                            <p className="muted">
+                                {pin
+                                    ? 'The link includes the server fingerprint, so the desktop app verifies this server from the first connection.'
+                                    : url.startsWith('http:')
+                                      ? 'This is a local development server; its connection is not encrypted.'
+                                      : window.campfire
+                                        ? 'This server uses a certificate from a trusted authority, so its link needs no fingerprint.'
+                                        : 'Links copied in a browser don’t include the fingerprint. Copy links from the desktop app or the server console so new members are protected from their first connection.'}
                             </p>
-                        )}
-                        <button className="secondary" disabled={busy} onClick={copyServerLink}>
-                            Copy server link
-                        </button>
-                        <p className="muted">
-                            {pin
-                                ? 'The link includes the server fingerprint, so the desktop app verifies this server from the first connection.'
-                                : url.startsWith('http:')
-                                  ? 'This is a local development server; its connection is not encrypted.'
-                                  : window.campfire
-                                    ? 'This server uses a certificate from a trusted authority, so its link needs no fingerprint.'
-                                    : 'Links copied in a browser don’t include the fingerprint. Copy links from the desktop app or the server console so new members are protected from their first connection.'}
-                        </p>
-                        <p className="muted">
-                            For calls over the internet, your server may need a relay service. See
-                            the hosting guide.
-                        </p>
-                    </>
-                )}
-                {settingsTab === 'storage' && permission('server.edit') && (
-                    <StorageSettings
-                        state={state}
-                        api={api}
-                        act={act}
-                        busy={busy}
-                        refresh={refresh}
-                        notify={notify}
-                    />
+                            <p className="muted">
+                                For calls over the internet, your server may need a relay service.
+                                See the hosting guide.
+                            </p>
+                        </section>
+                    </div>
                 )}
                 {settingsTab === 'channels' &&
                     [

@@ -3817,3 +3817,46 @@ label,
     margin-left: 0;
     color: var(--muted);
 }
+/* Server settings use the same cards as My account. */
+.server-general-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px 14px;
+    align-items: start;
+}
+.server-settings label .field-help {
+    display: block;
+    margin-bottom: 0;
+    font-weight: 400;
+}
+.server-general-form > button {
+    grid-column: 1 / -1;
+    justify-self: end;
+}
+.server-settings form > .primary,
+.server-settings .retention-field > .primary {
+    padding: 7px 12px;
+    min-height: 34px;
+    font-size: 12px;
+}
+.storage-settings form {
+    display: grid;
+    gap: 8px;
+    justify-items: start;
+}
+.storage-settings form > label {
+    justify-self: stretch;
+}
+.account-section .retention-field:last-child {
+    margin-bottom: 0;
+}
+.server-icon-settings {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+}
+@media (max-width: 600px) {
+    .server-general-form {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

@@ -66,7 +66,7 @@ export function RegistrationSettings({
         }
     };
     return (
-        <section className="registration-settings" aria-label="Who can join">
+        <section className="account-section registration-settings" aria-label="Who can join">
             <h3>Who can join</h3>
             <p className="muted">
                 Only the owner changes registration mode. Invitations can be delegated separately.

@@ -39,7 +39,7 @@ export function createApp({
     // Tests replace the network fetcher so they never contact real sites.
     linkPreviewFetcher,
     trustProxy = false,
-    // The attachment storage quota until the owner sets one in Settings → Storage.
+    // The attachment storage quota until the owner sets one in Settings → Server settings.
     maxStoredUploadBytes = 1024 * 1024 * 1024,
     setupCode,
     setupRestoreToken,

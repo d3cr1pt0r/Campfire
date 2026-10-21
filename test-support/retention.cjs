@@ -4,6 +4,9 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 app.setPath('userData', process.env.RETENTION_PROFILE);
 app.commandLine.appendSwitch('disable-gpu');
+// Keep rendering when other windows cover this one, so images near the viewport still load.
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.on('window-all-closed', () => {});
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const errors = [];
@@ -93,7 +96,7 @@ app.whenReady()
             'message with files arrives',
         );
         // Images load once near the viewport; bring this one into view.
-        await js("document.querySelector('.attachment-image').scrollIntoView()");
+        await js(`${article('Two files')}.querySelector('.attachment-image').scrollIntoView()`);
         await wait(
             `${article('Two files')}.textContent.includes('notes.txt') && !!${article('Two files')}.querySelector('img')`,
             'uploaded file and image preview appear',
@@ -195,9 +198,9 @@ app.whenReady()
         await js(`${article('Words that stay')}.scrollIntoView({block:'center'})`);
         await shot('placeholder');
 
-        // The owner's Storage tab.
+        // Retention and storage in the owner's Server settings.
         await click('Settings');
-        await click('Storage');
+        await click('Server settings');
         await wait(
             "(document.querySelector('.storage-overview')?.textContent||'').includes('used by attachments')",
             'storage overview loads',
@@ -230,6 +233,20 @@ app.whenReady()
         );
         await shot('confirm');
         await click('Cancel');
+        // With equal periods, switching text keeping off and on once duplicated fields.
+        await api('/retention/dm', 'PATCH', { retention: 30, applyNow: true });
+        const fields = (checked) =>
+            `document.querySelectorAll('.retention-field select').length===2 && [...document.querySelectorAll('.retention-field > label:not(.toggle-label)')].map(node=>node.firstChild.textContent.trim()).join()==='Channels,Direct messages' && document.querySelector('[role=switch][aria-label="Keep messages permanently, only remove files"]').getAttribute('aria-checked')==='${checked}'`;
+        await wait(fields(true), 'equal periods show one field each');
+        await click('Keep messages permanently, only remove files');
+        await wait(
+            "[...document.querySelectorAll('button')].some(node=>node.textContent.trim()==='Schedule change')",
+            'switching text keeping off asks first',
+        );
+        await click('Schedule change');
+        await wait(fields(false), 'switching text keeping off keeps one field each');
+        await click('Keep messages permanently, only remove files');
+        await wait(fields(true), 'switching it back on keeps one field each');
         assert.deepEqual(errors, []);
         console.log('PASS no renderer errors');
         clearTimeout(deadline);

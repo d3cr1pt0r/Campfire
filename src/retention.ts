@@ -39,7 +39,7 @@ const periodName = (step: RetentionStep) =>
     step.keepText && step.days !== Infinity
         ? `Files · ${formatRetention(step.days)}`
         : formatRetention(step.days);
-// The period in force, as the Storage tab lists it.
+// The period in force, as the storage overview lists it.
 export const periodLabel = (schedule: RetentionStep[], now: number) =>
     periodName(stepAt(schedule, now));
 

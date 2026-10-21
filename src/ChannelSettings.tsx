@@ -300,7 +300,7 @@ function ChannelEditor({
                     label="Keep messages"
                     help={
                         permission('server.edit')
-                            ? 'How long messages here are kept. The server default is set in Storage.'
+                            ? 'How long messages here are kept. The server default is set in Server settings.'
                             : 'How long messages here are kept. Only members who can edit server settings change this.'
                     }
                     policy={channel}

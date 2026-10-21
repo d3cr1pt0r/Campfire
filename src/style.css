@@ -3403,11 +3403,6 @@ button:disabled {
     padding: 8px 0;
 }
 
-.registration-settings {
-    margin-block: 24px;
-    padding-block: 20px;
-    border-block: 1px solid var(--border);
-}
 .registration-settings .settings-card {
     margin-block: 12px;
     padding: 14px;
