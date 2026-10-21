@@ -7,6 +7,7 @@ import { useConversation } from './useConversation';
 import type { ApiClient } from './api';
 import type { AppSocket, Message, State, User } from './types';
 import type { PollTarget } from './PollDialog';
+import { appendText } from './richText';
 import { validateFileSelection } from '../shared/uploads.js';
 import { emojis } from '../shared/emojis.js';
 
@@ -29,6 +30,8 @@ type Props = {
     openPoll: (target: PollTarget) => void;
     connected: boolean;
     onClose: () => void;
+    formattingToolbar: boolean;
+    setFormattingToolbar: (shown: boolean) => void;
 };
 
 export function ThreadPanel(props: Props) {
@@ -134,15 +137,15 @@ export function ThreadPanel(props: Props) {
             setError((e as Error).message);
         }
     };
-    const pasteDesktop = async (textarea: HTMLTextAreaElement) => {
+    const pasteDesktop = async (target: HTMLElement, insertText: (text: string) => void) => {
         if (!window.campfire?.readClipboardAttachments || !canPost) return;
         try {
             const clipboard = await window.campfire.readClipboardAttachments();
             if (
                 !mounted.current ||
-                !textarea.isConnected ||
-                textarea.disabled ||
-                document.activeElement !== textarea
+                !target.isConnected ||
+                !target.isContentEditable ||
+                document.activeElement !== target
             )
                 return;
             if (clipboard.files.length)
@@ -152,7 +155,7 @@ export function ThreadPanel(props: Props) {
                             new File([new Uint8Array(file.data)], file.name, { type: file.type }),
                     ),
                 );
-            else if (clipboard.text) document.execCommand('insertText', false, clipboard.text);
+            else if (clipboard.text) insertText(clipboard.text);
         } catch (e) {
             if (mounted.current) setError((e as Error).message);
         }
@@ -289,7 +292,7 @@ export function ThreadPanel(props: Props) {
                                     key={emoji}
                                     disabled={!canPost || busy}
                                     onClick={() => {
-                                        setDraft((text) => (text + emoji).slice(0, 4000));
+                                        setDraft((text) => appendText(text, emoji));
                                         setPicker(false);
                                     }}
                                 >
@@ -326,6 +329,8 @@ export function ThreadPanel(props: Props) {
                 onPoll={(question) =>
                     props.openPoll({ room: parent.room, thread: parent.id, question })
                 }
+                formattingToolbar={props.formattingToolbar}
+                setFormattingToolbar={props.setFormattingToolbar}
             />
         </aside>
     );

@@ -27,7 +27,8 @@ import { ConversationSection } from './ConversationSection';
 import { MemberList } from './MemberList';
 import { DirectMessages } from './DirectMessages';
 import { SettingsPanel } from './SettingsPanel';
-import { SimpleForm, RoleForm } from './forms';
+import { SimpleForm, RoleForm, MessageForm } from './forms';
+import { appendText } from './richText';
 import { Avatar, initials } from './Avatar';
 import { createStateRefresh } from './stateRefresh';
 import { useDialog } from './useDialog';
@@ -366,6 +367,9 @@ function App() {
         [typing, setTyping] = useState<Record<string, number>>({}),
         [unread, setUnread] = useState<Record<string, number>>({});
     const [prefs, setPrefs] = useState<Preferences>(initialPreferences);
+    const formattingToolbar = prefs.formattingToolbar !== false;
+    const setFormattingToolbar = (shown: boolean) =>
+        setPrefs((previous) => ({ ...previous, formattingToolbar: shown }));
     useLayoutEffect(
         () =>
             watchTheme(
@@ -866,16 +870,16 @@ function App() {
             notify((error as Error).message);
         }
     };
-    const pasteDesktop = async (textarea: HTMLTextAreaElement) => {
+    const pasteDesktop = async (target: HTMLElement, insertText: (text: string) => void) => {
         if (!window.campfire?.readClipboardAttachments || !canPost) return;
         const targetRoom = room;
         const account = state?.me.id;
         try {
             const clipboard = await window.campfire.readClipboardAttachments();
             if (
-                !textarea.isConnected ||
-                document.activeElement !== textarea ||
-                textarea.disabled ||
+                !target.isConnected ||
+                document.activeElement !== target ||
+                !target.isContentEditable ||
                 roomRef.current !== targetRoom ||
                 stateRef.current?.me.id !== account
             )
@@ -887,12 +891,7 @@ function App() {
                             new File([new Uint8Array(file.data)], file.name, { type: file.type }),
                     ),
                 );
-            } else if (clipboard.text) {
-                // Chromium's text-edit command preserves selection, undo, and
-                // the same React input path as ordinary typing.
-                textarea.focus();
-                document.execCommand('insertText', false, clipboard.text);
-            }
+            } else if (clipboard.text) insertText(clipboard.text);
         } catch (error) {
             notify((error as Error).message);
         }
@@ -2021,6 +2020,8 @@ function App() {
                                     user={user}
                                     placeholder={`Message ${dmUser ? '@' + displayName(dmUser) : '#' + (currentChannel?.name || 'general')}`}
                                     onPoll={(question) => openPoll({ room, question })}
+                                    formattingToolbar={formattingToolbar}
+                                    setFormattingToolbar={setFormattingToolbar}
                                 />
                             </section>
                             {thread && thread.room === room && roomVisible && (
@@ -2044,6 +2045,8 @@ function App() {
                                     openPoll={openPoll}
                                     connected={connected}
                                     onClose={() => setThread(null)}
+                                    formattingToolbar={formattingToolbar}
+                                    setFormattingToolbar={setFormattingToolbar}
                                 />
                             )}
                             {members && !thread && (
@@ -2226,11 +2229,10 @@ function App() {
                             ) : modal === 'edit' ? (
                                 <>
                                     <h2 id="action-dialog-title">Edit message</h2>
-                                    <SimpleForm
-                                        label="Message"
-                                        initialValue={edit?.body}
-                                        submit="Save message"
+                                    <MessageForm
+                                        initialValue={edit?.body || ''}
                                         busy={busy}
+                                        formattingToolbar={formattingToolbar}
                                         onSubmit={(value) =>
                                             act(async () => {
                                                 await api(`/messages/${edit?.id}`, 'PATCH', {
@@ -2294,7 +2296,7 @@ function App() {
                                                 key={emoji}
                                                 onClick={() => {
                                                     if (modal === 'emoji') {
-                                                        setDraft((d) => d + emoji);
+                                                        setDraft((d) => appendText(d, emoji));
                                                         setModal(null);
                                                     } else
                                                         void act(async () => {

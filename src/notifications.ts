@@ -1,6 +1,7 @@
 import type { ChannelNotificationMode, Message, Preferences, User } from './types';
 import { mentionSegments } from './mentions.ts';
 import { messageParts } from './messageText.ts';
+import { messageTexts } from './messageFormat.ts';
 import { rememberedDevice } from './devices.ts';
 import { audioLevel } from './audioPreferences.ts';
 
@@ -40,10 +41,13 @@ export function shouldNotify(
     if (mode === 'all') return true;
     return (
         prefs.mentionNotifications !== false &&
-        messageParts(message.body).some(
-            (part) =>
-                !part.link &&
-                mentionSegments(part.text, users).some((segment) => segment.user?.id === me.id),
+        // Mentions inside code are quoted text, not pings.
+        messageTexts(message.body).some((text) =>
+            messageParts(text).some(
+                (part) =>
+                    !part.link &&
+                    mentionSegments(part.text, users).some((segment) => segment.user?.id === me.id),
+            ),
         )
     );
 }

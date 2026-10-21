@@ -1,7 +1,9 @@
 import { mentionSegments } from './mentions';
 import type { User } from './types';
 import { messageParts } from './messageText';
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { parseMessage, type Inline, type List } from './messageFormat';
+import { createContext, Fragment, useContext, useEffect, useRef, useState } from 'react';
+import { Check, Copy } from 'lucide-react';
 import { ExpandedImage } from './ExpandedImage';
 import { useImage } from './useImage';
 export const AssetContext = createContext({ url: '', token: '' });
@@ -99,15 +101,8 @@ export function Emoji({
         <>{value}</>
     );
 }
-export function ChatContent({
-    text,
-    custom,
-    users = [],
-}: {
-    text: string;
-    users?: User[];
-    custom: { id: string; name: string }[];
-}) {
+type Custom = { id: string; name: string }[];
+function PlainText({ text, custom, users }: { text: string; users: User[]; custom: Custom }) {
     return (
         <>
             {messageParts(text).map((part, i) =>
@@ -134,5 +129,110 @@ export function ChatContent({
                 ),
             )}
         </>
+    );
+}
+function InlineContent({
+    content,
+    custom,
+    users,
+}: {
+    content: Inline[];
+    users: User[];
+    custom: Custom;
+}) {
+    return content.map((part, i) => {
+        if (part.type === 'text')
+            return <PlainText key={i} text={part.text} users={users} custom={custom} />;
+        if (part.type === 'code')
+            return (
+                <code key={i} className="message-code">
+                    {part.text}
+                </code>
+            );
+        const Tag = part.type === 'bold' ? 'strong' : part.type === 'italic' ? 'em' : 's';
+        return (
+            <Tag key={i}>
+                <InlineContent content={part.children} users={users} custom={custom} />
+            </Tag>
+        );
+    });
+}
+function CodeBlock({ text }: { text: string }) {
+    const [copied, setCopied] = useState(false);
+    return (
+        <div className="message-code-block">
+            <pre>
+                <code>{text}</code>
+            </pre>
+            <button
+                type="button"
+                className="code-copy"
+                title={copied ? 'Copied' : 'Copy code'}
+                aria-label={copied ? 'Copied' : 'Copy code'}
+                onClick={async () => {
+                    try {
+                        await navigator.clipboard.writeText(text);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 1500);
+                    } catch {
+                        /* Clipboard access can be refused; the code remains selectable. */
+                    }
+                }}
+            >
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+            </button>
+        </div>
+    );
+}
+// Consecutive lines share one pre-wrapped run; lists, quotes and code blocks break lines themselves.
+export function ChatContent({
+    text,
+    custom,
+    users = [],
+}: {
+    text: string;
+    users?: User[];
+    custom: Custom;
+}) {
+    const lines = (rows: Inline[][]) =>
+        rows.map((row, i) => (
+            <Fragment key={i}>
+                {i > 0 && '\n'}
+                <InlineContent content={row} users={users} custom={custom} />
+            </Fragment>
+        ));
+    return parseMessage(text).map((block, i, blocks) => {
+        if (block.type === 'paragraph')
+            return (
+                <Fragment key={i}>
+                    {blocks[i - 1]?.type === 'paragraph' && '\n'}
+                    <InlineContent content={block.content} users={users} custom={custom} />
+                </Fragment>
+            );
+        if (block.type === 'code') return <CodeBlock key={i} text={block.text} />;
+        if (block.type === 'quote')
+            return (
+                <blockquote key={i} className="message-quote">
+                    {lines(block.lines)}
+                </blockquote>
+            );
+        return <MessageList key={i} list={block} users={users} custom={custom} />;
+    });
+}
+function MessageList({ list, custom, users }: { list: List; users: User[]; custom: Custom }) {
+    const items = list.items.map((item, index) => (
+        <li key={index}>
+            <InlineContent content={item.content} users={users} custom={custom} />
+            {item.children.map((child, childIndex) => (
+                <MessageList key={childIndex} list={child} users={users} custom={custom} />
+            ))}
+        </li>
+    ));
+    return list.type === 'bullets' ? (
+        <ul className="message-list">{items}</ul>
+    ) : (
+        <ol className="message-list" start={list.start}>
+            {items}
+        </ol>
     );
 }

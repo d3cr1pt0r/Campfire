@@ -125,6 +125,7 @@ export type Preferences = {
     participantVolumes?: Record<string, { voice: number; stream: number }>;
     pushToTalk: boolean;
     sounds: boolean;
+    formattingToolbar?: boolean;
 };
 
 export type MediaRole = 'voice' | 'video' | 'streamAudio';

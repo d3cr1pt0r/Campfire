@@ -424,14 +424,14 @@ export function ChatMessage({
                         {Boolean(m.pinned) && <Pin size={12} />}
                     </span>
                     {!m.poll && !m.voiceInvite && (
-                        <span className="message-text">
+                        <div className="message-text rich-text">
                             <ChatContent
                                 users={state.users}
                                 text={m.body}
                                 custom={state.emojis || []}
                             />
                             {Boolean(m.edited) && <small className="edited"> (edited)</small>}
-                        </span>
+                        </div>
                     )}
                 </div>
                 {m.voiceInvite && (

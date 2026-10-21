@@ -214,7 +214,7 @@ app.whenReady()
         await js(a, 'document.querySelector(".role-editor").requestSubmit()');
         await wait(
             b,
-            'document.querySelector(".chat-area .composer textarea")?.disabled',
+            'document.querySelector(".chat-area .composer .rich-input")?.getAttribute("contenteditable") === "false"',
             'channel send denial updates second client',
         );
         assert.equal(
@@ -356,7 +356,7 @@ app.whenReady()
         await api(alice, `/users/${bob.user.id}/roles`, 'PATCH', { roles: [restricted.id] });
         await wait(
             b,
-            'document.querySelector(".chat-area .composer textarea")?.disabled',
+            'document.querySelector(".chat-area .composer .rich-input")?.getAttribute("contenteditable") === "false"',
             'explicit restricted role replaces Default sending',
         );
         await wait(
@@ -370,7 +370,7 @@ app.whenReady()
         );
         await wait(
             b,
-            'document.querySelector(".chat-area .composer textarea") && !document.querySelector(".chat-area .composer textarea").disabled',
+            'document.querySelector(".chat-area .composer .rich-input")?.getAttribute("contenteditable") === "true"',
             'clearing the last role restores Default sending',
         );
         assert.deepEqual((await api(bob, '/state')).me.roles, []);
