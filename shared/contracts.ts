@@ -82,6 +82,19 @@ export type Message = {
         user: string;
         emoji: string;
     }[];
+    // The question is the message body.
+    poll?: Poll;
+};
+// Shaped per member: counts appear once they have voted or voting has closed, and
+// voters only in public polls.
+export type Poll = {
+    multiple: boolean;
+    anonymous: boolean;
+    ends: number;
+    ended: boolean;
+    total: number;
+    mine: string[];
+    answers: { id: string; text: string; count?: number; voters?: string[] }[];
 };
 export type ChannelNotificationMode = 'all' | 'mentions' | 'muted';
 export type Preferences = {

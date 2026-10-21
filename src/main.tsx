@@ -16,6 +16,7 @@ import { connectionHint, pinsFor, trustStep } from './serverTrust';
 import { version as appVersion } from '../package.json';
 import { ChatComposer } from './ChatComposer';
 import { ThreadPanel } from './ThreadPanel';
+import { PollDialog, type PollTarget } from './PollDialog';
 import { ChatMessages } from './ChatMessages';
 import type { ChatScrollPosition } from './chatScroll';
 import { CallPanel, type CallAreaMode } from './CallPanel';
@@ -394,6 +395,11 @@ function App() {
     const [draggingFiles, setDraggingFiles] = useState(false);
     const dragDepth = useRef(0);
     const { modal, setModal, resetModals } = useModalNavigation();
+    const [pollTarget, setPollTarget] = useState<PollTarget | null>(null);
+    const openPoll = (target: PollTarget) => {
+        setPollTarget(target);
+        setModal('poll');
+    };
     const [edit, setEdit] = useState<Message | null>(null),
         [devices, setDevices] = useState<MediaDeviceInfo[]>([]),
         [settingsTab, setSettingsTab] = useState('account');
@@ -723,8 +729,10 @@ function App() {
         if (!roomVisible)
             setModal((previous) =>
                 previous === 'edit' ||
+                previous === 'poll' ||
                 previous?.startsWith('reaction:') ||
-                previous?.startsWith('delete:')
+                previous?.startsWith('delete:') ||
+                previous?.startsWith('end-poll:')
                     ? null
                     : previous,
             );
@@ -1956,6 +1964,7 @@ function App() {
                                     typing={typing}
                                     user={user}
                                     placeholder={`Message ${dmUser ? '@' + displayName(dmUser) : '#' + (currentChannel?.name || 'general')}`}
+                                    onPoll={(question) => openPoll({ room, question })}
                                 />
                             </section>
                             {thread && thread.room === room && roomVisible && (
@@ -1974,6 +1983,7 @@ function App() {
                                     act={act}
                                     setModal={setModal}
                                     setEdit={setEdit}
+                                    openPoll={openPoll}
                                     connected={connected}
                                     onClose={() => setThread(null)}
                                 />
@@ -2250,6 +2260,53 @@ function App() {
                                     >
                                         Upload custom emoji
                                     </button>
+                                </>
+                            ) : modal === 'poll' && pollTarget ? (
+                                <PollDialog
+                                    key={`${pollTarget.room}:${pollTarget.thread}`}
+                                    initialQuestion={pollTarget.question}
+                                    busy={busy}
+                                    onCancel={() => setModal(null)}
+                                    onSubmit={(poll) =>
+                                        void act(async () => {
+                                            await api('/messages', 'POST', {
+                                                room: pollTarget.room,
+                                                thread: pollTarget.thread,
+                                                poll,
+                                            });
+                                            setModal(null);
+                                        })
+                                    }
+                                />
+                            ) : modal.startsWith('end-poll:') ? (
+                                <>
+                                    <h2 id="action-dialog-title">End this poll now?</h2>
+                                    <p className="muted">
+                                        Voting closes for everyone and the final results are shown.
+                                        This can’t be undone.
+                                    </p>
+                                    <div className="dialog-actions">
+                                        <button
+                                            className="secondary"
+                                            disabled={busy}
+                                            onClick={() => setModal(null)}
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            className="primary"
+                                            disabled={busy}
+                                            onClick={() =>
+                                                void act(async () => {
+                                                    const [, id] = modal.split(':');
+                                                    await api(`/messages/${id}/poll/end`, 'POST');
+                                                    setModal(null);
+                                                })
+                                            }
+                                        >
+                                            {busy ? 'Working…' : 'End poll'}
+                                        </button>
+                                    </div>
                                 </>
                             ) : (
                                 <>

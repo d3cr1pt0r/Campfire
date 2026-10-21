@@ -2,7 +2,8 @@ import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'reac
 import { Emoji } from './ChatContent';
 import { emojiQuery, emojiMatches } from './emojiCompletion';
 import { mentionQuery, completeMention } from './mentions';
-import { Paperclip, X, Plus, Smile, Send } from 'lucide-react';
+import { Paperclip, X, Plus, Smile, Send, Vote } from 'lucide-react';
+import { pollCommand } from './polls';
 import { displayName } from './profiles';
 import type { User } from './types';
 
@@ -29,6 +30,8 @@ type Props = {
     focusRequest?: number;
     users: User[];
     emojis?: { id: string; name: string; author: string | null }[];
+    // Opens the poll dialog, with a question when typed as "/poll Question".
+    onPoll?: (question: string) => void;
 };
 export function ChatComposer({
     attachments,
@@ -53,8 +56,39 @@ export function ChatComposer({
     focusRequest,
     users,
     emojis = [],
+    onPoll,
 }: Props) {
     const input = useRef<HTMLTextAreaElement>(null);
+    const addButton = useRef<HTMLButtonElement>(null);
+    const menu = useRef<HTMLDivElement>(null);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const canPoll = !!onPoll && canPost;
+    const menuItems = () => [
+        ...(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ||
+            []),
+    ];
+    useEffect(() => {
+        if (!menuOpen) return;
+        menuItems()[0]?.focus();
+        const close = (event: MouseEvent) => {
+            const target = event.target as Node;
+            if (!menu.current?.contains(target) && !addButton.current?.contains(target))
+                setMenuOpen(false);
+        };
+        document.addEventListener('mousedown', close);
+        return () => document.removeEventListener('mousedown', close);
+    }, [menuOpen]);
+    const closeMenu = () => {
+        setMenuOpen(false);
+        addButton.current?.focus();
+    };
+    const submit = (event: React.FormEvent) => {
+        const question = onPoll ? pollCommand(draft) : null;
+        if (question === null) return send(event);
+        event.preventDefault();
+        setDraft('');
+        onPoll?.(question);
+    };
     useLayoutEffect(() => {
         if (focusRequest !== undefined && canPost) input.current?.focus({ preventScroll: true });
     }, [focusRequest, canPost]);
@@ -199,16 +233,74 @@ export function ChatComposer({
                     ))}
                 </div>
             )}
-            <form className="composer" onSubmit={send}>
+            {menuOpen && (
+                <div
+                    className="composer-menu"
+                    role="menu"
+                    aria-label="Add to message"
+                    ref={menu}
+                    onKeyDown={(event) => {
+                        const items = menuItems();
+                        const index = items.indexOf(document.activeElement as HTMLButtonElement);
+                        if (event.key === 'Escape') {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            closeMenu();
+                        }
+                        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                            event.preventDefault();
+                            const step = event.key === 'ArrowDown' ? 1 : -1;
+                            items[(index + step + items.length) % items.length]?.focus();
+                        }
+                    }}
+                    onBlur={(event) => {
+                        if (!menu.current?.contains(event.relatedTarget as Node))
+                            setMenuOpen(false);
+                    }}
+                >
+                    <button
+                        type="button"
+                        role="menuitem"
+                        disabled={!canAttach}
+                        title={
+                            canAttach
+                                ? 'Up to 10 files, 5 MB total'
+                                : 'You do not have permission to attach files'
+                        }
+                        onClick={() => {
+                            setMenuOpen(false);
+                            fileInput.current?.click();
+                        }}
+                    >
+                        <Paperclip size={17} />
+                        Upload files
+                    </button>
+                    {onPoll && (
+                        <button
+                            type="button"
+                            role="menuitem"
+                            disabled={!canPoll}
+                            onClick={() => {
+                                setMenuOpen(false);
+                                onPoll('');
+                            }}
+                        >
+                            <Vote size={17} />
+                            Create poll
+                        </button>
+                    )}
+                </div>
+            )}
+            <form className="composer" onSubmit={submit}>
                 <button
                     type="button"
-                    title={
-                        canAttach
-                            ? 'Attach files (up to 10 files, 5 MB total)'
-                            : 'You do not have permission to attach files'
-                    }
-                    disabled={busy || !canAttach}
-                    onClick={() => fileInput.current?.click()}
+                    ref={addButton}
+                    title="Add files or a poll"
+                    aria-label="Add files or a poll"
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpen}
+                    disabled={busy || (!canAttach && !canPoll)}
+                    onClick={() => setMenuOpen((open) => !open)}
                 >
                     <Plus size={22} />
                 </button>
@@ -301,7 +393,7 @@ export function ChatComposer({
 
                         if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                             e.preventDefault();
-                            if (!busy && !e.nativeEvent.isComposing) void send(e);
+                            if (!busy && !e.nativeEvent.isComposing) void submit(e);
                         }
                     }}
                 />

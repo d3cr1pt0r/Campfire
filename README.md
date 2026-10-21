@@ -14,6 +14,7 @@ A place to catch up, share what you're working on, or just hang out together. Us
 - **Hop into a call:** join a voice channel or start a private voice or video call with up to eight people.
 - **Share your screen:** show a game, a project, or whatever you're watching, and choose whose streams to follow.
 - **Share the little things:** send files and images, react with emojis, and add your community's own custom emojis.
+- **Decide together:** post a poll with up to ten answers, public or anonymous, and see the results once you've voted.
 - **Pick up where you left off:** browse older messages, search conversations, pin useful messages, and return to your saved reading position.
 - **Make it yours:** choose a nickname, profile picture, status, and light or dark appearance.
 - **Keep things comfortable:** adjust notifications, audio devices, and individual call volumes.

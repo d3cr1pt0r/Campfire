@@ -6,6 +6,7 @@ import { emojis } from '../shared/emojis.js';
 import { check, route } from './policies.js';
 import { transaction, messageViews } from './database.js';
 import { createThumbnails } from './thumbnails.js';
+import { forViewer } from './poll-view.js';
 export function registerMessages({
     app,
     db,
@@ -17,6 +18,7 @@ export function registerMessages({
     messageView,
     emitRoom,
     maxStoredUploadBytes,
+    polls,
 }) {
     const thumbnails = createThumbnails({ get, all, run });
     const requireAction = (user, room, permission) =>
@@ -41,7 +43,7 @@ export function registerMessages({
         route((req, res) => {
             const message = get('SELECT * FROM messages WHERE id=?', req.params.id);
             check(message && hasRoom(req.user, message.room), 'Message not found', 404);
-            res.json(messageView(message));
+            res.json(forViewer(messageView(message), req.user.id));
         }),
     );
     app.get(
@@ -99,7 +101,9 @@ export function registerMessages({
                 hasMore && oldest
                     ? Buffer.from(JSON.stringify([oldest.created, oldest.id])).toString('base64url')
                     : null;
-            const messages = messageViews(all, rows.reverse());
+            const messages = messageViews(all, rows.reverse()).map((view) =>
+                forViewer(view, req.user.id),
+            );
             res.json(req.query.page === '1' ? { messages, next } : messages);
         }),
     );
@@ -128,7 +132,14 @@ export function registerMessages({
                 'Attach up to 10 files per message',
             );
             if (files.length) requireAction(req.user, room, 'files.attach');
-            check(body.trim() || files.length, 'Write a message or attach a file');
+            // A poll is a message whose text is the question; it needs no extra permission.
+            const poll = req.body.poll === undefined ? null : polls.validate(req.body.poll);
+            if (poll)
+                check(
+                    !body.trim() && !files.length,
+                    'A poll is posted on its own, without text or attachments',
+                );
+            check(body.trim() || files.length || poll, 'Write a message or attach a file');
             let total = 0;
             const validated = files.map((file) => {
                 check(
@@ -163,10 +174,11 @@ export function registerMessages({
                     id,
                     room,
                     req.user.id,
-                    body.trim(),
+                    poll ? poll.question : body.trim(),
                     Date.now(),
                     thread,
                 );
+                if (poll) polls.insert(id, poll);
                 for (const file of validated)
                     run(
                         'INSERT INTO attachments(id,message,name,mime,data,bytes) VALUES(?,?,?,?,?,?)',
@@ -179,9 +191,10 @@ export function registerMessages({
                     );
             });
             const m = messageView(get('SELECT * FROM messages WHERE id=?', id));
+            if (poll) polls.schedule(id, poll.ends);
             emitRoom(room, 'message', m);
             updateParent(thread);
-            res.json(m);
+            res.json(forViewer(m, req.user.id));
         }),
     );
     app.patch(
@@ -194,6 +207,10 @@ export function registerMessages({
                 check(typeof req.body.pinned === 'boolean', 'Invalid pin value');
             if ('body' in req.body) {
                 check(m.author === req.user.id, 'Only the author can edit this message', 403);
+                check(
+                    !get('SELECT 1 FROM polls WHERE message=?', m.id),
+                    'Polls can’t be edited. Delete it and post a new one instead.',
+                );
                 check(
                     typeof req.body.body === 'string' &&
                         req.body.body.trim().length > 0 &&

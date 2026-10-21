@@ -2,6 +2,7 @@ import { permissionIds, memberPermissions } from '../shared/permissions.js';
 import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
+import { loadPolls, pollData } from './poll-view.js';
 
 export function transaction(db, action) {
     db.exec('BEGIN IMMEDIATE');
@@ -134,10 +135,15 @@ export function messageViews(all, messages) {
             ...ids,
         ).map(({ thread, count }) => [thread, count]),
     );
-    return messages.map((m) => ({
-        ...m,
-        replyCount: counts.get(m.id) || 0,
-        attachments: attachments.get(m.id) || [],
-        reactions: reactions.get(m.id) || [],
-    }));
+    const polls = loadPolls(all, ids);
+    return messages.map((m) => {
+        const view = {
+            ...m,
+            replyCount: counts.get(m.id) || 0,
+            attachments: attachments.get(m.id) || [],
+            reactions: reactions.get(m.id) || [],
+        };
+        if (polls.has(m.id)) view[pollData] = polls.get(m.id);
+        return view;
+    });
 }

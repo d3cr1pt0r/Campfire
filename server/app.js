@@ -13,6 +13,8 @@ import { originPolicy, route } from './policies.js';
 import { createSessions } from './sessions.js';
 import { registerAccounts } from './accounts.js';
 import { registerMessages } from './messages.js';
+import { registerPolls } from './polls.js';
+import { forViewer } from './poll-view.js';
 import { registerProfiles } from './profiles.js';
 import { registerAdministration } from './administration.js';
 import { registerCalls } from './calls.js';
@@ -102,7 +104,8 @@ export function createApp({
         const room = canonicalRoom(rawRoom);
         for (const socket of io.sockets.sockets.values()) {
             const user = sessions.userFor(socket.data.token);
-            if (user && hasRoom(user, room)) socket.emit(event, data);
+            // Each member gets their own view of a poll: results only after voting.
+            if (user && hasRoom(user, room)) socket.emit(event, forViewer(data, user.id));
         }
     };
     const context = {
@@ -198,7 +201,8 @@ export function createApp({
             });
         }),
     );
-    const messages = registerMessages(context);
+    const polls = registerPolls(context);
+    const messages = registerMessages({ ...context, polls });
     registerProfiles(context);
     registerAdministration({ ...context, enforceCalls: calls.enforceCalls });
     const dist = fileURLToPath(new URL('../dist', import.meta.url));
@@ -224,6 +228,7 @@ export function createApp({
             closing ??= (async () => {
                 clearInterval(renewal);
                 await messages.close();
+                polls.close();
                 calls.close();
                 sessions.close();
                 await io.close();

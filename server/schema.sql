@@ -145,6 +145,28 @@ BEGIN UPDATE storage_usage SET bytes=bytes-OLD.bytes WHERE id=1; END;
 CREATE TRIGGER IF NOT EXISTS attachment_usage_update AFTER UPDATE OF bytes ON attachments
 BEGIN UPDATE storage_usage SET bytes=bytes+NEW.bytes-OLD.bytes WHERE id=1; END;
 
+-- A poll belongs to the message that posts it; the message body holds the question.
+-- Voting stops at ends, which ending a poll early moves to that moment.
+CREATE TABLE IF NOT EXISTS polls(
+    message TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+    multiple INTEGER NOT NULL CHECK(multiple IN (0,1)),
+    anonymous INTEGER NOT NULL CHECK(anonymous IN (0,1)),
+    ends INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS poll_answers(
+    id TEXT PRIMARY KEY,
+    poll TEXT NOT NULL REFERENCES polls(message) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    text TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS poll_answers_poll ON poll_answers(poll,position);
+-- Anonymous polls keep votes too, so each member votes once; who voted is never sent.
+CREATE TABLE IF NOT EXISTS poll_votes(
+    answer TEXT NOT NULL REFERENCES poll_answers(id) ON DELETE CASCADE,
+    user TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    PRIMARY KEY(answer,user)
+);
+
 CREATE TABLE IF NOT EXISTS reactions(
     message TEXT REFERENCES messages(id) ON DELETE CASCADE,
     user TEXT REFERENCES users(id),

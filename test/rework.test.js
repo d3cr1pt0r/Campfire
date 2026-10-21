@@ -32,14 +32,14 @@ test('overlapping and repeated shutdown calls close SQLite only once', async (t)
     assert.equal(service.db.isOpen, false);
 });
 
-test('history enrichment uses three queries regardless of message count', () => {
+test('history enrichment uses four queries regardless of message count', () => {
     let queries = 0;
     const rows = Array.from({ length: 500 }, (_, i) => ({ id: String(i) }));
     const result = messageViews(() => {
         queries++;
         return [];
     }, rows);
-    assert.equal(queries, 3);
+    assert.equal(queries, 4);
     assert.equal(result.length, 500);
     assert.deepEqual(result[0], { id: '0', replyCount: 0, attachments: [], reactions: [] });
 });

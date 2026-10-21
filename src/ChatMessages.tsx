@@ -19,7 +19,9 @@ import {
     Pencil,
     Trash2,
     Reply,
+    TimerOff,
 } from 'lucide-react';
+import { PollCard } from './PollCard';
 import { ChatContent, AuthImage } from './ChatContent';
 import { needsScrollHistory, restoredScrollOffset, type ChatScrollPosition } from './chatScroll';
 
@@ -410,15 +412,27 @@ export function ChatMessage({
                         </button>
                         {Boolean(m.pinned) && <Pin size={12} />}
                     </span>
-                    <span className="message-text">
-                        <ChatContent
-                            users={state.users}
-                            text={m.body}
-                            custom={state.emojis || []}
-                        />
-                        {Boolean(m.edited) && <small className="edited"> (edited)</small>}
-                    </span>
+                    {!m.poll && (
+                        <span className="message-text">
+                            <ChatContent
+                                users={state.users}
+                                text={m.body}
+                                custom={state.emojis || []}
+                            />
+                            {Boolean(m.edited) && <small className="edited"> (edited)</small>}
+                        </span>
+                    )}
                 </div>
+                {m.poll && (
+                    <PollCard
+                        message={{ ...m, poll: m.poll }}
+                        canVote={permission('reactions.add')}
+                        user={user}
+                        vote={(answers) =>
+                            void act(() => api(`/messages/${m.id}/vote`, 'POST', { answers }))
+                        }
+                    />
+                )}
                 {m.attachments.map((a) => (
                     <React.Fragment key={a.id}>
                         {(/^image\/(png|jpeg|gif|webp)$/.test(a.mime) ||
@@ -502,7 +516,19 @@ export function ChatMessage({
                 >
                     <Smile size={16} />
                 </button>
-                {m.author === state.me.id && (
+                {m.poll &&
+                    !m.poll.ended &&
+                    (m.author === state.me.id ||
+                        (!m.room.startsWith('dm:') && permission('messages.deleteOthers'))) && (
+                        <button
+                            title="End poll now"
+                            aria-label="End poll now"
+                            onClick={() => setModal(`end-poll:${m.id}`)}
+                        >
+                            <TimerOff size={16} />
+                        </button>
+                    )}
+                {m.author === state.me.id && !m.poll && (
                     <button
                         title="Edit"
                         onClick={() => {

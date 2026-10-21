@@ -6,6 +6,7 @@ import { Emoji } from './ChatContent';
 import { useConversation } from './useConversation';
 import type { ApiClient } from './api';
 import type { AppSocket, Message, State, User } from './types';
+import type { PollTarget } from './PollDialog';
 import { validateFileSelection } from '../shared/uploads.js';
 import { emojis } from '../shared/emojis.js';
 
@@ -23,6 +24,7 @@ type Props = {
     act: (fn: () => Promise<unknown>) => Promise<void>;
     setModal: (modal: string | null) => void;
     setEdit: (message: Message | null) => void;
+    openPoll: (target: PollTarget) => void;
     connected: boolean;
     onClose: () => void;
 };
@@ -317,6 +319,9 @@ export function ThreadPanel(props: Props) {
                 user={user}
                 placeholder="Reply to thread"
                 label="Thread reply"
+                onPoll={(question) =>
+                    props.openPoll({ room: parent.room, thread: parent.id, question })
+                }
             />
         </aside>
     );
