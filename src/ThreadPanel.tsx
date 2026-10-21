@@ -4,12 +4,12 @@ import { ChatMessage, ChatMessages } from './ChatMessages';
 import { ChatComposer } from './ChatComposer';
 import { Emoji } from './ChatContent';
 import { useConversation } from './useConversation';
-import type { ApiClient } from './api';
+import { messagePayload, type ApiClient } from './api';
 import type { AppSocket, Message, State, User } from './types';
 import type { MessageAvatarMode } from './messageAppearance';
 import type { PollTarget } from './PollDialog';
 import { appendText } from './richText';
-import { defaultUploadBytes, validateFileSelection } from '../shared/uploads.js';
+import { validateFileSelection } from '../shared/uploads.js';
 import { emojis } from '../shared/emojis.js';
 
 type Props = {
@@ -31,6 +31,7 @@ type Props = {
     setEdit: (message: Message | null) => void;
     openPoll: (target: PollTarget) => void;
     connected: boolean;
+    notify: (text: string) => void;
     onClose: () => void;
     formattingToolbar: boolean;
     setFormattingToolbar: (shown: boolean) => void;
@@ -56,6 +57,8 @@ export function ThreadPanel(props: Props) {
     const mounted = useRef(true);
     const close = useRef(onClose);
     close.current = onClose;
+    const notify = useRef(props.notify);
+    notify.current = props.notify;
     const canPost =
         permission('threads.reply') && (!!root.replyCount || permission('threads.create'));
     const conversation = useConversation(api, socket, parent.room, true, search, pins, parent.id);
@@ -95,6 +98,11 @@ export function ThreadPanel(props: Props) {
         const remove = (event: { id: string; room: string }) => {
             if (event.id === parent.id && event.room === parent.room) close.current();
         };
+        const expire = (event: { room: string; ids: string[] }) => {
+            if (event.room !== parent.room || !event.ids.includes(parent.id)) return;
+            notify.current('This thread reached the end of its retention period and was deleted.');
+            close.current();
+        };
         const onTyping = (event: { room: string; user: string; thread?: string | null }) => {
             if (
                 event.room === parent.room &&
@@ -106,6 +114,7 @@ export function ThreadPanel(props: Props) {
         socket?.on('connect', load);
         socket?.on('message:update', update);
         socket?.on('message:delete', remove);
+        socket?.on('messages:expired', expire);
         socket?.on('typing', onTyping);
         void load();
         const timer = setInterval(
@@ -124,6 +133,7 @@ export function ThreadPanel(props: Props) {
             socket?.off('connect', load);
             socket?.off('message:update', update);
             socket?.off('message:delete', remove);
+            socket?.off('messages:expired', expire);
             socket?.off('typing', onTyping);
         };
     }, [api, socket, parent.id, parent.room, state.me.id]);
@@ -173,23 +183,11 @@ export function ThreadPanel(props: Props) {
         const files = [...attachments];
         try {
             validateFileSelection(files, state.maxUploadBytes);
-            const payload = await Promise.all(
-                files.map(async (file) => {
-                    const data = await new Promise<string>((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = () => resolve(String(reader.result).split(',')[1]);
-                        reader.onerror = () => reject(new Error('Could not read file'));
-                        reader.readAsDataURL(file);
-                    });
-                    return { name: file.name, data };
-                }),
+            await api(
+                '/messages',
+                'POST',
+                messagePayload({ room: parent.room, thread: parent.id, body: text }, files),
             );
-            await api('/messages', 'POST', {
-                room: parent.room,
-                thread: parent.id,
-                body: text,
-                attachments: payload,
-            });
             if (mounted.current) {
                 setDraft((previous) => (previous === text ? '' : previous));
                 setAttachments([]);
@@ -268,6 +266,7 @@ export function ThreadPanel(props: Props) {
                 {...props}
                 key={`${search}:${pins}`}
                 thread
+                retentionUnit={root.retention}
                 conversation={conversation}
                 search={search}
                 pins={pins}
@@ -308,7 +307,7 @@ export function ThreadPanel(props: Props) {
             <ChatComposer
                 focusRequest={props.focusRequest}
                 canAttach={canPost && permission('files.attach')}
-                uploadLimit={state.maxUploadBytes ?? defaultUploadBytes}
+                uploadLimit={state.maxUploadBytes}
                 users={state.users}
                 emojis={state.emojis}
                 attachments={attachments}

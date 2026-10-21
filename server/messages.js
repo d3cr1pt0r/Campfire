@@ -8,6 +8,8 @@ import { check, route } from './policies.js';
 import { transaction } from './database.js';
 import { createThumbnails } from './thumbnails.js';
 import { forViewer } from './poll-view.js';
+// node:sqlite returns blobs as Uint8Array; a Buffer view avoids copying large files.
+const bytesOf = (data) => Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 export function registerMessages({
     app,
     db,
@@ -19,7 +21,7 @@ export function registerMessages({
     messageView,
     messageViews,
     emitRoom,
-    maxStoredUploadBytes,
+    storageQuota,
     uploadLimit,
     polls,
     previews,
@@ -40,7 +42,7 @@ export function registerMessages({
     // Cards arrive after the message: the server fetches the links, then updates it.
     const unfurl = (id) =>
         void previews
-            ?.unfurl(get('SELECT * FROM messages WHERE id=?', id))
+            ?.unfurl(id)
             .then((changed) => {
                 const message = changed && get('SELECT * FROM messages WHERE id=?', id);
                 if (message) emitRoom(message.room, 'message:update', messageView(message));
@@ -117,33 +119,79 @@ export function registerMessages({
             const messages = messageViews(rows.reverse()).map((view) =>
                 forViewer(view, req.user.id),
             );
-            res.json(req.query.page === '1' ? { messages, next } : messages);
+            res.json({ messages, next });
         }),
     );
-    // Base64 grows attachments by a third; the rest covers text, names and a poll.
+    // Text and polls arrive as JSON; files as multipart/form-data with room, body and thread
+    // fields and one "file" part each. Both are read only after sign-in.
+    const messageJson = express.json({ limit: '1mb' });
+    const formFields = new Set(['room', 'body', 'thread']);
+    const readForm = async (req) => {
+        let form;
+        try {
+            form = await new Request('http://campfire.invalid/', {
+                method: 'POST',
+                headers: { 'content-type': req.get('content-type') },
+                body: req.body,
+            }).formData();
+        } catch {
+            check(false, 'Invalid message form');
+        }
+        const fields = {},
+            files = [];
+        for (const [key, value] of form) {
+            if (key === 'file' && typeof value !== 'string')
+                files.push({ name: value.name, data: Buffer.from(await value.arrayBuffer()) });
+            else {
+                check(
+                    formFields.has(key) && typeof value === 'string' && !Object.hasOwn(fields, key),
+                    'Invalid message form',
+                );
+                fields[key] = value;
+            }
+        }
+        req.body = fields;
+        req.files = files;
+    };
     const parseMessage = (req, res, next) => {
+        if (!req.is('multipart/form-data')) return messageJson(req, res, next);
         const limit = uploadLimit();
-        express.json({ limit: Math.ceil(limit / 3) * 4 + 1024 * 1024 })(req, res, (error) =>
-            next(
-                error?.type === 'entity.too.large'
-                    ? Object.assign(
-                          new Error(
-                              `Attachments must total ${formatUploadLimit(limit)} or less per message`,
-                          ),
-                          { status: 413 },
-                      )
-                    : error,
-            ),
+        // The form's framing and text fields fit in the extra 64 KB.
+        express.raw({ type: 'multipart/form-data', limit: limit + 64 * 1024 })(
+            req,
+            res,
+            (error) => {
+                if (error?.type === 'entity.too.large')
+                    return next(
+                        Object.assign(
+                            new Error(
+                                `Attachments must total ${formatUploadLimit(limit)} or less per message`,
+                            ),
+                            { status: 413 },
+                        ),
+                    );
+                if (error) return next(error);
+                readForm(req).then(() => next(), next);
+            },
         );
     };
     app.post(
         '/api/messages',
         parseMessage,
         route((req, res) => {
-            const { body = '', attachment, attachments } = req.body;
-            const room = canonicalRoom(req.body.room);
+            const fields = req.body;
+            check(
+                fields && typeof fields === 'object' && !Array.isArray(fields),
+                'Invalid message',
+            );
+            check(
+                fields.attachments === undefined && fields.attachment === undefined,
+                'Send attachments as multipart/form-data',
+            );
+            const { body = '' } = fields;
+            const room = canonicalRoom(fields.room);
             check(typeof room === 'string' && hasRoom(req.user, room), 'Unknown conversation', 403);
-            const thread = req.body.thread ?? null;
+            const thread = fields.thread ?? null;
             if (thread === null) requireAction(req.user, room, 'messages.send');
             if (thread !== null) {
                 const parent = threadParent(req.user, room, thread);
@@ -155,15 +203,11 @@ export function registerMessages({
                 typeof body === 'string' && body.length <= 4000,
                 'Messages can contain up to 4,000 characters',
             );
-            const files =
-                attachments === undefined ? (attachment == null ? [] : [attachment]) : attachments;
-            check(
-                Array.isArray(files) && files.length <= maxUploadFiles,
-                'Attach up to 10 files per message',
-            );
+            const files = req.files ?? [];
+            check(files.length <= maxUploadFiles, 'Attach up to 10 files per message');
             if (files.length) requireAction(req.user, room, 'files.attach');
             // A poll is a message whose text is the question; it needs no extra permission.
-            const poll = req.body.poll === undefined ? null : polls.validate(req.body.poll);
+            const poll = fields.poll === undefined ? null : polls.validate(fields.poll);
             if (poll)
                 check(
                     !body.trim() && !files.length,
@@ -174,60 +218,58 @@ export function registerMessages({
             let total = 0;
             const validated = files.map((file) => {
                 check(
-                    file &&
-                        typeof file.name === 'string' &&
-                        file.name.length > 0 &&
-                        file.name.length <= 200 &&
-                        typeof file.data === 'string' &&
-                        /^[A-Za-z0-9+/]*={0,2}$/.test(file.data) &&
-                        file.data.length <= Math.ceil(limit / 3) * 4,
-                    `Invalid attachment (maximum ${formatUploadLimit(limit)})`,
+                    file.name.length > 0 && file.name.length <= 200,
+                    'Attachment names must contain 1–200 characters',
                 );
-                const bytes = Buffer.from(file.data, 'base64');
-                const mime = imageMime(bytes);
-                total += bytes.length;
+                const mime = imageMime(file.data);
+                total += file.data.length;
                 check(
                     total <= limit,
                     `Attachments must total ${formatUploadLimit(limit)} or less per message`,
                 );
                 return {
                     ...file,
-                    bytes: bytes.length,
                     mime: mime || 'application/octet-stream',
                     // Images store their displayed size; zeros mark an unreadable header.
                     image: mime
-                        ? (imageInfo(bytes) ?? { width: 0, height: 0, animated: false })
+                        ? (imageInfo(file.data) ?? { width: 0, height: 0, animated: false })
                         : null,
                 };
             });
             const id = randomUUID();
             transaction(db, () => {
-                const used = get('SELECT bytes FROM storage_usage WHERE id=1').bytes;
-                check(
-                    !total || used + total <= maxStoredUploadBytes,
-                    'Server attachment storage is full. Delete attachments or ask the owner to raise the quota.',
-                    413,
-                );
+                if (validated.length) {
+                    const quota = storageQuota();
+                    const used = get('SELECT bytes FROM storage_usage WHERE id=1').bytes;
+                    check(quota > 0, 'New attachments are turned off on this server', 403);
+                    check(
+                        used + total <= quota,
+                        'Server attachment storage is full. Delete attachments or ask the owner to raise the quota.',
+                        413,
+                    );
+                }
+                const now = Date.now();
                 run(
-                    'INSERT INTO messages(id,room,author,body,created,thread) VALUES(?,?,?,?,?,?)',
+                    'INSERT INTO messages(id,room,author,body,created,thread,since) VALUES(?,?,?,?,?,?,?)',
                     id,
                     room,
                     req.user.id,
                     poll ? poll.question : body.trim(),
-                    Date.now(),
+                    now,
                     thread,
+                    now,
                 );
                 if (poll) polls.insert(id, poll);
                 for (const file of validated) {
                     const attachment = randomUUID();
                     run(
-                        'INSERT INTO attachments(id,message,name,mime,data,bytes) VALUES(?,?,?,?,?,?)',
+                        'INSERT INTO attachments(id,message,name,mime,bytes,data) VALUES(?,?,?,?,?,?)',
                         attachment,
                         id,
                         file.name,
                         file.mime,
+                        file.data.length,
                         file.data,
-                        file.bytes,
                     );
                     if (file.image)
                         run(
@@ -239,6 +281,8 @@ export function registerMessages({
                         );
                 }
             });
+            // Links to pages already stored show at once; the rest follow the fetch.
+            if (!poll) previews?.link(id);
             const m = messageView(get('SELECT * FROM messages WHERE id=?', id));
             if (poll) polls.schedule(id, poll.ends);
             emitRoom(room, 'message', m);
@@ -277,17 +321,20 @@ export function registerMessages({
                     Date.now(),
                     m.id,
                 );
+                previews?.link(m.id);
+                previews?.prune();
             }
             if ('pinned' in req.body) {
-                run('UPDATE messages SET pinned=? WHERE id=?', req.body.pinned ? 1 : 0, m.id);
+                // Unpinning restarts the retention period, so a misclick never loses anything.
+                if (m.pinned && !req.body.pinned)
+                    run('UPDATE messages SET pinned=0,since=? WHERE id=?', Date.now(), m.id);
+                else run('UPDATE messages SET pinned=? WHERE id=?', req.body.pinned ? 1 : 0, m.id);
             }
-            emitRoom(
-                m.room,
-                'message:update',
-                messageView(get('SELECT * FROM messages WHERE id=?', m.id)),
-            );
+            const view = messageView(get('SELECT * FROM messages WHERE id=?', m.id));
+            emitRoom(m.room, 'message:update', view);
+            if ('pinned' in req.body) updateParent(m.thread);
             if ('body' in req.body) unfurl(m.id);
-            res.json({ ok: true });
+            res.json(forViewer(view, req.user.id));
         }),
     );
     app.delete(
@@ -303,7 +350,13 @@ export function registerMessages({
                 );
                 requireAction(req.user, m.room, 'messages.deleteOthers');
             }
-            run('DELETE FROM messages WHERE id=?', m.id);
+            transaction(db, () => {
+                run('DELETE FROM messages WHERE id=?', m.id);
+                // Losing a pinned reply restarts the thread's period, as unpinning it would.
+                if (m.thread && m.pinned)
+                    run('UPDATE messages SET since=MAX(since,?) WHERE id=?', Date.now(), m.thread);
+            });
+            previews?.prune();
             updateParent(m.thread);
             emitRoom(m.room, 'message:delete', { id: m.id, room: m.room });
             res.json({ ok: true });
@@ -354,7 +407,7 @@ export function registerMessages({
             check(/^image\/(png|jpeg|gif|webp)$/.test(attachment.mime), 'Preview unavailable', 404);
             const data = await thumbnails.get(attachment.id, () => {
                 const row = get('SELECT data FROM attachments WHERE id=?', attachment.id);
-                return row ? Buffer.from(row.data, 'base64') : null;
+                return row ? bytesOf(row.data) : null;
             });
             // Access may have changed while the image was processed.
             const user = get('SELECT * FROM users WHERE id=? AND banned=0', req.user.id);
@@ -375,7 +428,7 @@ export function registerMessages({
         '/api/attachments/:id',
         route((req, res) => {
             const a = get(
-                'SELECT a.*,m.room FROM attachments a JOIN messages m ON m.id=a.message WHERE a.id=?',
+                'SELECT a.id,a.name,m.room FROM attachments a JOIN messages m ON m.id=a.message WHERE a.id=?',
                 req.params.id,
             );
             check(a && hasRoom(req.user, a.room), 'Attachment not found', 404);
@@ -383,7 +436,7 @@ export function registerMessages({
                 'Content-Disposition',
                 `attachment; filename*=UTF-8''${encodeURIComponent(a.name)}`,
             );
-            const data = Buffer.from(a.data, 'base64');
+            const data = bytesOf(get('SELECT data FROM attachments WHERE id=?', a.id).data);
             const mime = imageMime(data);
             if (req.query.inline === '1' && mime) {
                 res.setHeader('Content-Disposition', 'inline');

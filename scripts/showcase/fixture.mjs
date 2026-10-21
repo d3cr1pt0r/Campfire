@@ -76,6 +76,11 @@ export const state = {
     directCalls: [],
     emojis: [],
     iceServers: [],
+    maxUploadBytes: 5 * 1024 * 1024,
+    retention: {
+        server: { retention: 0, retentionNext: null, retentionAt: null },
+        dm: { retention: 0, retentionNext: null, retentionAt: null },
+    },
 };
 
 const start = Date.parse('2026-10-18T18:00:00Z');

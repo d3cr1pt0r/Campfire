@@ -3,7 +3,14 @@ import { boundedPng, channelName } from './images.js';
 import { check, route, validateRole } from './policies.js';
 import { transaction } from './database.js';
 import { channelPermissionIds } from '../shared/permissions.js';
-import { formatUploadLimit, isUploadLimit, uploadLimitCeiling } from '../shared/uploads.js';
+import {
+    formatStorageQuota,
+    formatUploadLimit,
+    isStorageQuota,
+    isUploadLimit,
+    storageQuotaCeiling,
+    uploadLimitCeiling,
+} from '../shared/uploads.js';
 export function registerAdministration({
     app,
     io,
@@ -20,6 +27,7 @@ export function registerAdministration({
     permissionsFor,
     permissionDetails,
     publishChannels,
+    previews,
 }) {
     app.post(
         '/api/channels',
@@ -75,7 +83,7 @@ export function registerAdministration({
                 const index = channels.findIndex((entry) => entry.id === channel.id);
                 const other = channels[index + (req.body.direction === 'up' ? -1 : 1)];
                 if (other) {
-                    // Renumber first so even imported channels with tied positions move reliably.
+                    // Renumber first so the swap works whatever gaps or ties the positions have.
                     const ordered = all(
                         'SELECT id FROM channels WHERE kind=? ORDER BY position,rowid',
                         channel.kind,
@@ -207,6 +215,7 @@ export function registerAdministration({
                 run('DELETE FROM messages WHERE room=?', channel.id);
                 run('DELETE FROM channels WHERE id=?', channel.id);
             });
+            previews.prune();
             enforceCalls();
             publishChannels();
             res.json({ ok: true });
@@ -429,11 +438,7 @@ export function registerAdministration({
                         role.id,
                     ).map((entry) => entry.role),
                 );
-            transaction(db, () => {
-                // The legacy column is retained for old database imports, never used for authorization.
-                run("UPDATE users SET role='everyone' WHERE role=?", role.id);
-                run('DELETE FROM roles WHERE id=?', role.id);
-            });
+            run('DELETE FROM roles WHERE id=?', role.id);
             enforceCalls();
             publishChannels();
             res.json({ ok: true });
@@ -552,13 +557,20 @@ export function registerAdministration({
             transaction(db, () => {
                 run('DELETE FROM sessions WHERE user=?', target.id);
                 run('DELETE FROM reactions WHERE user=?', target.id);
-                // Keep conversation history and replies without retaining the account identity.
+                // Nobody can open a direct message with a deleted member again, so those go with
+                // the account, personal notes included. Rooms are dm:<lower id>:<higher id>.
+                run(
+                    "DELETE FROM messages WHERE room IN (SELECT 'dm:' || min(?1,id) || ':' || max(?1,id) FROM users)",
+                    target.id,
+                );
+                // Keep channel history and replies without retaining the account identity.
                 run('UPDATE messages SET author=NULL WHERE author=?', target.id);
                 run('UPDATE emojis SET author=NULL WHERE author=?', target.id);
                 // Clearing usedBy alone would make a redeemed invitation usable again.
                 run('UPDATE invitations SET usedBy=NULL,revoked=1 WHERE usedBy=?', target.id);
                 run('DELETE FROM users WHERE id=?', target.id);
             });
+            previews.prune();
             for (const socket of io.sockets.sockets.values())
                 if (socket.data.user.id === target.id) socket.disconnect(true);
             enforceCalls();
@@ -571,13 +583,21 @@ export function registerAdministration({
         '/api/settings',
         route((req, res) => {
             requirePermission(req.user, 'server.edit');
-            const { name, icon, reactionAuthors, profileFrames, maxUploadBytes } = req.body;
+            const {
+                name,
+                icon,
+                reactionAuthors,
+                profileFrames,
+                maxUploadBytes,
+                maxStoredUploadBytes,
+            } = req.body;
             check(
                 name !== undefined ||
                     icon !== undefined ||
                     reactionAuthors !== undefined ||
                     profileFrames !== undefined ||
-                    maxUploadBytes !== undefined,
+                    maxUploadBytes !== undefined ||
+                    maxStoredUploadBytes !== undefined,
                 'No settings provided',
             );
             if (name !== undefined)
@@ -593,6 +613,11 @@ export function registerAdministration({
                 check(
                     isUploadLimit(maxUploadBytes),
                     `Maximum upload size must be a whole number of MB from 1 to ${formatUploadLimit(uploadLimitCeiling)}`,
+                );
+            if (maxStoredUploadBytes !== undefined)
+                check(
+                    isStorageQuota(maxStoredUploadBytes),
+                    `Attachment storage must be a whole number of GB from 0 to ${formatStorageQuota(storageQuotaCeiling)}`,
                 );
             let image;
             if (icon !== undefined && icon !== null) {
@@ -614,6 +639,8 @@ export function registerAdministration({
                 if (reactionAuthors !== undefined) save('reactionAuthors', String(reactionAuthors));
                 if (profileFrames !== undefined) save('profileFrames', String(profileFrames));
                 if (maxUploadBytes !== undefined) save('maxUploadBytes', String(maxUploadBytes));
+                if (maxStoredUploadBytes !== undefined)
+                    save('maxStoredUploadBytes', String(maxStoredUploadBytes));
             });
             publishChannels();
             res.json({ ok: true });

@@ -321,3 +321,68 @@ test('previews can be switched off for a server', async (t) => {
     assert.equal(serverConfig({ LINK_PREVIEWS: ' OFF ' }).linkPreviews, false);
     assert.equal(serverConfig({}).linkPreviews, true);
 });
+
+test('cards belong to the messages that link them, survive refetches and go when unused', async (t) => {
+    let release;
+    const gate = new Promise((resolve) => (release = resolve));
+    const html = (title) => ({
+        type: 'text/html',
+        body: Buffer.from(`<meta property="og:title" content="${title}">`),
+    });
+    const f = await fixture(t, {
+        'https://site.example/a': async () => html('Page A'),
+        'https://site.example/b': async () => html('Page B'),
+        'https://slow.example/': async () => {
+            await gate;
+            return html('Slow');
+        },
+    });
+    const send = async (body) =>
+        (
+            await request(f.service.app, '/messages', f.member.token, 'POST', {
+                room: 'general',
+                body,
+            })
+        ).data;
+    const first = await f.post(f.member, 'https://site.example/a');
+    // A page already stored shows in the posted message straight away.
+    const second = await send('again https://site.example/a');
+    assert.equal(second.previews[0].title, 'Page A');
+    await f.service.previews.idle();
+    // Refetching a stale card keeps it on every message that links it.
+    f.service.db.prepare('UPDATE link_previews SET fetched=fetched-?').run(2 * 86400000);
+    const third = await f.post(f.member, 'third https://site.example/a');
+    assert.equal(f.requests.filter((url) => url === 'https://site.example/a').length, 2);
+    for (const message of [first, second, third])
+        assert.equal((await f.view(message.id)).previews[0].title, 'Page A');
+    // Editing the links away unlinks the card, which is dropped a day after its fetch.
+    for (const message of [first, second, third])
+        await request(f.service.app, `/messages/${message.id}`, f.member.token, 'PATCH', {
+            body: 'No links now',
+        });
+    const count = (table) => f.service.db.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n;
+    assert.equal(count('message_link_previews'), 0);
+    assert.equal(count('link_previews'), 1);
+    f.service.db.prepare('UPDATE link_previews SET fetched=fetched-?').run(2 * 86400000);
+    f.service.previews.prune();
+    assert.equal(count('link_previews'), 0);
+    // Messages deleted or edited while their page loads keep no stale links.
+    const deleted = await send('https://slow.example/');
+    const edited = await send('see https://slow.example/');
+    await request(f.service.app, `/messages/${deleted.id}`, f.member.token, 'DELETE');
+    await request(f.service.app, `/messages/${edited.id}`, f.member.token, 'PATCH', {
+        body: 'now https://site.example/b',
+    });
+    release();
+    await f.service.previews.idle();
+    assert.deepEqual(
+        (await f.view(edited.id)).previews.map((card) => card.title),
+        ['Page B'],
+    );
+    assert.equal(
+        f.service.db
+            .prepare('SELECT COUNT(*) n FROM message_link_previews WHERE message=?')
+            .get(deleted.id).n,
+        0,
+    );
+});

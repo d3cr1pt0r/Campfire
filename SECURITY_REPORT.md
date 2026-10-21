@@ -59,7 +59,7 @@ Direct peer-to-peer connections can also expose participants' public network add
 
 ### 5. Chat content is readable by the server
 
-Messages and attachments are processed and stored without application-level content encryption. DMs are access-controlled on the server, but are not end-to-end encrypted against the server operator or someone who compromises the server/database. Base64 attachment encoding is not encryption.
+Messages and attachments are processed and stored without application-level content encryption. DMs are access-controlled on the server, but are not end-to-end encrypted against the server operator or someone who compromises the server/database. Attachments are stored as plain bytes in the SQLite database.
 
 HTTPS protects traffic between client and server; it does not prevent the server from reading or storing that content.
 

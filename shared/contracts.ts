@@ -1,4 +1,5 @@
 import type { AvatarFrame } from './frames.js';
+import type { RetentionPolicies, RetentionPolicy, RetentionUnit } from './retention.js';
 export type PresenceStatus = 'online' | 'idle' | 'dnd';
 export type User = {
     id: string;
@@ -26,7 +27,7 @@ export type Channel = {
     reactionAuthors?: number | boolean;
     private: boolean;
     permissions: string[];
-};
+} & Partial<RetentionPolicy>;
 export type ChannelAccess = {
     channel: string;
     role: string;
@@ -49,7 +50,9 @@ export type State = {
     reactionAuthors?: boolean;
     profileFrames?: boolean;
     // Combined size allowed for one message's attachments, set in Server settings.
-    maxUploadBytes?: number;
+    maxUploadBytes: number;
+    // How long channel and direct messages are kept; channels may override the default.
+    retention: RetentionPolicies;
     removedUsers?: User[];
     users: User[];
     roles: Role[];
@@ -95,6 +98,22 @@ export type Message = {
     voiceInvite?: { channel: string; name: string };
     // Cards the server made for links in the body, once it has fetched them.
     previews?: LinkPreview[];
+    // The retention clock of the message's thread, which is deleted as a unit.
+    retention?: RetentionUnit;
+};
+export type RetentionPreview = {
+    // When a scheduled change would take effect; null when the change applies at once.
+    at: number | null;
+    scheduled: { messages: number; bytes: number };
+    immediate: { messages: number; bytes: number };
+};
+export type StorageOverview = {
+    attachments: { bytes: number; quota: number };
+    database: { bytes: number; free: number };
+    kept: { bytes: number; files: number };
+    channels: { id: string; name: string; bytes: number; files: number }[];
+    otherChannels: { bytes: number; files: number };
+    directMessages: { bytes: number; files: number };
 };
 export type LinkPreview = {
     id: string;
@@ -131,7 +150,7 @@ export type Preferences = {
     messageSounds?: boolean;
     dmNotifications?: boolean;
     mentionNotifications?: boolean;
-    channelNotifications?: Record<string, ChannelNotificationMode | boolean>;
+    channelNotifications?: Record<string, ChannelNotificationMode>;
     serverNotifications?: Record<string, boolean>;
     closeToTray?: boolean;
     input: string;
@@ -151,6 +170,8 @@ export type Preferences = {
     pushToTalk: boolean;
     sounds: boolean;
     formattingToolbar?: boolean;
+    // Retention banners a member dismissed, by conversation, with the change's start.
+    retentionNotices?: Record<string, number>;
 };
 
 export type MediaRole = 'voice' | 'video' | 'streamAudio';
@@ -171,6 +192,8 @@ export interface ServerEvents {
     message: (message: Message) => void;
     'message:update': (message: Message) => void;
     'message:delete': (event: { id: string; room: string }) => void;
+    // Top-level messages whose retention period ended; their replies went with them.
+    'messages:expired': (event: { room: string; ids: string[] }) => void;
     'member:deleted': (event: { id: string }) => void;
     typing: (event: { room: string; user: string; thread?: string | null }) => void;
     calls: (members: CallMember[]) => void;

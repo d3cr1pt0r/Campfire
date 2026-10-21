@@ -1,13 +1,15 @@
--- The complete Campfire schema. It runs on every start: a new data directory gets every
--- table, and an existing database is left as it is.
+-- The complete Campfire schema, run on every start. A new data directory gets every table; a
+-- database from an older version is refused (checkCurrent in database.js), never upgraded.
+-- Incremental vacuum lets retention give freed space back to the disk; it must precede the tables.
+PRAGMA auto_vacuum=INCREMENTAL;
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
 
 CREATE TABLE IF NOT EXISTS roles(
     id TEXT PRIMARY KEY,
-    name TEXT,
+    name TEXT NOT NULL,
     color TEXT,
-    permissions TEXT,
+    permissions TEXT NOT NULL,
     position INTEGER NOT NULL DEFAULT 0
 );
 CREATE TRIGGER IF NOT EXISTS preserve_default_role_ids BEFORE UPDATE OF id ON roles WHEN NEW.id<>OLD.id
@@ -15,13 +17,11 @@ BEGIN SELECT RAISE(ABORT,'Role IDs cannot change'); END;
 CREATE TRIGGER IF NOT EXISTS preserve_default_roles BEFORE DELETE ON roles WHEN OLD.id IN ('owner','everyone')
 BEGIN SELECT RAISE(ABORT,'Default roles cannot be deleted'); END;
 
--- Role assignments live in user_roles; users.role is never used for authorization.
 CREATE TABLE IF NOT EXISTS users(
     id TEXT PRIMARY KEY,
-    username TEXT UNIQUE COLLATE NOCASE,
-    password TEXT,
-    role TEXT REFERENCES roles(id),
-    banned INTEGER DEFAULT 0,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password TEXT NOT NULL,
+    banned INTEGER NOT NULL DEFAULT 0 CHECK(banned IN (0,1)),
     owner INTEGER NOT NULL DEFAULT 0 CHECK(owner IN (0,1))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS one_server_owner ON users(owner) WHERE owner=1;
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS profiles(
 );
 CREATE TABLE IF NOT EXISTS avatars(
     id TEXT PRIMARY KEY,
-    user TEXT UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    user TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
     data TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS presence_preferences(
@@ -55,8 +55,8 @@ CREATE TABLE IF NOT EXISTS presence_preferences(
 );
 CREATE TABLE IF NOT EXISTS sessions(
     token TEXT PRIMARY KEY,
-    user TEXT REFERENCES users(id),
-    expires INTEGER
+    user TEXT NOT NULL REFERENCES users(id),
+    expires INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS password_resets(
     user TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -72,17 +72,23 @@ CREATE TABLE IF NOT EXISTS invitations(
     usedBy TEXT REFERENCES users(id),
     revoked INTEGER NOT NULL DEFAULT 0
 );
-CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
 CREATE TABLE IF NOT EXISTS channels(
     id TEXT PRIMARY KEY,
-    name TEXT,
-    kind TEXT,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('text','voice')),
     protected INTEGER NOT NULL DEFAULT 0,
     position INTEGER NOT NULL DEFAULT 0,
     description TEXT NOT NULL DEFAULT '',
     reactionAuthors INTEGER NOT NULL DEFAULT 1 CHECK(reactionAuthors IN (0,1)),
-    private INTEGER NOT NULL DEFAULT 0 CHECK(private IN (0,1))
+    private INTEGER NOT NULL DEFAULT 0 CHECK(private IN (0,1)),
+    -- Days messages are kept (0 forever, NULL the server default). A shorter period waits in
+    -- retentionNext (NULL there: the server default) until retentionAt.
+    retention INTEGER CHECK(retention>=0),
+    retentionNext INTEGER CHECK(retentionNext>0),
+    retentionAt INTEGER,
+    CHECK(retentionNext IS NULL OR retentionAt IS NOT NULL)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS protected_channel_kind ON channels(kind) WHERE protected=1;
 CREATE INDEX IF NOT EXISTS channels_kind_position ON channels(kind,position);
@@ -100,16 +106,27 @@ CREATE TABLE IF NOT EXISTS channel_overrides(
     PRIMARY KEY(channel,role,permission)
 );
 
+-- since starts the retention period: when the message was posted, or last unpinned.
 CREATE TABLE IF NOT EXISTS messages(
     id TEXT PRIMARY KEY,
-    room TEXT,
+    room TEXT NOT NULL,
     author TEXT REFERENCES users(id),
-    body TEXT,
-    created INTEGER,
+    body TEXT NOT NULL,
+    created INTEGER NOT NULL,
     edited INTEGER,
-    pinned INTEGER DEFAULT 0,
-    thread TEXT REFERENCES messages(id) ON DELETE CASCADE
+    pinned INTEGER NOT NULL DEFAULT 0 CHECK(pinned IN (0,1)),
+    thread TEXT REFERENCES messages(id) ON DELETE CASCADE,
+    since INTEGER NOT NULL
 );
+-- The server default for channels, and the one period for every direct message.
+CREATE TABLE IF NOT EXISTS retention_policies(
+    scope TEXT PRIMARY KEY CHECK(scope IN ('server','dm')),
+    retention INTEGER NOT NULL DEFAULT 0 CHECK(retention>=0),
+    retentionNext INTEGER CHECK(retentionNext>0),
+    retentionAt INTEGER,
+    CHECK((retentionNext IS NULL) = (retentionAt IS NULL))
+);
+INSERT OR IGNORE INTO retention_policies(scope) VALUES('server'),('dm');
 -- Keep the original name so a deleted channel still has a readable invitation.
 CREATE TABLE IF NOT EXISTS voice_channel_invitations(
     message TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
@@ -117,9 +134,10 @@ CREATE TABLE IF NOT EXISTS voice_channel_invitations(
     name TEXT NOT NULL,
     recipient TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE
 );
-CREATE INDEX IF NOT EXISTS messages_room_created ON messages(room,created);
 CREATE INDEX IF NOT EXISTS messages_room_cursor ON messages(room,created,id);
 CREATE INDEX IF NOT EXISTS messages_thread_cursor ON messages(thread,room,created,id);
+-- Retention looks for old unpinned top-level messages, conversation by conversation.
+CREATE INDEX IF NOT EXISTS messages_expiry ON messages(room,since) WHERE thread IS NULL AND pinned=0;
 CREATE TRIGGER IF NOT EXISTS valid_message_thread BEFORE INSERT ON messages
 WHEN NEW.thread IS NOT NULL AND NOT EXISTS(
     SELECT 1 FROM messages WHERE id=NEW.thread AND room=NEW.room AND thread IS NULL
@@ -128,13 +146,16 @@ CREATE TRIGGER IF NOT EXISTS immutable_message_thread BEFORE UPDATE OF thread,ro
 WHEN NEW.thread IS NOT OLD.thread OR NEW.room IS NOT OLD.room
 BEGIN SELECT RAISE(ABORT,'Message conversation cannot change'); END;
 
+-- Files are stored as raw bytes, last so reading the other columns never loads them; bytes
+-- repeats their length for the storage triggers.
 CREATE TABLE IF NOT EXISTS attachments(
     id TEXT PRIMARY KEY,
-    message TEXT REFERENCES messages(id) ON DELETE CASCADE,
-    name TEXT,
-    mime TEXT,
-    data TEXT,
-    bytes INTEGER NOT NULL DEFAULT 0
+    message TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    bytes INTEGER NOT NULL,
+    data BLOB NOT NULL,
+    CHECK(typeof(data)='blob' AND bytes=length(data))
 );
 CREATE INDEX IF NOT EXISTS attachments_message ON attachments(message);
 -- Displayed size of image attachments, so clients can reserve their exact space before
@@ -146,7 +167,8 @@ CREATE TABLE IF NOT EXISTS attachment_images(
     animated INTEGER NOT NULL CHECK(animated IN (0,1))
 );
 -- Link previews the server fetched, shared by every message that links the same page.
--- failed marks pages that gave no card, so they are not fetched again for an hour.
+-- failed marks pages that gave no card, so they are not fetched again for an hour. Cards no
+-- message links are dropped a day after their fetch.
 CREATE TABLE IF NOT EXISTS link_previews(
     id TEXT PRIMARY KEY,
     url TEXT NOT NULL UNIQUE,
@@ -165,6 +187,14 @@ CREATE TABLE IF NOT EXISTS link_previews(
 CREATE TABLE IF NOT EXISTS hidden_link_previews(
     message TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE
 );
+-- The stored cards each message shows, in link order.
+CREATE TABLE IF NOT EXISTS message_link_previews(
+    message TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL CHECK(position BETWEEN 0 AND 2),
+    preview TEXT NOT NULL REFERENCES link_previews(id) ON DELETE CASCADE,
+    PRIMARY KEY(message,position)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS message_link_previews_preview ON message_link_previews(preview);
 -- GIFs a member starred in the GIF picker. Only KLIPY's links are kept, not the media.
 CREATE TABLE IF NOT EXISTS gif_favorites(
     id TEXT PRIMARY KEY,
@@ -215,12 +245,11 @@ CREATE TABLE IF NOT EXISTS poll_votes(
 );
 
 CREATE TABLE IF NOT EXISTS reactions(
-    message TEXT REFERENCES messages(id) ON DELETE CASCADE,
-    user TEXT REFERENCES users(id),
-    emoji TEXT,
+    message TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    user TEXT NOT NULL REFERENCES users(id),
+    emoji TEXT NOT NULL,
     PRIMARY KEY(message,user,emoji)
 );
-CREATE INDEX IF NOT EXISTS reactions_message ON reactions(message);
 CREATE TABLE IF NOT EXISTS emojis(
     id TEXT PRIMARY KEY,
     name TEXT UNIQUE NOT NULL,

@@ -18,7 +18,7 @@ export function useConversation(
             createConversation(
                 room,
                 (before, signal) => {
-                    const params = new URLSearchParams({ room, page: '1', limit: '100' });
+                    const params = new URLSearchParams({ room, limit: '100' });
                     if (thread) params.set('thread', thread);
                     if (before) params.set('before', before);
                     if (search) params.set('search', search);
@@ -42,6 +42,9 @@ export function useConversation(
         const remove = (event: { room: string; id: string }) => {
             if (event.room === room) conversation.receive({ type: 'delete', id: event.id });
         };
+        const expire = (event: { room: string; ids: string[] }) => {
+            if (event.room === room) conversation.receive({ type: 'expire', ids: event.ids });
+        };
         const deletedMember = ({ id }: { id: string }) => {
             conversation.receive({ type: 'member-deleted', id });
         };
@@ -49,6 +52,7 @@ export function useConversation(
         socket?.on('message', upsert);
         socket?.on('message:update', upsert);
         socket?.on('message:delete', remove);
+        socket?.on('messages:expired', expire);
         socket?.on('member:deleted', deletedMember);
         reload();
         return () => {
@@ -57,6 +61,7 @@ export function useConversation(
             socket?.off('message', upsert);
             socket?.off('message:update', upsert);
             socket?.off('message:delete', remove);
+            socket?.off('messages:expired', expire);
             socket?.off('member:deleted', deletedMember);
         };
     }, [conversation, socket, room, enabled]);

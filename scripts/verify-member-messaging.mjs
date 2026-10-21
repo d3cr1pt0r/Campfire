@@ -32,8 +32,8 @@ try {
         const id = randomUUID();
         const username = `Member${i + 1}`;
         service.db
-            .prepare('INSERT INTO users(id,username,password,role) VALUES(?,?,?,?)')
-            .run(id, username, 'fixture-unused-password', 'everyone');
+            .prepare('INSERT INTO users(id,username,password) VALUES(?,?,?)')
+            .run(id, username, 'fixture-unused-password');
         service.db.prepare('INSERT INTO profiles(user,nickname) VALUES(?,?)').run(id, username);
     }
     await new Promise((resolve) => service.http.listen(0, '127.0.0.1', resolve));

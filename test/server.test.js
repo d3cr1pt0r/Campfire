@@ -6,6 +6,7 @@ import path from 'node:path';
 import { once } from 'node:events';
 import { io as client } from 'socket.io-client';
 import { createApp } from '../test-support/open-server.js';
+import { messageForm } from '../test-support/http.js';
 test(
     'an idle authenticated transport disconnects when its session expires',
     { timeout: 5000 },
@@ -56,13 +57,14 @@ test(
             rmSync(dataDir, { recursive: true, force: true });
         });
         const request = async (endpoint, { token, method = 'GET', body, status = 200 } = {}) => {
+            const form = body instanceof FormData;
             const res = await fetch(base + '/api' + endpoint, {
                 method,
                 headers: {
-                    'Content-Type': 'application/json',
+                    ...(form ? {} : { 'Content-Type': 'application/json' }),
                     ...(token ? { Authorization: `Bearer ${token}` } : {}),
                 },
-                body: body === undefined ? undefined : JSON.stringify(body),
+                body: body === undefined ? undefined : form ? body : JSON.stringify(body),
             });
             const data = await res.json();
             assert.equal(res.status, status, JSON.stringify(data));
@@ -140,7 +142,10 @@ test(
                 body: 'Hello everyone',
             });
             assert.equal((await received)[0].id, textMessage.id);
-            assert.equal((await api(bob, '/messages?room=general'))[0].body, 'Hello everyone');
+            assert.equal(
+                (await api(bob, '/messages?room=general')).messages[0].body,
+                'Hello everyone',
+            );
         });
         await t.test('DMs are visible only to the two participants', async () => {
             const room = `dm:${[alice.user.id, bob.user.id].sort().join(':')}`;
@@ -164,13 +169,16 @@ test(
             await api(bob, `/messages/${textMessage.id}/reaction`, 'POST', { emoji: '👍' });
             await api(bob, `/messages/${textMessage.id}`, 'PATCH', { pinned: true }, 403);
             await api(alice, `/messages/${textMessage.id}`, 'PATCH', { pinned: true });
-            const result = await api(bob, '/messages?room=general&search=Edited');
+            const result = (await api(bob, '/messages?room=general&search=Edited')).messages;
             assert.equal(result.length, 1);
             assert.ok(result[0].edited);
             assert.equal(result[0].pinned, 1);
             assert.equal(result[0].reactions.length, 1);
             await api(bob, `/messages/${textMessage.id}/reaction`, 'POST', { emoji: '👍' });
-            assert.equal((await api(bob, '/messages?room=general'))[0].reactions.length, 0);
+            assert.equal(
+                (await api(bob, '/messages?room=general')).messages[0].reactions.length,
+                0,
+            );
         });
         await t.test('thread replies and parent counts reach live Socket.IO clients', async () => {
             const received = once(bs, 'message');
@@ -184,7 +192,7 @@ test(
             const parent = (await updated)[0];
             assert.equal(parent.id, textMessage.id);
             assert.equal(parent.replyCount, 1);
-            assert.equal((await api(bob, '/messages?room=general')).length, 1);
+            assert.equal((await api(bob, '/messages?room=general')).messages.length, 1);
             const typing = once(bs, 'typing');
             as.emit('typing', textMessage.room, textMessage.id);
             assert.equal((await typing)[0].thread, textMessage.id);
@@ -195,26 +203,33 @@ test(
             assert.equal((await recounted)[0].replyCount, 0);
         });
         await t.test('attachments enforce conversation access and a size limit', async () => {
-            const message = await api(alice, '/messages', 'POST', {
-                room: dmMessage.room,
-                body: '',
-                attachment: { name: 'hello.txt', data: Buffer.from('hello').toString('base64') },
-            });
+            const message = await api(
+                alice,
+                '/messages',
+                'POST',
+                messageForm({ room: dmMessage.room }, [
+                    { name: 'hello.txt', data: Buffer.from('hello') },
+                ]),
+            );
             const res = await fetch(base + `/api/attachments/${message.attachments[0].id}`, {
                 headers: { Authorization: `Bearer ${bob.token}` },
             });
             assert.equal(await res.text(), 'hello');
             assert.match(res.headers.get('content-disposition'), /^attachment/);
             await api(eve, `/attachments/${message.attachments[0].id}`, 'GET', undefined, 404);
+            const large = await api(
+                alice,
+                '/messages',
+                'POST',
+                messageForm({ room: 'general' }, [{ name: 'large', data: Buffer.alloc(7000004) }]),
+                413,
+            );
+            assert.match(large.error, /5 MB/);
             await api(
                 alice,
                 '/messages',
                 'POST',
-                {
-                    room: 'general',
-                    body: '',
-                    attachment: { name: 'large', data: 'A'.repeat(7000004) },
-                },
+                { room: 'general', attachment: { name: 'old.txt', data: 'aGk=' } },
                 400,
             );
         });
@@ -281,13 +296,17 @@ test(
             service = createApp({ dataDir });
             await new Promise((resolve) => service.http.listen(0, '127.0.0.1', resolve));
             base = `http://127.0.0.1:${service.http.address().port}`;
-            assert.equal((await api(alice, '/messages?room=general'))[0].body, 'Edited hello');
             assert.equal(
-                (await api(alice, `/messages?room=${encodeURIComponent(dmMessage.room)}`))[0].body,
+                (await api(alice, '/messages?room=general')).messages[0].body,
+                'Edited hello',
+            );
+            assert.equal(
+                (await api(alice, `/messages?room=${encodeURIComponent(dmMessage.room)}`))
+                    .messages[0].body,
                 'Private hello',
             );
             await api(alice, `/messages/${textMessage.id}`, 'DELETE');
-            assert.equal((await api(alice, '/messages?room=general')).length, 0);
+            assert.equal((await api(alice, '/messages?room=general')).messages.length, 0);
         });
     },
 );

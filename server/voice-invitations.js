@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { canonicalRoom } from '../shared/rooms.js';
 import { check, route } from './policies.js';
 import { transaction } from './database.js';
@@ -48,11 +47,10 @@ export function registerVoiceInvitations({
             check(typeof req.body.user === 'string', 'Choose a member');
             const requestId = req.body.requestId;
             check(
-                requestId === undefined ||
-                    (typeof requestId === 'string' &&
-                        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-                            requestId,
-                        )),
+                typeof requestId === 'string' &&
+                    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+                        requestId,
+                    ),
                 'Invalid invitation request',
             );
             const target = get('SELECT * FROM users WHERE id=? AND banned=0', req.body.user);
@@ -68,34 +66,23 @@ export function registerVoiceInvitations({
                 403,
             );
             // Each opening uses a new request ID. Retrying a send reuses its ID.
-            // Retain the old two-minute behavior for clients without request IDs.
-            const existing = requestId
-                ? get(
-                      `SELECT m.* FROM messages m JOIN voice_channel_invitations v ON v.message=m.id
+            const existing = get(
+                `SELECT m.* FROM messages m JOIN voice_channel_invitations v ON v.message=m.id
                 WHERE m.id=? AND v.channel=? AND v.recipient=? AND m.author=?`,
-                      requestId,
-                      channel.id,
-                      target.id,
-                      req.user.id,
-                  )
-                : get(
-                      `SELECT m.* FROM messages m JOIN voice_channel_invitations v ON v.message=m.id
-            WHERE v.channel=? AND v.recipient=? AND m.author=? AND m.created>? ORDER BY m.created DESC LIMIT 1`,
-                      channel.id,
-                      target.id,
-                      req.user.id,
-                      Date.now() - 120000,
-                  );
+                requestId,
+                channel.id,
+                target.id,
+                req.user.id,
+            );
             if (existing) {
                 res.json(messageView(existing));
                 return;
             }
-            if (requestId)
-                check(
-                    !get('SELECT id FROM messages WHERE id=?', requestId),
-                    'Invitation request already used',
-                    409,
-                );
+            check(
+                !get('SELECT id FROM messages WHERE id=?', requestId),
+                'Invitation request already used',
+                409,
+            );
             check(
                 ![...io.sockets.sockets.values()].some(
                     (socket) =>
@@ -104,15 +91,17 @@ export function registerVoiceInvitations({
                 'That member is already in this channel',
                 409,
             );
-            const id = requestId || randomUUID();
+            const id = requestId;
             transaction(db, () => {
+                const now = Date.now();
                 run(
-                    'INSERT INTO messages(id,room,author,body,created) VALUES(?,?,?,?,?)',
+                    'INSERT INTO messages(id,room,author,body,created,since) VALUES(?,?,?,?,?,?)',
                     id,
                     room,
                     req.user.id,
                     `Invitation to voice channel ${channel.name}`,
-                    Date.now(),
+                    now,
+                    now,
                 );
                 run(
                     'INSERT INTO voice_channel_invitations(message,channel,name,recipient) VALUES(?,?,?,?)',

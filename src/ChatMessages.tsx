@@ -22,12 +22,15 @@ import {
     Trash2,
     Reply,
     TimerOff,
+    Hourglass,
 } from 'lucide-react';
 import { PollCard } from './PollCard';
 import { ChatContent } from './ChatContent';
 import { ImageAttachment } from './ImageAttachment';
 import { LinkPreviews } from './LinkPreviews';
 import { needsScrollHistory, restoredScrollOffset, type ChatScrollPosition } from './chatScroll';
+import { conversationSchedule, messageRetention, unpinText } from './retention';
+import { appliesRetention, type RetentionUnit } from '../shared/retention.js';
 
 export function ChatMessages(
     props: Omit<React.ComponentProps<typeof ChatMessageList>, 'saved' | 'save'> & {
@@ -93,10 +96,15 @@ function ChatMessageList({
     currentVoiceChannel,
     onJoinVoice,
     thread = false,
+    notify,
+    retentionUnit,
     saved,
     save,
 }: {
     messageAvatars?: MessageAvatarMode;
+    notify?: (text: string) => void;
+    // Thread replies share the clock of the thread they belong to.
+    retentionUnit?: RetentionUnit;
     saved?: ChatScrollPosition;
     save: (position: ChatScrollPosition) => void;
     currentVoiceChannel?: string | null;
@@ -349,6 +357,8 @@ function ChatMessageList({
                                         setEdit={setEdit}
                                         onReply={onReply}
                                         thread={thread}
+                                        notify={notify}
+                                        retentionUnit={retentionUnit}
                                         messageAvatars={messageAvatars}
                                         currentVoiceChannel={currentVoiceChannel}
                                         onJoinVoice={onJoinVoice}
@@ -394,6 +404,8 @@ export function ChatMessage({
     currentVoiceChannel,
     onJoinVoice,
     thread = false,
+    notify,
+    retentionUnit,
 }: Pick<
     React.ComponentProps<typeof ChatMessageList>,
     | 'messageAvatars'
@@ -411,12 +423,30 @@ export function ChatMessage({
     | 'setEdit'
     | 'onReply'
     | 'thread'
+    | 'notify'
+    | 'retentionUnit'
 > & { message: Message }) {
     const u = m.author ? user(m.author) : undefined;
     const avatars = messageAvatarMode(messageAvatars);
+    const now = Date.now();
+    const schedule = conversationSchedule(state, m.room);
+    const retention = messageRetention(
+        schedule,
+        retentionUnit ?? m.retention,
+        m.created,
+        Boolean(m.pinned),
+        now,
+    );
     return (
         <article className={`message message-avatars-${avatars}`}>
-            <time className="message-time" dateTime={new Date(m.created).toISOString()}>
+            <time
+                className="message-time"
+                dateTime={new Date(m.created).toISOString()}
+                title={retention?.title}
+            >
+                {retention?.ending && (
+                    <Hourglass className="retention-ending" size={10} aria-hidden />
+                )}
                 <span>
                     {new Date(m.created).toLocaleTimeString('en-US', {
                         hour: 'numeric',
@@ -588,13 +618,22 @@ export function ChatMessage({
                 )}
                 {permission('messages.pin') && (
                     <button
-                        title={m.pinned ? 'Unpin' : 'Pin'}
+                        title={
+                            m.pinned
+                                ? 'Unpin'
+                                : schedule && appliesRetention(schedule, now)
+                                  ? 'Pin — keeps it permanently'
+                                  : 'Pin'
+                        }
                         onClick={() =>
-                            void act(() =>
-                                api(`/messages/${m.id}`, 'PATCH', {
+                            void act(async () => {
+                                const view = await api<Message>(`/messages/${m.id}`, 'PATCH', {
                                     pinned: !m.pinned,
-                                }),
-                            )
+                                });
+                                const text =
+                                    m.pinned && unpinText(schedule, view.retention, Date.now());
+                                if (text) notify?.(text);
+                            })
                         }
                     >
                         <Pin size={16} />

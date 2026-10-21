@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createApp } from '../test-support/open-server.js';
-import { request } from '../test-support/http.js';
+import { messageForm, request } from '../test-support/http.js';
 import { canonicalRoom, dmParticipant } from '../shared/rooms.js';
 import { roleFixture } from '../test-support/role-fixture.js';
 
@@ -25,13 +25,15 @@ test('member DMs, attachments and sessions survive a restart without relationshi
             bob = await signup('Bob'),
             other = await signup('Other');
         const room = canonicalRoom(`dm:${alice.user.id}:${bob.user.id}`);
-        const sent = await request(service.app, '/messages', alice.token, 'POST', {
-            room,
-            body: 'A direct conversation',
-            attachments: [
-                { name: 'note.txt', data: Buffer.from('saved attachment').toString('base64') },
-            ],
-        });
+        const sent = await request(
+            service.app,
+            '/messages',
+            alice.token,
+            'POST',
+            messageForm({ room, body: 'A direct conversation' }, [
+                { name: 'note.txt', data: 'saved attachment' },
+            ]),
+        );
         assert.equal(sent.status, 200);
         await service.close();
         service = createApp({ dataDir });
@@ -56,10 +58,10 @@ test('member DMs, attachments and sessions survive a restart without relationshi
             bob.token,
         );
         assert.equal(history.status, 200);
-        assert.equal(history.data[0].body, 'A direct conversation');
+        assert.equal(history.data.messages[0].body, 'A direct conversation');
         const file = await request(
             service.app,
-            `/attachments/${history.data[0].attachments[0].id}`,
+            `/attachments/${history.data.messages[0].attachments[0].id}`,
             bob.token,
         );
         assert.equal(file.status, 200);
@@ -86,7 +88,7 @@ test('member DMs, attachments and sessions survive a restart without relationshi
         );
         assert.equal(
             (await request(service.app, `/messages?room=${encodeURIComponent(room)}`, bob.token))
-                .data.length,
+                .data.messages.length,
             1,
         );
     } finally {
@@ -119,13 +121,14 @@ test('personal DMs persist notes and files privately, support normal actions, an
         dmParticipant(`dm:${f.owner.user.id}:${f.member.user.id}`, f.owner.user.id),
         f.member.user.id,
     );
-    const sent = await f.api(f.member, '/messages', 'POST', {
-        room,
-        body: 'A private note to myself',
-        attachments: [
-            { name: 'private.txt', data: Buffer.from('private file').toString('base64') },
-        ],
-    });
+    const sent = await f.api(
+        f.member,
+        '/messages',
+        'POST',
+        messageForm({ room, body: 'A private note to myself' }, [
+            { name: 'private.txt', data: 'private file' },
+        ]),
+    );
     const thread = await f.api(f.member, '/messages', 'POST', {
         room,
         thread: sent.id,
@@ -150,10 +153,9 @@ test('personal DMs persist notes and files privately, support normal actions, an
     assert.deepEqual((await f.api(f.member, '/state')).directMessages, [
         { room, updated: thread.created, received: 0 },
     ]);
-    const history = await f.api(
-        f.member,
-        `/messages?room=${encodeURIComponent(room)}&search=personal`,
-    );
+    const history = (
+        await f.api(f.member, `/messages?room=${encodeURIComponent(room)}&search=personal`)
+    ).messages;
     assert.equal(history.length, 1);
     assert.equal(history[0].pinned, 1);
     assert.equal(history[0].reactions.length, 1);
@@ -163,5 +165,8 @@ test('personal DMs persist notes and files privately, support normal actions, an
     );
     await f.api(f.member, `/messages/${thread.id}`, 'DELETE');
     await f.api(f.member, `/messages/${sent.id}`, 'DELETE');
-    assert.deepEqual(await f.api(f.member, `/messages?room=${encodeURIComponent(room)}`), []);
+    assert.deepEqual(
+        (await f.api(f.member, `/messages?room=${encodeURIComponent(room)}`)).messages,
+        [],
+    );
 });

@@ -18,7 +18,7 @@ function environment(dark) {
         },
     };
 }
-test('new and legacy clients follow the OS, including live changes and cleanup', () => {
+test('clients without a saved theme follow the OS, including live changes and cleanup', () => {
     const env = environment(false);
     const stop = watchTheme(undefined, env.root, env.query);
     assert.equal(env.root.dataset.theme, 'canvas');

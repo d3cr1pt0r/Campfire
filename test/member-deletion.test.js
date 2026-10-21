@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { roleFixture } from '../test-support/role-fixture.js';
+import { messageForm } from '../test-support/http.js';
 
 const endpoint = (account) => `/users/${account.user.id}`;
 const confirm = (account) => ({ username: account.user.username });
@@ -30,11 +31,14 @@ test('account deletion requires its own permission, hierarchy and explicit usern
 test('deletion erases the account, retains threads and uploads, revokes used invitations and survives restart', async (t) => {
     const f = await roleFixture(t);
     const id = f.member.user.id;
-    const message = await f.api(f.member, '/messages', 'POST', {
-        room: 'general',
-        body: 'Keep this history',
-        attachments: [{ name: 'file.txt', data: 'aGVsbG8=' }],
-    });
+    const message = await f.api(
+        f.member,
+        '/messages',
+        'POST',
+        messageForm({ room: 'general', body: 'Keep this history' }, [
+            { name: 'file.txt', data: 'hello' },
+        ]),
+    );
     const reply = await f.api(f.other, '/messages', 'POST', {
         room: 'general',
         thread: message.id,
@@ -99,8 +103,64 @@ test('deletion erases the account, retains threads and uploads, revokes used inv
     assert.equal((await f.api(f.owner, `/messages/${message.id}`)).author, null);
 });
 
+test('deletion removes the member’s direct messages and notes, keeping other conversations', async (t) => {
+    const f = await roleFixture(t);
+    const room = (a, b) => `dm:${[a.user.id, b.user.id].sort().join(':')}`;
+    const file = (fields, name) =>
+        messageForm(fields, [{ name, data: Buffer.from(`contents of ${name}`) }]);
+    const direct = await f.api(
+        f.member,
+        '/messages',
+        'POST',
+        file({ room: room(f.member, f.owner), body: 'Private' }, 'direct.txt'),
+    );
+    await f.api(f.owner, '/messages', 'POST', {
+        room: direct.room,
+        thread: direct.id,
+        body: 'Owner reply',
+    });
+    await f.api(f.owner, `/messages/${direct.id}/reaction`, 'POST', { emoji: '👍' });
+    await f.api(
+        f.member,
+        '/messages',
+        'POST',
+        file({ room: room(f.member, f.member), body: 'Note' }, 'note.txt'),
+    );
+    const unrelated = await f.api(f.owner, '/messages', 'POST', {
+        room: room(f.owner, f.other),
+        body: 'Not theirs',
+    });
+    const channel = await f.api(
+        f.member,
+        '/messages',
+        'POST',
+        file({ room: 'general', body: 'Public' }, 'public.txt'),
+    );
+    await f.api(f.owner, endpoint(f.member), 'DELETE', confirm(f.member));
+    for (const gone of [room(f.member, f.owner), room(f.member, f.member)])
+        assert.equal(
+            f.db.prepare('SELECT COUNT(*) n FROM messages WHERE room=?').get(gone).n,
+            0,
+            gone,
+        );
+    assert.equal((await f.api(f.owner, `/messages/${unrelated.id}`)).body, 'Not theirs');
+    const kept = await f.api(f.owner, `/messages/${channel.id}`);
+    assert.equal(kept.author, null);
+    assert.equal(kept.attachments.length, 1);
+    assert.equal(f.db.prepare('SELECT COUNT(*) n FROM attachments').get().n, 1);
+    assert.equal(
+        f.db.prepare('SELECT bytes FROM storage_usage').get().bytes,
+        'contents of public.txt'.length,
+    );
+    assert.deepEqual(f.db.prepare('PRAGMA foreign_key_check').all(), []);
+});
+
 test('disabled accounts can be deleted and failed deletion rolls back all changes', async (t) => {
     const f = await roleFixture(t);
+    const kept = await f.api(f.other, '/messages', 'POST', {
+        room: `dm:${[f.other.user.id, f.owner.user.id].sort().join(':')}`,
+        body: 'Survives the failed deletion',
+    });
     await f.api(f.owner, `${endpoint(f.member)}/access`, 'POST', { enabled: false });
     await f.api(f.owner, endpoint(f.member), 'DELETE', confirm(f.member));
     f.db.exec(
@@ -112,5 +172,6 @@ test('disabled accounts can be deleted and failed deletion rolls back all change
         f.db.prepare('SELECT COUNT(*) n FROM profiles WHERE user=?').get(f.other.user.id).n,
         1,
     );
+    assert.equal((await f.api(f.other, `/messages/${kept.id}`)).body, kept.body);
     assert.deepEqual(f.db.prepare('PRAGMA foreign_key_check').all(), []);
 });

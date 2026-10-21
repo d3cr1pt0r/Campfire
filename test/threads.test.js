@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createApp } from '../test-support/open-server.js';
-import { request } from '../test-support/http.js';
+import { messageForm, request } from '../test-support/http.js';
 
 test('threads isolate history, share chat features, enforce permissions, and persist', async (t) => {
     const directory = mkdtempSync(path.join(tmpdir(), 'campfire-threads-'));
@@ -29,11 +29,16 @@ test('threads isolate history, share chat features, enforce permissions, and per
         outsider = await signup('Outsider');
     const root = await api(owner, '/messages', 'POST', { room: 'general', body: 'Parent' });
     const other = await api(owner, '/messages', 'POST', { room: 'general', body: 'Other parent' });
-    const send = (account, thread, body = 'Reply', room = 'general', extra = {}) =>
-        api(account, '/messages', 'POST', { room, thread, body, ...extra });
-    const first = await send(member, root.id, 'Reply :smile:', 'general', {
-        attachments: [{ name: 'reply.txt', data: Buffer.from('thread file').toString('base64') }],
-    });
+    const send = (account, thread, body = 'Reply', room = 'general', files) =>
+        api(
+            account,
+            '/messages',
+            'POST',
+            files ? messageForm({ room, thread, body }, files) : { room, thread, body },
+        );
+    const first = await send(member, root.id, 'Reply :smile:', 'general', [
+        { name: 'reply.txt', data: 'thread file' },
+    ]);
     const second = await send(owner, root.id, 'Second');
     await send(owner, other.id, 'Other thread');
     for (const [index, message] of [root, other, first, second].entries())
@@ -41,19 +46,19 @@ test('threads isolate history, share chat features, enforce permissions, and per
     assert.equal(first.thread, root.id);
     assert.equal((await api(member, `/messages/${root.id}`)).replyCount, 2);
     assert.deepEqual(
-        (await api(member, '/messages?room=general')).map((m) => m.id),
+        (await api(member, '/messages?room=general')).messages.map((m) => m.id),
         [root.id, other.id],
     );
     const history = `/messages?room=general&thread=${root.id}`;
     assert.deepEqual(
-        (await api(member, history)).map((m) => m.id),
+        (await api(member, history)).messages.map((m) => m.id),
         [first.id, second.id],
     );
-    const page = await api(member, history + '&page=1&limit=1');
+    const page = await api(member, history + '&limit=1');
     assert.equal(page.messages[0].id, second.id);
     assert.ok(page.next);
     assert.equal(
-        (await api(member, history + '&page=1&limit=1&before=' + page.next)).messages[0].id,
+        (await api(member, history + '&limit=1&before=' + page.next)).messages[0].id,
         first.id,
     );
     await api(
@@ -76,18 +81,16 @@ test('threads isolate history, share chat features, enforce permissions, and per
     await api(owner, `/messages/${first.id}`, 'PATCH', { body: 'Not mine' }, 403);
     await api(member, `/messages/${first.id}/reaction`, 'POST', { emoji: '👍' });
     await api(owner, `/messages/${first.id}`, 'PATCH', { pinned: true });
-    const pinned = await api(member, history + '&pinned=1&search=Edited');
+    const pinned = (await api(member, history + '&pinned=1&search=Edited')).messages;
     assert.equal(pinned.length, 1);
     assert.equal(pinned[0].body, 'Edited reply');
     assert.equal(pinned[0].reactions[0].emoji, '👍');
     assert.equal(pinned[0].attachments[0].id, first.attachments[0].id);
-    assert.equal((await api(member, '/messages?room=general&search=Edited')).length, 0);
+    assert.equal((await api(member, '/messages?room=general&search=Edited')).messages.length, 0);
 
     const room = `dm:${[owner.user.id, member.user.id].sort().join(':')}`;
     const dmRoot = await api(owner, '/messages', 'POST', { room, body: 'Private parent' });
-    const dmReply = await send(member, dmRoot.id, '', room, {
-        attachments: [{ name: 'private.txt', data: 'aGk=' }],
-    });
+    const dmReply = await send(member, dmRoot.id, '', room, [{ name: 'private.txt', data: 'hi' }]);
     await api(
         outsider,
         `/messages?room=${encodeURIComponent(room)}&thread=${dmRoot.id}`,
@@ -121,7 +124,7 @@ test('threads isolate history, share chat features, enforce permissions, and per
     );
     await api(member, `/messages/${first.id}`, 'PATCH', { body: 'Own edits remain available' });
     await api(member, `/messages/${first.id}/reaction`, 'POST', { emoji: '👍' }, 403);
-    assert.equal((await api(member, history)).length, 2);
+    assert.equal((await api(member, history)).messages.length, 2);
     await api(owner, '/roles/everyone/access', 'PUT', {
         overrides: [{ channel: 'general', permission: 'channels.view', effect: 'deny' }],
     });
@@ -138,20 +141,18 @@ test('threads isolate history, share chat features, enforce permissions, and per
         () =>
             service.db
                 .prepare(
-                    'INSERT INTO messages(id,room,author,body,created,thread) VALUES(?,?,?,?,?,?)',
+                    'INSERT INTO messages(id,room,author,body,created,thread,since) VALUES(?,?,?,?,?,?,1)',
                 )
                 .run('nested', 'general', owner.user.id, '', 1, first.id),
         /Invalid thread parent/,
     );
     await service.close();
     service = createApp({ dataDir: directory });
-    assert.equal((await api(member, history)).length, 2);
+    assert.equal((await api(member, history)).messages.length, 2);
     assert.equal((await api(member, `/messages/${root.id}`)).replyCount, 2);
     await api(member, `/messages/${first.id}`, 'DELETE');
     assert.equal((await api(member, `/messages/${root.id}`)).replyCount, 1);
-    await send(member, root.id, 'Replacement', 'general', {
-        attachments: [{ name: 'cleanup.txt', data: 'aGk=' }],
-    });
+    await send(member, root.id, 'Replacement', 'general', [{ name: 'cleanup.txt', data: 'hi' }]);
     await api(owner, `/messages/${root.id}`, 'DELETE');
     await api(owner, history, 'GET', undefined, 404);
     assert.equal(

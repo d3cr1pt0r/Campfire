@@ -9,7 +9,6 @@ import { Server } from 'socket.io';
 import { createChannelAccess } from './channel-access.js';
 import { canonicalRoom } from '../shared/rooms.js';
 import { openDatabase, messageViews } from './database.js';
-import { imageInfo } from './images.js';
 import { originPolicy, route } from './policies.js';
 import { createSessions } from './sessions.js';
 import { registerAccounts } from './accounts.js';
@@ -23,8 +22,9 @@ import { registerVoiceInvitations } from './voice-invitations.js';
 import { registerPresence } from './presence.js';
 import { registerGifs } from './gifs.js';
 import { createLinkPreviews, registerLinkPreviews } from './link-previews.js';
+import { registerRetention } from './retention.js';
 import { klipyMediaHosts } from '../shared/klipy.js';
-import { defaultUploadBytes, isUploadLimit } from '../shared/uploads.js';
+import { defaultUploadBytes, isStorageQuota, isUploadLimit } from '../shared/uploads.js';
 import { loadCertificateFiles, loadIdentity } from './identity.js';
 
 export function createApp({
@@ -37,6 +37,7 @@ export function createApp({
     // Tests replace the network fetcher so they never contact real sites.
     linkPreviewFetcher,
     trustProxy = false,
+    // The attachment storage quota until the owner sets one in Settings → Storage.
     maxStoredUploadBytes = 1024 * 1024 * 1024,
     setupCode,
     sessionLifetimeMs = 30 * 86400000,
@@ -114,24 +115,16 @@ export function createApp({
     const sessions = createSessions({ ...database, io });
     const access = createChannelAccess({ ...database, ...sessions, io });
     const { hasRoom } = access;
-    // Image attachments from before sizes were stored are measured once, when first viewed.
-    const describeImage = (id) => {
-        const row = get('SELECT data FROM attachments WHERE id=?', id);
-        if (!row) return null;
-        const size = imageInfo(Buffer.from(row.data, 'base64'));
-        run(
-            'INSERT OR IGNORE INTO attachment_images(attachment,width,height,animated) VALUES(?,?,?,?)',
-            id,
-            size?.width ?? 0,
-            size?.height ?? 0,
-            size?.animated ? 1 : 0,
-        );
-        return size;
-    };
-    const views = (messages) => messageViews(all, messages, describeImage);
+    const views = (messages) => messageViews(all, messages);
     const uploadLimit = () => {
         const bytes = Number(get("SELECT value FROM settings WHERE key='maxUploadBytes'")?.value);
         return isUploadLimit(bytes) ? bytes : defaultUploadBytes;
+    };
+    const storageQuota = () => {
+        const value = get("SELECT value FROM settings WHERE key='maxStoredUploadBytes'")?.value;
+        return value !== undefined && isStorageQuota(Number(value))
+            ? Number(value)
+            : maxStoredUploadBytes;
     };
     const messageView = (message) => views([message])[0];
     const emitRoom = (rawRoom, event, data) => {
@@ -159,7 +152,7 @@ export function createApp({
         previews,
         messageViews: views,
         emitRoom,
-        maxStoredUploadBytes,
+        storageQuota,
         uploadLimit,
         sessionLifetimeMs,
     };
@@ -182,6 +175,7 @@ export function createApp({
     registerVoiceInvitations(context);
     registerGifs(context);
     registerLinkPreviews(context);
+    const retention = registerRetention(context);
     app.get(
         '/api/state',
         route((req, res) => {
@@ -197,6 +191,7 @@ export function createApp({
                     'false',
                 profileFrames: sessions.profileFramesEnabled(),
                 maxUploadBytes: uploadLimit(),
+                retention: retention.policies(),
                 removedUsers:
                     sessions.can(req.user, 'members.ban') ||
                     sessions.can(req.user, 'members.restore') ||
@@ -275,8 +270,10 @@ export function createApp({
         io,
         db,
         previews,
+        retention,
         close: () => {
             closing ??= (async () => {
+                await retention.close();
                 clearInterval(renewal);
                 await messages.close();
                 await previews.close();

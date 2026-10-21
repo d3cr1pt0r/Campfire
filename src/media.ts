@@ -8,9 +8,8 @@ type CapturePreferences = Pick<
 export function microphoneConstraints(preferences: CapturePreferences) {
     return {
         noiseSuppression: preferences.noise,
-        // Preserve the old combined switch until each option has been saved.
-        echoCancellation: preferences.echoCancellation ?? preferences.noise,
-        autoGainControl: preferences.autoGainControl ?? preferences.noise,
+        echoCancellation: preferences.echoCancellation ?? true,
+        autoGainControl: preferences.autoGainControl ?? true,
     };
 }
 type MicrophoneResult = { stream: MediaStream; usedDefault: boolean };

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import { createApp } from '../test-support/open-server.js';
-import { request } from '../test-support/http.js';
+import { messageForm, request } from '../test-support/http.js';
 import { canonicalRoom } from '../shared/rooms.js';
 
 async function fixture(t) {
@@ -28,10 +28,13 @@ async function fixture(t) {
         outsider = await signup('Outsider');
     const room = canonicalRoom(`dm:${owner.user.id}:${member.user.id}`);
     const upload = async (bytes) => {
-        const response = await request(service.app, '/messages', owner.token, 'POST', {
-            room,
-            attachments: [{ name: 'image.png', data: bytes.toString('base64') }],
-        });
+        const response = await request(
+            service.app,
+            '/messages',
+            owner.token,
+            'POST',
+            messageForm({ room }, [{ name: 'image.png', data: bytes }]),
+        );
         assert.equal(response.status, 200, JSON.stringify(response.data));
         return response.data;
     };
@@ -94,7 +97,7 @@ test('invalid and excessive-pixel images fail previews without changing download
     );
 });
 
-test('legacy attachments create previews on demand and concurrent requests share one cached result', async (t) => {
+test('GIF attachments create previews on demand and concurrent requests share one cached result', async (t) => {
     const f = await fixture(t);
     const original = await sharp({
         create: { width: 600, height: 1800, channels: 3, background: '#11aaee' },
@@ -131,17 +134,10 @@ test('thumbnail decoding bounds concurrency and queued work, and deduplicates an
         .toBuffer();
     const message = await f.upload(original);
     const insert = f.service.db.prepare(
-        'INSERT INTO attachments(id,message,name,mime,data,bytes) VALUES(?,?,?,?,?,?)',
+        'INSERT INTO attachments(id,message,name,mime,bytes,data) VALUES(?,?,?,?,?,?)',
     );
     for (let i = 0; i < 33; i++)
-        insert.run(
-            `bounded-${i}`,
-            message.id,
-            'test.png',
-            'image/png',
-            original.toString('base64'),
-            original.length,
-        );
+        insert.run(`bounded-${i}`, message.id, 'test.png', 'image/png', original.length, original);
     const thumbnails = createThumbnails({
         get: (sql, ...params) => f.service.db.prepare(sql).get(...params),
         all: (sql, ...params) => f.service.db.prepare(sql).all(...params),
@@ -185,13 +181,16 @@ test('image attachments report their displayed size and animation, read when upl
         'still.gif': await sharp(first).gif().toBuffer(),
         'notes.txt': Buffer.from('plain text'),
     };
-    const response = await request(f.service.app, '/messages', f.owner.token, 'POST', {
-        room: canonicalRoom(`dm:${f.owner.user.id}:${f.member.user.id}`),
-        attachments: Object.entries(files).map(([name, data]) => ({
-            name,
-            data: data.toString('base64'),
-        })),
-    });
+    const response = await request(
+        f.service.app,
+        '/messages',
+        f.owner.token,
+        'POST',
+        messageForm(
+            { room: canonicalRoom(`dm:${f.owner.user.id}:${f.member.user.id}`) },
+            Object.entries(files).map(([name, data]) => ({ name, data })),
+        ),
+    );
     assert.equal(response.status, 200, JSON.stringify(response.data));
     const sizes = Object.fromEntries(
         response.data.attachments.map(({ name, width, height, animated }) => [
@@ -210,7 +209,7 @@ test('image attachments report their displayed size and animation, read when upl
     assert.equal(f.service.db.prepare('SELECT COUNT(*) n FROM attachment_images').get().n, 5);
 });
 
-test('older image attachments are measured once, when their message is first viewed', async (t) => {
+test('unreadable image headers report no size, and sizes go with their message', async (t) => {
     const f = await fixture(t);
     const original = await sharp({
         create: { width: 640, height: 200, channels: 3, background: '#55aa77' },
@@ -219,8 +218,6 @@ test('older image attachments are measured once, when their message is first vie
         .toBuffer();
     const message = await f.upload(original),
         id = message.attachments[0].id;
-    // Uploads from before sizes were stored have no row.
-    f.service.db.prepare('DELETE FROM attachment_images').run();
     const history = async () =>
         (
             await request(
@@ -228,7 +225,7 @@ test('older image attachments are measured once, when their message is first vie
                 `/messages?room=${encodeURIComponent(message.room)}`,
                 f.owner.token,
             )
-        ).data[0].attachments[0];
+        ).data.messages[0].attachments[0];
     assert.deepEqual(await history(), {
         id,
         name: 'image.png',
@@ -237,11 +234,7 @@ test('older image attachments are measured once, when their message is first vie
         height: 200,
         animated: false,
     });
-    assert.deepEqual(
-        { ...f.service.db.prepare('SELECT * FROM attachment_images WHERE attachment=?').get(id) },
-        { attachment: id, width: 640, height: 200, animated: 0 },
-    );
-    // An unreadable header is remembered too, so it is not read again on every view.
+    // Zero sizes mark an image whose header could not be read.
     f.service.db.prepare('UPDATE attachment_images SET width=0,height=0').run();
     assert.equal((await history()).width, undefined);
     // Deleting the message removes its stored size.
