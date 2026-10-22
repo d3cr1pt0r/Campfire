@@ -53,3 +53,9 @@ The working `package.json` declares version 0.1.9. No local v0.1.8 or v0.1.9 tag
 [Prepared description](v0.2.0.md). Covers changes after local tag v0.1.9 (`0820d71`) through `7753def`: encrypted transport and desktop server identity verification, password changes, video pop-outs, channel notification modes, the removal of friends, left-sidebar direct messages and interface cleanup, and the redesigned roles and permissions with Default fallback and removal of Member.
 
 The package manifest and lockfile declare version 0.2.0. No local v0.2.0 tag exists. The changelog link uses the v0.1.9 tag and the recorded source cutoff; reconcile it with the final v0.2.0 tag before publication. No live release lookup was performed, and no publication date or uploaded assets are assumed. This draft has not been published to GitHub.
+
+## v0.2.1 draft
+
+[Prepared description](v0.2.1.md). Covers the 58 commits after local tag v0.2.0 (`595ec49`) through `0ed1686`: channel categories and inherited permissions, notification and settings redesigns, compact member lists, polls, live formatting, GIFs and link previews, voice invitations, personal DMs, password recovery, profile frames, audio controls, retention and storage settings, and setup capture/reset.
+
+The package manifest and lockfile declare version 0.2.1. The notes explicitly describe the incompatible v0.2.0 database schema and the limits of setup capture/reset. The changelog link records the current source cutoff; reconcile it with the final v0.2.1 tag before publication. This draft was prepared from local history and source without a live release lookup. No release was published or tag created.

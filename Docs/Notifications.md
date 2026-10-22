@@ -18,7 +18,7 @@ The most specific rule wins:
 2. An override for the channel's category.
 3. The server default.
 
-Under **Notification overrides**, choose a category or channel and select its notification level. The inheritance option shows the current parent default. Remove an override to return to inheritance. Category notification rules apply to every text channel in that category, including channels with custom access permissions.
+Under **Notification overrides**, categories and text channels appear in a collapsible hierarchy, with a notification dropdown beside each row. Reordering and category channel counts are omitted here. The inheritance option shows the current parent default; select it to remove an override and return to inheritance. Category notification rules apply to every text channel in that category, including channels with custom access permissions.
 
 Existing channel choices are retained. Until you choose a new server default, the previous direct-mention preference supplies its default.
 
