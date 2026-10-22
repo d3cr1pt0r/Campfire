@@ -602,8 +602,10 @@ export function registerAdministration({
                 run('DELETE FROM reactions WHERE user=?', target.id);
                 // Nobody can open a direct message with a deleted member again, so those go with
                 // the account, personal notes included. Rooms are dm:<lower id>:<higher id>.
+                // Bind each occurrence separately: older Node SQLite treats ?1 as a named parameter.
                 run(
-                    "DELETE FROM messages WHERE room IN (SELECT 'dm:' || min(?1,id) || ':' || max(?1,id) FROM users)",
+                    "DELETE FROM messages WHERE room IN (SELECT 'dm:' || min(?,id) || ':' || max(?,id) FROM users)",
+                    target.id,
                     target.id,
                 );
                 // Keep channel history and replies without retaining the account identity.

@@ -126,6 +126,23 @@ test('deletion removes the member’s direct messages and notes, keeping other c
         'POST',
         file({ room: room(f.member, f.member), body: 'Note' }, 'note.txt'),
     );
+    // Cover both positions of the deleted user in canonical DM room IDs.
+    const peers = [
+        '00000000-0000-0000-0000-000000000000',
+        'ffffffff-ffff-ffff-ffff-ffffffffffff',
+    ].map((id, index) => {
+        f.db
+            .prepare('INSERT INTO users(id,username,password) VALUES(?,?,?)')
+            .run(id, `Peer${index}`, 'unused-fixture-password');
+        return { user: { id } };
+    });
+    for (const peer of peers)
+        await f.api(
+            f.member,
+            '/messages',
+            'POST',
+            file({ room: room(f.member, peer), body: 'Remove both sides' }, 'peer.txt'),
+        );
     const unrelated = await f.api(f.owner, '/messages', 'POST', {
         room: room(f.owner, f.other),
         body: 'Not theirs',
@@ -137,7 +154,11 @@ test('deletion removes the member’s direct messages and notes, keeping other c
         file({ room: 'general', body: 'Public' }, 'public.txt'),
     );
     await f.api(f.owner, endpoint(f.member), 'DELETE', confirm(f.member));
-    for (const gone of [room(f.member, f.owner), room(f.member, f.member)])
+    for (const gone of [
+        room(f.member, f.owner),
+        room(f.member, f.member),
+        ...peers.map((peer) => room(f.member, peer)),
+    ])
         assert.equal(
             f.db.prepare('SELECT COUNT(*) n FROM messages WHERE room=?').get(gone).n,
             0,
