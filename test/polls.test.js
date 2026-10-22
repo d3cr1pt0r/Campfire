@@ -220,11 +220,13 @@ test('when voting time runs out, everyone receives the final results', async (t)
     const created = await post(f, f.member, { poll: poll() });
     await vote(f, f.member, created, [created.poll.answers[1].id]);
     // Polls still open at startup are scheduled again from the database.
+    // Hold time steady across restart so a busy runner cannot expire the poll before startup.
+    t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: Date.now() });
     f.db.prepare('UPDATE polls SET ends=? WHERE message=?').run(Date.now() + 200, created.id);
     await f.restart();
     const watcher = listen(f, f.other);
     t.after(() => watcher.close());
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    t.mock.timers.tick(1000);
     const final = watcher.updates.find((message) => message.id === created.id)?.poll;
     assert.equal(final?.ended, true);
     assert.deepEqual(
