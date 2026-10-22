@@ -4236,7 +4236,7 @@ body.stream-popout-body {
     overflow-wrap: anywhere;
 }
 .voice-channel-invite {
-    opacity: 1;
+    opacity: 0;
     flex-shrink: 0;
     width: 28px;
     height: 28px;
@@ -4244,12 +4244,21 @@ body.stream-popout-body {
     color: var(--nav-muted);
     border-radius: 5px;
 }
+.voice-channel-row:hover .voice-channel-invite,
+.voice-channel-row:has(:focus-visible) .voice-channel-invite,
+.voice-channel-row.invite-open .voice-channel-invite {
+    opacity: 1;
+}
 .voice-channel-invite:hover {
     background: #ffffff12;
     color: var(--nav-ink);
 }
 .voice-channel-invite:disabled {
     cursor: not-allowed;
+    opacity: 0;
+}
+.voice-channel-row:hover .voice-channel-invite:disabled,
+.voice-channel-row:has(:focus-visible) .voice-channel-invite:disabled {
     opacity: 0.35;
 }
 .voice-invite-popup {

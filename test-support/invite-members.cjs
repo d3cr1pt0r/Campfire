@@ -72,10 +72,10 @@ app.whenReady()
             await pause(100);
             assert.equal(
                 await js(
-                    `(()=>{const icon=document.querySelector('.voice-channel-invite');const rect=icon.getBoundingClientRect();return getComputedStyle(icon).opacity==='1' && document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2)?.closest('.voice-channel-invite')===icon;})()`,
+                    `(()=>{const icon=document.querySelector('.voice-channel-invite');const rect=icon.getBoundingClientRect();return document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2)?.closest('.voice-channel-invite')===icon;})()`,
                 ),
                 true,
-                'invite icon is visible and unobstructed at ' + width,
+                'invite control is unobstructed at ' + width,
             );
         }
         await click('Invite to lounge');

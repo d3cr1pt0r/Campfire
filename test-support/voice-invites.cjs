@@ -100,7 +100,7 @@ app.whenReady()
                 alice,
                 "getComputedStyle(document.querySelector('.voice-channel-invite')).opacity",
             ),
-            '1',
+            '0',
         );
         const bounds = await js(
             alice,
@@ -111,7 +111,7 @@ app.whenReady()
         await wait(
             alice,
             "getComputedStyle(document.querySelector('.voice-channel-invite')).opacity==='1'",
-            'invite icons stay visible on voice-channel hover',
+            'invite icons appear on voice-channel hover',
         );
         await click(alice, '[aria-label="Invite to lounge"]');
         await wait(
