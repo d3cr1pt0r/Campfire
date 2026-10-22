@@ -369,7 +369,10 @@ function ChannelEditor({
 }: Props & { channel: Channel }) {
     const [confirming, setConfirming] = useState(false);
     return (
-        <section className="channel-settings-card" aria-label={`${channel.name} channel settings`}>
+        <section
+            className="settings-section channel-settings-card"
+            aria-label={`${channel.name} channel settings`}
+        >
             <form
                 onSubmit={(event) => {
                     event.preventDefault();

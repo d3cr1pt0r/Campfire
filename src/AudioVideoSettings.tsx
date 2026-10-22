@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { Mic, Volume2, Video, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import type { Preferences } from './types';
 import { Toggle } from './forms';
 import { MicrophoneMeter } from './MicrophoneMeter';
@@ -134,29 +134,29 @@ export function AudioVideoSettings({
         );
     };
     return (
-        <div className="audio-video-settings">
-            <div className="audio-settings-intro">
-                <p>Balance your voice, calls, and sounds.</p>
-                <button
-                    type="button"
-                    className="secondary"
-                    disabled={refreshing}
-                    onClick={() => void refresh()}
-                >
-                    <RefreshCw size={14} />
-                    {refreshing ? 'Refreshing…' : 'Refresh devices'}
-                </button>
-            </div>
+        <div className="settings-page audio-video-settings">
             {error && (
                 <p className="audio-settings-error" role="alert">
                     {error}
                 </p>
             )}
-            <section className="audio-settings-section" aria-labelledby="audio-microphone-title">
-                <h3 id="audio-microphone-title">
-                    <Mic size={17} />
-                    Microphone
-                </h3>
+            <section
+                className="settings-section audio-settings-section"
+                aria-labelledby="audio-microphone-title"
+            >
+                <div className="audio-settings-intro">
+                    <h3 id="audio-microphone-title">Microphone</h3>
+                    <button
+                        type="button"
+                        className="secondary"
+                        disabled={refreshing}
+                        onClick={() => void refresh()}
+                    >
+                        <RefreshCw size={14} />
+                        {refreshing ? 'Refreshing…' : 'Refresh devices'}
+                    </button>
+                </div>
+                <p className="field-help">Preferences save automatically on this device.</p>
                 {deviceSelect('input')}
                 {inCall && (
                     <p className="audio-help">
@@ -226,11 +226,11 @@ export function AudioVideoSettings({
                     }
                 />
             </section>
-            <section className="audio-settings-section" aria-labelledby="audio-playback-title">
-                <h3 id="audio-playback-title">
-                    <Volume2 size={17} />
-                    Playback
-                </h3>
+            <section
+                className="settings-section audio-settings-section"
+                aria-labelledby="audio-playback-title"
+            >
+                <h3 id="audio-playback-title">Playback</h3>
                 <div className="audio-output-row">
                     {deviceSelect('output')}
                     <button
@@ -281,11 +281,11 @@ export function AudioVideoSettings({
                     Notifications.
                 </p>
             </section>
-            <section className="audio-settings-section" aria-labelledby="audio-video-title">
-                <h3 id="audio-video-title">
-                    <Video size={17} />
-                    Video & screen sharing
-                </h3>
+            <section
+                className="settings-section audio-settings-section"
+                aria-labelledby="audio-video-title"
+            >
+                <h3 id="audio-video-title">Video & screen sharing</h3>
                 <label>
                     Preferred resolution
                     <select

@@ -14,7 +14,7 @@ export function CategoryEditor({ category, ...props }: Props & { category: Categ
     const { api, busy, refresh, act, permission } = props;
     const [confirming, setConfirming] = useState(false);
     return (
-        <div className="category-editor">
+        <div className="settings-section category-editor">
             {permission('channels.edit') && (
                 <form
                     onSubmit={(event) => {
@@ -37,7 +37,7 @@ export function CategoryEditor({ category, ...props }: Props & { category: Categ
                             disabled={busy}
                         />
                     </label>
-                    <button className="secondary" disabled={busy}>
+                    <button className="primary" disabled={busy}>
                         Save category
                     </button>
                 </form>

@@ -1256,7 +1256,7 @@ small {
     display: flex;
     align-items: center;
     gap: 16px;
-    padding: 20px 24px 20px 28px;
+    padding: 16px 20px;
     border-bottom: 1px solid var(--border);
     min-width: 0;
 }
@@ -1305,7 +1305,7 @@ small {
 .settings-content {
     grid-column: 2;
     grid-row: 2;
-    padding: 20px 28px 32px;
+    padding: 16px 20px 20px;
     flex: 1;
     min-width: 0;
     overflow: auto;
@@ -3926,7 +3926,7 @@ body.stream-popout-body {
 }
 
 .roles-intro {
-    margin-bottom: 20px;
+    margin-bottom: 12px;
 }
 .roles-intro h3 {
     margin-top: 0;
@@ -4059,11 +4059,6 @@ body.stream-popout-body {
 }
 
 /* Audio settings use short, consistent rows rather than one long device form. */
-.audio-video-settings {
-    display: grid;
-    gap: 16px;
-    min-width: 0;
-}
 .audio-settings-intro {
     display: flex;
     align-items: center;
@@ -4081,19 +4076,6 @@ body.stream-popout-body {
     gap: 6px;
     margin: 0;
     white-space: nowrap;
-}
-.audio-settings-section {
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px;
-    min-width: 0;
-}
-.audio-settings-section h3 {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0 0 14px;
-    font-size: 14px;
 }
 .settings-content .audio-settings-section label {
     margin: 0;
@@ -4631,11 +4613,6 @@ body.stream-popout-body {
 .thread-panel .thread-original .message.message-avatars-hidden {
     padding-block: 1px;
 }
-.message-appearance-settings {
-    border-top: 1px solid var(--border);
-    padding-top: 12px;
-    margin-top: 20px;
-}
 .message-avatar-preview {
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -4653,32 +4630,35 @@ body.stream-popout-body {
     margin-right: 8px;
 }
 
-.account-settings {
+.account-settings,
+.settings-page {
     display: grid;
-    gap: 14px;
-}
-.account-section {
+    gap: 12px;
     min-width: 0;
-    padding: 16px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
 }
-.account-section h3 {
+:is(.account-section, .settings-section) {
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+:is(.account-section, .settings-section) h3 {
     font-size: 14px;
     letter-spacing: 0;
     margin: 0 0 10px;
 }
-.settings-content .account-section label {
+.settings-content :is(.account-section, .settings-section) label {
     margin: 0;
     font-size: 13px;
 }
-.account-section input:not([type='file']),
-.account-section select {
+:is(.account-section, .settings-section)
+    input:not([type='file'], [type='range'], [type='checkbox'], [type='radio'], [type='color']),
+:is(.account-section, .settings-section) select {
     margin-top: 6px;
     min-height: 36px;
 }
-.account-section .field-help,
-.account-section .muted {
+:is(.account-section, .settings-section) .field-help,
+:is(.account-section, .settings-section) .muted {
     font-size: 12px;
     line-height: 1.5;
     margin: 6px 0 10px;
@@ -4742,7 +4722,7 @@ body.stream-popout-body {
     font-size: 12px;
 }
 
-.account-section form > .primary {
+:is(.account-section, .settings-section) form > .primary {
     width: auto;
     margin-top: 0;
 }
@@ -4817,7 +4797,7 @@ body.stream-popout-body {
     height: 30px;
     font-size: 12px;
 }
-.account-section .toggle-label {
+:is(.account-section, .settings-section) .toggle-label {
     min-height: 40px;
     padding: 6px 0;
     gap: 12px;
@@ -4863,7 +4843,7 @@ body.stream-popout-body {
     margin-bottom: 12px;
 }
 @media (max-width: 600px) {
-    .account-section {
+    :is(.account-section, .settings-section) {
         padding: 12px;
     }
     .account-profile-overview {

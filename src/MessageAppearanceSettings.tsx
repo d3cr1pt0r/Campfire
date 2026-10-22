@@ -17,7 +17,10 @@ export function MessageAppearanceSettings({
 }) {
     const mode = messageAvatarMode(prefs.messageAvatars);
     return (
-        <section className="message-appearance-settings" aria-labelledby="message-appearance-title">
+        <section
+            className="settings-section message-appearance-settings"
+            aria-labelledby="message-appearance-title"
+        >
             <h3 id="message-appearance-title">Messages</h3>
             <label>
                 Message avatars

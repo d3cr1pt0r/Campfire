@@ -12,7 +12,7 @@ import { pinsFor } from './serverTrust';
 import { AvatarCropper } from './AvatarCropper';
 import { ChannelSettings } from './ChannelSettings';
 import { StorageSettings } from './StorageSettings';
-import { ArrowRight, Bell, LogOut, Trash2, X } from 'lucide-react';
+import { ArrowRight, LogOut, Trash2, X } from 'lucide-react';
 import type { State, Preferences, User } from './types';
 import type { ApiClient } from './api';
 import type { useCall } from './useCall';
@@ -197,64 +197,66 @@ export function SettingsPanel({
                 </button>
             </nav>
             <div className="settings-content" key={settingsTab}>
-                {['appearance', 'audio', 'notifications'].includes(settingsTab) && (
-                    <p className="field-help">Preferences save automatically on this device.</p>
-                )}
                 {settingsTab === 'appearance' && (
-                    <>
-                        <h3>Make yourself at home</h3>
-                        <p className="muted">
-                            Choose the light around your Campfire. System follows your device’s
-                            light or dark appearance.
-                        </p>
-                        <fieldset className="theme-options">
-                            <legend className="sr-only">Color theme</legend>
-                            {(
-                                [
-                                    ['system', 'System', 'Follow your device'],
-                                    ['dark', 'Dark', 'Ember · charcoal & amber'],
-                                    ['light', 'Light', 'Canvas · warm cream'],
-                                ] as const
-                            ).map(([value, title, description]) => (
-                                <label className="theme-choice" key={value}>
-                                    <span
-                                        className={`theme-preview theme-preview-${value}`}
-                                        aria-hidden="true"
-                                    >
-                                        <i />
-                                        <span>
-                                            <b />
-                                            <b />
-                                            <b />
+                    <div className="settings-page appearance-settings">
+                        <section className="settings-section" aria-label="Color theme">
+                            <h3>Color theme</h3>
+                            <p className="muted">
+                                Saved automatically on this device. System follows your device’s
+                                light or dark appearance.
+                            </p>
+                            <fieldset className="theme-options">
+                                <legend className="sr-only">Color theme</legend>
+                                {(
+                                    [
+                                        ['system', 'System', 'Follow your device'],
+                                        ['dark', 'Dark', 'Ember · charcoal & amber'],
+                                        ['light', 'Light', 'Canvas · warm cream'],
+                                    ] as const
+                                ).map(([value, title, description]) => (
+                                    <label className="theme-choice" key={value}>
+                                        <span
+                                            className={`theme-preview theme-preview-${value}`}
+                                            aria-hidden="true"
+                                        >
+                                            <i />
+                                            <span>
+                                                <b />
+                                                <b />
+                                                <b />
+                                            </span>
                                         </span>
-                                    </span>
-                                    <span className="theme-choice-label">
-                                        <strong>{title}</strong>
-                                        <small>{description}</small>
-                                    </span>
-                                    <input
-                                        type="radio"
-                                        name="theme"
-                                        value={value}
-                                        checked={(prefs.theme ?? 'system') === value}
-                                        onChange={() =>
-                                            setPrefs((previous) => ({ ...previous, theme: value }))
-                                        }
-                                    />
-                                </label>
-                            ))}
-                        </fieldset>
-                        <p className="field-help">
-                            This preference applies only to this client, including the sign-in
-                            screen.
-                        </p>
+                                        <span className="theme-choice-label">
+                                            <strong>{title}</strong>
+                                            <small>{description}</small>
+                                        </span>
+                                        <input
+                                            type="radio"
+                                            name="theme"
+                                            value={value}
+                                            checked={(prefs.theme ?? 'system') === value}
+                                            onChange={() =>
+                                                setPrefs((previous) => ({
+                                                    ...previous,
+                                                    theme: value,
+                                                }))
+                                            }
+                                        />
+                                    </label>
+                                ))}
+                            </fieldset>
+                            <p className="field-help">
+                                This preference applies only to this client, including the sign-in
+                                screen.
+                            </p>
+                        </section>
                         <MessageAppearanceSettings
                             prefs={prefs}
                             setPrefs={setPrefs}
                             user={state.me}
                             color={color(state.me)}
                         />
-                    </>
+                    </div>
                 )}
                 {settingsTab === 'account' && (
                     <div className="account-settings">
@@ -606,202 +608,227 @@ export function SettingsPanel({
                     />
                 )}
                 {settingsTab === 'emojis' && (
-                    <>
-                        <p>
-                            Upload a custom emoji to use in messages and reactions. Images resize to
-                            128 × 128; animated uploads use a still frame.
-                        </p>
-                        <form onSubmit={uploadEmoji}>
-                            <label>
-                                Name
-                                <input
-                                    name="name"
-                                    pattern="[a-z0-9_]{2,32}"
-                                    minLength={2}
-                                    maxLength={32}
-                                    placeholder="party_cat"
-                                    required
-                                />
-                            </label>
-                            <label>
-                                Image
-                                <input
-                                    name="image"
-                                    type="file"
-                                    accept="image/png,image/jpeg,image/webp,image/gif"
-                                    required
-                                />
-                            </label>
-                            <button
-                                className="primary"
-                                disabled={busy || !permission('emojis.upload')}
-                            >
-                                Upload emoji
-                            </button>
-                        </form>
-                        <div className="custom-emoji-list">
-                            {(state.emojis || []).map((e) => (
-                                <div key={e.id}>
-                                    <Emoji value={`:${e.name}:`} custom={state.emojis} />
-                                    <span>:{e.name}:</span>
-                                    {(e.author === state.me.id ||
-                                        permission('emojis.deleteOthers')) &&
-                                        (deleteEmoji === e.id ? (
-                                            <div className="emoji-delete-actions">
-                                                <span>Delete :{e.name}:?</span>
+                    <div className="settings-page emoji-settings">
+                        <section className="settings-section" aria-label="Upload emoji">
+                            <h3>Upload emoji</h3>
+                            <p className="muted">
+                                Upload a custom emoji to use in messages and reactions. Images
+                                resize to 128 × 128; animated uploads use a still frame.
+                            </p>
+                            <form className="settings-form-grid" onSubmit={uploadEmoji}>
+                                <label>
+                                    Name
+                                    <input
+                                        name="name"
+                                        pattern="[a-z0-9_]{2,32}"
+                                        minLength={2}
+                                        maxLength={32}
+                                        placeholder="party_cat"
+                                        required
+                                    />
+                                </label>
+                                <label>
+                                    Image
+                                    <input
+                                        name="image"
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/webp,image/gif"
+                                        required
+                                    />
+                                </label>
+                                <button
+                                    className="primary"
+                                    disabled={busy || !permission('emojis.upload')}
+                                >
+                                    Upload emoji
+                                </button>
+                            </form>
+                        </section>
+                        <section className="settings-section" aria-label="Emoji library">
+                            <h3>Emoji library</h3>
+                            {!(state.emojis || []).length && (
+                                <p className="muted">No custom emoji yet.</p>
+                            )}
+                            <div className="custom-emoji-list">
+                                {(state.emojis || []).map((e) => (
+                                    <div key={e.id}>
+                                        <Emoji value={`:${e.name}:`} custom={state.emojis} />
+                                        <span>:{e.name}:</span>
+                                        {(e.author === state.me.id ||
+                                            permission('emojis.deleteOthers')) &&
+                                            (deleteEmoji === e.id ? (
+                                                <div className="emoji-delete-actions">
+                                                    <span>Delete :{e.name}:?</span>
+                                                    <button
+                                                        className="secondary"
+                                                        disabled={busy}
+                                                        onClick={() => setDeleteEmoji(null)}
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                    <button
+                                                        className="secondary danger-text"
+                                                        disabled={busy}
+                                                        onClick={() =>
+                                                            void act(async () => {
+                                                                await api(
+                                                                    `/emojis/${e.id}`,
+                                                                    'DELETE',
+                                                                );
+                                                                setDeleteEmoji(null);
+                                                                await refresh();
+                                                            })
+                                                        }
+                                                    >
+                                                        Delete emoji
+                                                    </button>
+                                                </div>
+                                            ) : (
                                                 <button
-                                                    className="secondary"
+                                                    title={`Delete ${e.name}`}
                                                     disabled={busy}
-                                                    onClick={() => setDeleteEmoji(null)}
+                                                    onClick={() => setDeleteEmoji(e.id)}
                                                 >
-                                                    Cancel
+                                                    <Trash2 size={16} />
                                                 </button>
-                                                <button
-                                                    className="secondary danger-text"
-                                                    disabled={busy}
-                                                    onClick={() =>
-                                                        void act(async () => {
-                                                            await api(`/emojis/${e.id}`, 'DELETE');
-                                                            setDeleteEmoji(null);
-                                                            await refresh();
-                                                        })
-                                                    }
-                                                >
-                                                    Delete emoji
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <button
-                                                title={`Delete ${e.name}`}
-                                                disabled={busy}
-                                                onClick={() => setDeleteEmoji(e.id)}
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        ))}
-                                </div>
-                            ))}
-                        </div>
-                    </>
+                                            ))}
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    </div>
                 )}
                 {settingsTab === 'notifications' && (
-                    <>
-                        <Bell className="settings-hero" size={42} />
-                        <p className="muted">
-                            Get a desktop notification for new messages while the app is in the
-                            background for DMs and channel activity you choose below. Message text
-                            stays out of notifications.
-                        </p>
-                        <Toggle
-                            title="Desktop notifications"
-                            value={prefs.notifications}
-                            set={(v) =>
-                                void act(async () => {
-                                    if (v) {
-                                        if (!('Notification' in window))
-                                            throw new Error(
-                                                'Desktop notifications are unavailable',
-                                            );
-                                        const result = await Notification.requestPermission();
-                                        if (result !== 'granted')
-                                            throw new Error(
-                                                'Notifications were not allowed. Check your operating system settings.',
-                                            );
-                                    }
-                                    setPrefs({ ...prefs, notifications: v });
-                                })
-                            }
-                        />
-                        <Toggle
-                            title="Message notification sound"
-                            value={prefs.messageSounds !== false}
-                            set={(value) =>
-                                setPrefs((previous) => ({ ...previous, messageSounds: value }))
-                            }
-                        />
-                        <button
-                            className="secondary"
-                            disabled={busy}
-                            onClick={() => void act(testNotificationSound)}
-                        >
-                            Test notification sound
-                        </button>
-                        <Toggle
-                            title="Notify for direct messages"
-                            value={prefs.dmNotifications !== false}
-                            set={(value) =>
-                                setPrefs((previous) => ({ ...previous, dmNotifications: value }))
-                            }
-                        />
-                        <Toggle
-                            title="Notify for direct @mentions"
-                            value={prefs.mentionNotifications !== false}
-                            set={(value) =>
-                                setPrefs((previous) => ({
-                                    ...previous,
-                                    mentionNotifications: value,
-                                }))
-                            }
-                        />
-                        <p className="muted">
-                            Do not disturb silences message sounds and desktop notifications. Sounds
-                            use your selected audio output. Browser clients may require an initial
-                            click; use Test notification sound to check playback. These preferences
-                            are saved on this device; conversation overrides below apply to your
-                            current account on this server.
-                        </p>
-                        <Toggle
-                            title={`Mute ${state.name}`}
-                            value={
-                                prefs.serverNotifications?.[
-                                    notificationKey(url, state.me.id, '*')
-                                ] === false
-                            }
-                            set={(muted) =>
-                                setPrefs((previous) => ({
-                                    ...previous,
-                                    serverNotifications: {
-                                        ...previous.serverNotifications,
-                                        [notificationKey(url, state.me.id, '*')]: !muted,
-                                    },
-                                }))
-                            }
-                        />
-                        <p className="muted">
-                            Server mute silences message sounds and desktop alerts, including direct
-                            messages. Unread indicators remain visible.
-                        </p>
-                        <h3>Text channels</h3>
-                        <p className="muted">
-                            Choose All messages, Mentions only, or Muted for each channel. These
-                            choices include thread replies. Mentions only uses the @mention
-                            preference above; All messages includes every message. Server mute and
-                            Do not disturb silence all modes. Unread indicators remain visible.
-                        </p>
-                        {state.channels
-                            .filter((channel) => channel.kind === 'text')
-                            .map((channel) => {
-                                const key = notificationKey(url, state.me.id, channel.id);
-                                return (
-                                    <ChannelNotificationSelect
-                                        key={key}
-                                        label={`#${channel.name} notifications`}
-                                        mode={channelNotificationMode(
-                                            prefs.channelNotifications?.[key],
-                                        )}
-                                        onChange={(value) =>
-                                            setPrefs((previous) => ({
-                                                ...previous,
-                                                channelNotifications: {
-                                                    ...previous.channelNotifications,
-                                                    [key]: value,
-                                                },
-                                            }))
+                    <div className="settings-page notification-settings">
+                        <section className="settings-section" aria-label="Alerts and sounds">
+                            <h3>Alerts & sounds</h3>
+                            <p className="muted">
+                                Get a desktop notification for new messages while the app is in the
+                                background for DMs and channel activity you choose below. Message
+                                text stays out of notifications.
+                            </p>
+                            <Toggle
+                                title="Desktop notifications"
+                                value={prefs.notifications}
+                                set={(v) =>
+                                    void act(async () => {
+                                        if (v) {
+                                            if (!('Notification' in window))
+                                                throw new Error(
+                                                    'Desktop notifications are unavailable',
+                                                );
+                                            const result = await Notification.requestPermission();
+                                            if (result !== 'granted')
+                                                throw new Error(
+                                                    'Notifications were not allowed. Check your operating system settings.',
+                                                );
                                         }
-                                    />
-                                );
-                            })}
-                        <details className="dm-notification-settings">
+                                        setPrefs({ ...prefs, notifications: v });
+                                    })
+                                }
+                            />
+                            <Toggle
+                                title="Message notification sound"
+                                value={prefs.messageSounds !== false}
+                                set={(value) =>
+                                    setPrefs((previous) => ({ ...previous, messageSounds: value }))
+                                }
+                            />
+                            <button
+                                className="secondary"
+                                disabled={busy}
+                                onClick={() => void act(testNotificationSound)}
+                            >
+                                Test notification sound
+                            </button>
+                            <Toggle
+                                title="Notify for direct messages"
+                                value={prefs.dmNotifications !== false}
+                                set={(value) =>
+                                    setPrefs((previous) => ({
+                                        ...previous,
+                                        dmNotifications: value,
+                                    }))
+                                }
+                            />
+                            <Toggle
+                                title="Notify for direct @mentions"
+                                value={prefs.mentionNotifications !== false}
+                                set={(value) =>
+                                    setPrefs((previous) => ({
+                                        ...previous,
+                                        mentionNotifications: value,
+                                    }))
+                                }
+                            />
+                            <p className="muted">
+                                Do not disturb silences sounds and desktop alerts. Sounds use your
+                                selected audio output; use Test notification sound to check
+                                playback. Device preferences save automatically. Conversation
+                                overrides below apply to your account on this server.
+                            </p>
+                        </section>
+                        <section className="settings-section" aria-label="Server notifications">
+                            <h3>Server notifications</h3>
+                            <Toggle
+                                title={`Mute ${state.name}`}
+                                value={
+                                    prefs.serverNotifications?.[
+                                        notificationKey(url, state.me.id, '*')
+                                    ] === false
+                                }
+                                set={(muted) =>
+                                    setPrefs((previous) => ({
+                                        ...previous,
+                                        serverNotifications: {
+                                            ...previous.serverNotifications,
+                                            [notificationKey(url, state.me.id, '*')]: !muted,
+                                        },
+                                    }))
+                                }
+                            />
+                            <p className="muted">
+                                Server mute silences message sounds and desktop alerts, including
+                                direct messages. Unread indicators remain visible.
+                            </p>
+                        </section>
+                        <section
+                            className="settings-section settings-preference-list"
+                            aria-label="Text channels"
+                        >
+                            <h3>Text channels</h3>
+                            <p className="muted">
+                                Choose All messages, Mentions only, or Muted for each channel. These
+                                choices include thread replies. Mentions only uses the @mention
+                                preference above; All messages includes every message. Server mute
+                                and Do not disturb silence all modes. Unread indicators remain
+                                visible.
+                            </p>
+                            {state.channels
+                                .filter((channel) => channel.kind === 'text')
+                                .map((channel) => {
+                                    const key = notificationKey(url, state.me.id, channel.id);
+                                    return (
+                                        <ChannelNotificationSelect
+                                            key={key}
+                                            label={`#${channel.name} notifications`}
+                                            mode={channelNotificationMode(
+                                                prefs.channelNotifications?.[key],
+                                            )}
+                                            onChange={(value) =>
+                                                setPrefs((previous) => ({
+                                                    ...previous,
+                                                    channelNotifications: {
+                                                        ...previous.channelNotifications,
+                                                        [key]: value,
+                                                    },
+                                                }))
+                                            }
+                                        />
+                                    );
+                                })}
+                        </section>
+                        <details className="settings-section account-details dm-notification-settings">
                             <summary>Individual direct messages</summary>
                             {state.users
                                 .filter((candidate) => candidate.id !== state.me.id)
@@ -833,16 +860,17 @@ export function SettingsPanel({
                                     );
                                 })}
                         </details>
-                    </>
+                    </div>
                 )}
                 {settingsTab === 'server' && (
                     <div className="account-settings server-settings">
-                        <p className="muted">
-                            Server management follows your combined role permissions. Role
-                            assignments and member moderation can be delegated independently.
-                        </p>
                         <section className="account-section" aria-label="General">
                             <h3>General</h3>
+                            <p className="muted">
+                                Server management follows your combined role permissions. Role
+                                assignments and member moderation can be delegated independently.
+                            </p>
+
                             <form
                                 className="server-general-form"
                                 onSubmit={(e) => {
@@ -896,9 +924,10 @@ export function SettingsPanel({
                             </form>
                             {permission('server.edit') && (
                                 <div className="server-icon-settings">
-                                    <label>
-                                        Server icon
+                                    <label className="secondary account-picture-upload">
+                                        Upload server icon
                                         <input
+                                            className="sr-only"
                                             type="file"
                                             accept="image/png,image/jpeg,image/webp,image/gif"
                                             disabled={busy}

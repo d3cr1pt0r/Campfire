@@ -25,165 +25,173 @@ export function RolesSettings(props: Props) {
     const [deleting, setDeleting] = useState<string | null>(null);
     const can = (id: string) => hasPermission(state.me, state.roles, id);
     return (
-        <section className="roles-settings">
-            <div className="roles-intro">
-                <h3>Role hierarchy</h3>
-                <p>
-                    Default applies only when a member has no assigned roles. Assigning a role
-                    replaces Default; multiple assigned roles combine. Higher roles control
-                    management authority and name color.
-                </p>
-                <p className="muted">
-                    Roles define server-wide permissions. Channel and category overrides are managed
-                    in Channels.
-                </p>
-                {manageChannels && (
-                    <button className="secondary" onClick={manageChannels}>
-                        Manage channel access
+        <div className="settings-page roles-settings">
+            <section className="settings-section" aria-label="Role hierarchy">
+                <div className="roles-intro">
+                    <h3>Role hierarchy</h3>
+                    <p className="muted">
+                        Default applies only when a member has no assigned roles. Assigning a role
+                        replaces Default; multiple assigned roles combine. Higher roles control
+                        management authority and name color.
+                    </p>
+                    <p className="muted">
+                        Roles define server-wide permissions. Channel and category overrides are
+                        managed in Channels.
+                    </p>
+                    {manageChannels && (
+                        <button className="secondary" onClick={manageChannels}>
+                            Manage channel access
+                        </button>
+                    )}
+                    <p className="owner-notice">
+                        Server ownership is protected and cannot be assigned, removed or transferred
+                        through roles.
+                    </p>
+                </div>
+                {state.roles.map((role, index) => (
+                    <div className="role-card" key={role.id}>
+                        <div className="role-card-heading">
+                            <i
+                                className="role-color-dot"
+                                style={{ background: role.color || 'transparent' }}
+                            />
+                            <div>
+                                <strong>{role.name}</strong>
+                                <small>
+                                    {role.id === 'everyone'
+                                        ? 'Fallback · Members without assigned roles'
+                                        : `${state.users.filter((user) => user.roles.includes(role.id)).length} ${state.users.filter((user) => user.roles.includes(role.id)).length === 1 ? 'member' : 'members'}`}
+                                </small>
+                            </div>
+                            {can('roles.manage') && role.id !== 'everyone' && (
+                                <>
+                                    <button
+                                        title={`Move ${role.name} up`}
+                                        aria-label={`Move ${role.name} up`}
+                                        disabled={
+                                            busy ||
+                                            index === 0 ||
+                                            !canManageRole(state.me, state.roles, role) ||
+                                            !canManageRole(
+                                                state.me,
+                                                state.roles,
+                                                state.roles[index - 1],
+                                            )
+                                        }
+                                        onClick={() =>
+                                            void act(async () => {
+                                                await api(`/roles/${role.id}/move`, 'POST', {
+                                                    direction: 'up',
+                                                });
+                                                await refresh();
+                                            })
+                                        }
+                                    >
+                                        <ArrowUp size={16} />
+                                    </button>
+                                    <button
+                                        title={`Move ${role.name} down`}
+                                        aria-label={`Move ${role.name} down`}
+                                        disabled={
+                                            busy ||
+                                            state.roles[index + 1]?.id === 'everyone' ||
+                                            !state.roles[index + 1] ||
+                                            !canManageRole(state.me, state.roles, role) ||
+                                            !canManageRole(
+                                                state.me,
+                                                state.roles,
+                                                state.roles[index + 1],
+                                            )
+                                        }
+                                        onClick={() =>
+                                            void act(async () => {
+                                                await api(`/roles/${role.id}/move`, 'POST', {
+                                                    direction: 'down',
+                                                });
+                                                await refresh();
+                                            })
+                                        }
+                                    >
+                                        <ArrowDown size={16} />
+                                    </button>
+                                </>
+                            )}
+                            <button
+                                title={`Edit ${role.name}`}
+                                aria-label={`Edit ${role.name} role`}
+                                disabled={
+                                    busy ||
+                                    !canManageRole(state.me, state.roles, role) ||
+                                    !can('roles.manage')
+                                }
+                                onClick={() => edit(role.id)}
+                            >
+                                <Pencil size={16} />
+                            </button>
+                            {role.id !== 'everyone' &&
+                                can('roles.manage') &&
+                                canManageRole(state.me, state.roles, role) && (
+                                    <button
+                                        title={`Delete ${role.name}`}
+                                        aria-label={`Delete ${role.name} role`}
+                                        disabled={busy}
+                                        onClick={() => setDeleting(role.id)}
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                )}
+                        </div>
+                        <p className="muted">
+                            {role.permissions.length}{' '}
+                            {role.permissions.length === 1 ? 'permission' : 'permissions'} ·{' '}
+                            {role.color || 'No name color'}
+                        </p>
+                        {deleting === role.id && (
+                            <div className="role-delete-confirm" role="alert">
+                                <p>
+                                    Delete {role.name}? Members keep their other roles. Members with
+                                    no remaining roles use Default.
+                                </p>
+                                <button onClick={() => setDeleting(null)}>Cancel</button>
+                                <button
+                                    className="danger-bg"
+                                    disabled={busy}
+                                    onClick={() =>
+                                        void act(async () => {
+                                            await api(`/roles/${role.id}`, 'DELETE');
+                                            setDeleting(null);
+                                            await refresh();
+                                        })
+                                    }
+                                >
+                                    Delete role
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                ))}
+                {can('roles.manage') && (
+                    <button className="secondary" onClick={() => edit('new')}>
+                        <Plus size={16} />
+                        Create role
                     </button>
                 )}
-                <p className="owner-notice">
-                    Server ownership is protected and cannot be assigned, removed or transferred
-                    through roles.
+            </section>
+            <section className="settings-section" aria-label="Member roles">
+                <h3>Member roles</h3>
+                <p className="muted">
+                    Choose one or more roles to replace Default. Their permissions combine. Clear
+                    every selection to restore Default.
                 </p>
-            </div>
-            {state.roles.map((role, index) => (
-                <div className="role-card" key={role.id}>
-                    <div className="role-card-heading">
-                        <i
-                            className="role-color-dot"
-                            style={{ background: role.color || 'transparent' }}
-                        />
-                        <div>
-                            <strong>{role.name}</strong>
-                            <small>
-                                {role.id === 'everyone'
-                                    ? 'Fallback · Members without assigned roles'
-                                    : `${state.users.filter((user) => user.roles.includes(role.id)).length} ${state.users.filter((user) => user.roles.includes(role.id)).length === 1 ? 'member' : 'members'}`}
-                            </small>
-                        </div>
-                        {can('roles.manage') && role.id !== 'everyone' && (
-                            <>
-                                <button
-                                    title={`Move ${role.name} up`}
-                                    aria-label={`Move ${role.name} up`}
-                                    disabled={
-                                        busy ||
-                                        index === 0 ||
-                                        !canManageRole(state.me, state.roles, role) ||
-                                        !canManageRole(
-                                            state.me,
-                                            state.roles,
-                                            state.roles[index - 1],
-                                        )
-                                    }
-                                    onClick={() =>
-                                        void act(async () => {
-                                            await api(`/roles/${role.id}/move`, 'POST', {
-                                                direction: 'up',
-                                            });
-                                            await refresh();
-                                        })
-                                    }
-                                >
-                                    <ArrowUp size={16} />
-                                </button>
-                                <button
-                                    title={`Move ${role.name} down`}
-                                    aria-label={`Move ${role.name} down`}
-                                    disabled={
-                                        busy ||
-                                        state.roles[index + 1]?.id === 'everyone' ||
-                                        !state.roles[index + 1] ||
-                                        !canManageRole(state.me, state.roles, role) ||
-                                        !canManageRole(
-                                            state.me,
-                                            state.roles,
-                                            state.roles[index + 1],
-                                        )
-                                    }
-                                    onClick={() =>
-                                        void act(async () => {
-                                            await api(`/roles/${role.id}/move`, 'POST', {
-                                                direction: 'down',
-                                            });
-                                            await refresh();
-                                        })
-                                    }
-                                >
-                                    <ArrowDown size={16} />
-                                </button>
-                            </>
-                        )}
-                        <button
-                            title={`Edit ${role.name}`}
-                            aria-label={`Edit ${role.name} role`}
-                            disabled={
-                                busy ||
-                                !canManageRole(state.me, state.roles, role) ||
-                                !can('roles.manage')
-                            }
-                            onClick={() => edit(role.id)}
-                        >
-                            <Pencil size={16} />
-                        </button>
-                        {role.id !== 'everyone' &&
-                            can('roles.manage') &&
-                            canManageRole(state.me, state.roles, role) && (
-                                <button
-                                    title={`Delete ${role.name}`}
-                                    aria-label={`Delete ${role.name} role`}
-                                    disabled={busy}
-                                    onClick={() => setDeleting(role.id)}
-                                >
-                                    <Trash2 size={16} />
-                                </button>
-                            )}
-                    </div>
-                    <p className="muted">
-                        {role.permissions.length}{' '}
-                        {role.permissions.length === 1 ? 'permission' : 'permissions'} ·{' '}
-                        {role.color || 'No name color'}
-                    </p>
-                    {deleting === role.id && (
-                        <div className="role-delete-confirm" role="alert">
-                            <p>
-                                Delete {role.name}? Members keep their other roles. Members with no
-                                remaining roles use Default.
-                            </p>
-                            <button onClick={() => setDeleting(null)}>Cancel</button>
-                            <button
-                                className="danger-bg"
-                                disabled={busy}
-                                onClick={() =>
-                                    void act(async () => {
-                                        await api(`/roles/${role.id}`, 'DELETE');
-                                        setDeleting(null);
-                                        await refresh();
-                                    })
-                                }
-                            >
-                                Delete role
-                            </button>
-                        </div>
-                    )}
-                </div>
-            ))}
-            {can('roles.manage') && (
-                <button className="secondary" onClick={() => edit('new')}>
-                    <Plus size={16} />
-                    Create role
-                </button>
-            )}
-            <h3>Member roles</h3>
-            <p className="muted">
-                Choose one or more roles to replace Default. Their permissions combine. Clear every
-                selection to restore Default.
-            </p>
-            {state.users.map((user) => (
-                <MemberRoles key={`${user.id}:${user.roles.join(',')}`} {...props} user={user} />
-            ))}
-        </section>
+                {state.users.map((user) => (
+                    <MemberRoles
+                        key={`${user.id}:${user.roles.join(',')}`}
+                        {...props}
+                        user={user}
+                    />
+                ))}
+            </section>
+        </div>
     );
 }
 function MemberRoles({ state, api, busy, refresh, act, user }: Props & { user: User }) {

@@ -148,7 +148,7 @@ export function RegistrationSettings({
                                         placeholder="Who is this for?"
                                     />
                                 </label>
-                                <button type="submit" disabled={busy}>
+                                <button type="submit" className="primary" disabled={busy}>
                                     Create invitation
                                 </button>
                             </form>
