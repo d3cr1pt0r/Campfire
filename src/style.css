@@ -4228,6 +4228,14 @@ body.stream-popout-body {
     align-items: center;
     gap: 2px;
     min-width: 0;
+    border-radius: 5px;
+    transition: background 0.15s;
+}
+.voice-channel-row:hover {
+    background: #ffffff0b;
+}
+.sidebar .voice-channel-row > .nav-item.channel:hover {
+    background: transparent;
 }
 .voice-channel-row > .channel {
     flex: 1;

@@ -113,6 +113,7 @@ app.whenReady()
             "getComputedStyle(document.querySelector('.voice-channel-invite')).opacity==='1'",
             'invite icons appear on voice-channel hover',
         );
+        await screenshot(alice, 'voice-channel-full-row-hover');
         await click(alice, '[aria-label="Invite to lounge"]');
         await wait(
             alice,
