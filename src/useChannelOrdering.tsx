@@ -11,12 +11,14 @@ export function useChannelOrdering({
     refresh,
     permission,
     busy = false,
+    allowReordering = true,
 }: {
     state: State;
     api: ApiClient;
     refresh: () => Promise<void>;
     permission: (id: string) => boolean;
     busy?: boolean;
+    allowReordering?: boolean;
 }) {
     const source = useRef<Item | null>(null);
     const [dragging, setDragging] = useState<Item | null>(null);
@@ -26,7 +28,7 @@ export function useChannelOrdering({
     const [error, setError] = useState('');
     const dialog = useRef<HTMLElement | null>(null);
     useDialog(dialog, () => setPending(null), !!pending);
-    const enabled = permission('channels.reorder') && !busy && !saving;
+    const enabled = allowReordering && permission('channels.reorder') && !busy && !saving;
     const clear = () => {
         source.current = null;
         setDragging(null);
@@ -52,6 +54,7 @@ export function useChannelOrdering({
         }
     };
     const place = (item: Item, destination: Destination) => {
+        if (!enabled) return;
         clear();
         const channel = state.channels.find((entry) => entry.id === item.id);
         if (
@@ -66,6 +69,10 @@ export function useChannelOrdering({
     const handle = (item: Item) => ({
         draggable: enabled,
         onDragStart: (event: DragEvent) => {
+            if (!enabled) {
+                event.preventDefault();
+                return;
+            }
             event.stopPropagation();
             source.current = item;
             setDragging(item);
@@ -106,7 +113,7 @@ export function useChannelOrdering({
                 setOver((value) => (value === key ? null : value));
         },
         onDrop: (event: DragEvent) => {
-            if (over !== key || !source.current) return;
+            if (!enabled || over !== key || !source.current) return;
             event.preventDefault();
             event.stopPropagation();
             place(source.current, destination);

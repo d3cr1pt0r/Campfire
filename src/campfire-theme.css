@@ -176,6 +176,9 @@ body {
     gap: 8px;
     border-radius: 7px;
 }
+.sidebar-content > .direct-messages {
+    margin-bottom: 12px;
+}
 .sidebar-content .direct-message {
     padding-block: 3px;
     font-size: 13px;

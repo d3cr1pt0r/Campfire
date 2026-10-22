@@ -197,21 +197,44 @@ app.whenReady()
             'document.querySelector("button[aria-label=\\\"Edit Presenter role\\\"]").click()',
         );
         await wait(a, '!!document.querySelector(".role-editor")', 'existing role opens');
-        await js(a, 'document.querySelector("#role-channels-tab").click()');
-        await js(
+        assert.equal(await js(a, '!!document.querySelector("#role-channels-tab")'), false);
+        await screenshot(a, 'server-role-permissions.png');
+        await js(a, 'document.querySelector(".role-editor").requestSubmit()');
+        await wait(
             a,
-            '{const detail=[...document.querySelectorAll(".role-channel-overrides")].find(node=>node.querySelector("summary").textContent.includes("general"));detail.open=true;}',
+            '!!document.querySelector(".roles-settings")',
+            'role saves server permissions',
         );
         await js(
             a,
-            '{for(const [permission,effect] of [["messages.send","deny"],["reactions.add","allow"]]){const select=document.querySelector(`select[aria-label="Presenter ${permission} in general"]`);select.value=effect;select.dispatchEvent(new Event("change",{bubbles:true}));}}',
+            '[...document.querySelectorAll("button")].find(node=>node.textContent.trim()==="Manage channel access").click()',
+        );
+        await wait(
+            a,
+            '!!document.querySelector(".channel-workspace")',
+            'channel access link opens Channels',
         );
         await js(
             a,
-            'document.querySelector(".role-channel-overrides[open]").scrollIntoView({block:"center"})',
+            '[...document.querySelectorAll(".tree-channel-select")].find(node=>node.textContent.trim()==="general").click()',
+        );
+        await js(
+            a,
+            '[...document.querySelectorAll(".permission-role-list button")].find(node=>node.textContent.trim()==="Presenter").click()',
+        );
+        await js(
+            a,
+            `document.querySelector('button[aria-label="Deny Send channel messages for Presenter"]').click()`,
+        );
+        await js(
+            a,
+            `document.querySelector('button[aria-label="Allow Add reactions for Presenter"]').click()`,
         );
         await screenshot(a, 'channel-overrides.png');
-        await js(a, 'document.querySelector(".role-editor").requestSubmit()');
+        await js(
+            a,
+            '[...document.querySelectorAll(".permission-savebar button")].find(node=>node.textContent.trim()==="Save changes").click()',
+        );
         await wait(
             b,
             'document.querySelector(".chat-area .composer .rich-input")?.getAttribute("contenteditable") === "false"',
@@ -263,7 +286,8 @@ app.whenReady()
             await pause(150);
             assert.equal(await js(a, 'document.documentElement.scrollWidth<=innerWidth'), true);
         }
-        // The current Default settings are a creation template, including changed colors and overrides.
+        // Default supplies server permissions and color; channel overrides stay in Channels.
+        await openRoles(a);
         const templatePermissions = ['channels.view', 'messages.send', 'reactions.add'];
         await api(alice, '/roles/everyone', 'PATCH', {
             name: 'Default',
@@ -311,19 +335,7 @@ app.whenReady()
             ),
             ['Add reactions', 'Send channel messages', 'View channels'].sort(),
         );
-        await js(a, 'document.querySelector("#role-channels-tab").click()');
-        for (const [permission, channel, effect] of [
-            ['messages.send', 'general', 'deny'],
-            ['reactions.add', 'general', 'allow'],
-            ['calls.camera', 'lounge', 'deny'],
-        ])
-            assert.equal(
-                await js(
-                    a,
-                    `document.querySelector(${JSON.stringify(`select[aria-label="New role ${permission} in ${channel}"]`)}).value`,
-                ),
-                effect,
-            );
+        assert.equal(await js(a, '!!document.querySelector("#role-channels-tab")'), false);
         await input(a, '.role-editor input[name=name]', 'Everyone copy');
         await js(a, 'document.querySelector(".role-editor").requestSubmit()');
         await wait(
@@ -340,9 +352,10 @@ app.whenReady()
                 .filter((entry) => entry.role === id)
                 .map(({ channel, permission, effect }) => ({ channel, permission, effect }))
                 .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
-        assert.deepEqual(overridesFor(copy.id), overridesFor('everyone'));
+        assert.deepEqual(overridesFor(copy.id), []);
+        assert.equal(overridesFor('everyone').length, 3);
         console.log(
-            'PASS new roles copy Default permissions, optional color and channel overrides while keeping the name blank',
+            'PASS new roles copy Default server permissions and color without copying channel overrides',
         );
         // Default becomes inactive with any explicit role and returns when the last checkbox is cleared.
         await api(alice, '/roles/everyone/access', 'PUT', {

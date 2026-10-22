@@ -179,6 +179,103 @@ const browserDrag = async (win, source, destination) => {
         debug.detach();
     }
 };
+const browserScrollDrag = async (win, source, destination, direction) => {
+    const from = await js(
+        win,
+        `{
+        const node=${source};
+        const outline=document.querySelector('.organizer-outline');
+        outline.scrollTop += node.getBoundingClientRect().top-outline.getBoundingClientRect().top-outline.clientHeight/2;
+        const r=node.getBoundingClientRect();
+        ({x:r.left+r.width/2,y:r.top+r.height/2});
+    }`,
+    );
+    const debug = win.webContents.debugger;
+    debug.attach('1.3');
+    let edge;
+    try {
+        await debug.sendCommand('Input.setInterceptDrags', { enabled: true });
+        const intercepted = new Promise((resolve, reject) => {
+            const timeout = setTimeout(
+                () => reject(Error('Native scroll drag did not start')),
+                3000,
+            );
+            const listener = (_event, method, params) => {
+                if (method !== 'Input.dragIntercepted') return;
+                clearTimeout(timeout);
+                debug.removeListener('message', listener);
+                resolve(params.data);
+            };
+            debug.on('message', listener);
+        });
+        await debug.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', ...from });
+        await debug.sendCommand('Input.dispatchMouseEvent', {
+            type: 'mousePressed',
+            ...from,
+            button: 'left',
+            buttons: 1,
+            clickCount: 1,
+        });
+        await debug.sendCommand('Input.dispatchMouseEvent', {
+            type: 'mouseMoved',
+            x: from.x + 12,
+            y: from.y + 5,
+            button: 'left',
+            buttons: 1,
+        });
+        const data = await intercepted;
+        edge = await js(
+            win,
+            `{
+            const r=document.querySelector('.organizer-outline').getBoundingClientRect();
+            ({x:r.left+r.width/2,y:${direction === 'down' ? 'r.bottom-8' : 'r.top+8'}});
+        }`,
+        );
+        const initial = await js(win, 'document.querySelector(".organizer-outline").scrollTop');
+        await debug.sendCommand('Input.dispatchDragEvent', { type: 'dragEnter', ...edge, data });
+        await debug.sendCommand('Input.dispatchDragEvent', { type: 'dragOver', ...edge, data });
+        await wait(
+            win,
+            `Math.abs(document.querySelector('.organizer-outline').scrollTop-${initial})>60`,
+            `native drag scrolls ${direction} while pointer stays at the edge`,
+        );
+        await wait(
+            win,
+            `{
+            const o=document.querySelector('.organizer-outline');
+            ${
+                direction === 'down'
+                    ? 'o.scrollTop+o.clientHeight>=o.scrollHeight-2'
+                    : 'o.scrollTop<=2'
+            };
+        }`,
+            `held edge reaches the ${direction === 'down' ? 'bottom' : 'top'} of the list`,
+        );
+        const to = await js(
+            win,
+            `{
+            const node=${destination};const r=node.getBoundingClientRect();
+            ({x:r.left+r.width/2,y:r.top+r.height*.2});
+        }`,
+        );
+        await debug.sendCommand('Input.dispatchDragEvent', { type: 'dragOver', ...to, data });
+        await debug.sendCommand('Input.dispatchDragEvent', { type: 'drop', ...to, data });
+    } finally {
+        await debug.sendCommand('Input.dispatchMouseEvent', {
+            type: 'mouseReleased',
+            ...from,
+            button: 'left',
+            buttons: 0,
+            clickCount: 1,
+        });
+        debug.detach();
+    }
+    await pause(100);
+    const stopped = await js(win, 'document.querySelector(".organizer-outline").scrollTop');
+    await pause(200);
+    assert.equal(await js(win, 'document.querySelector(".organizer-outline").scrollTop'), stopped);
+    console.log('PASS edge scrolling stops after drop');
+};
 const createItem = async (win, kind, name) => {
     await click(win, button('New'));
     await select(win, '.organizer-create select', kind);
@@ -375,34 +472,52 @@ app.whenReady()
                 .permissions.includes('messages.send'),
             true,
         );
-        // Sidebar uses the same drag interaction and allows moving back to the top level.
+        // Navigation cannot reorder channels or categories, including for the owner.
         const state = await api(alice, '/state');
         assert.equal(state.channels.find((c) => c.name === 'music').synced, true);
-        const media = state.categories.find((c) => c.name === 'Media');
-        const game = state.categories.find((c) => c.name === 'Games');
-        await drag(
-            b,
-            `${treeCategory('Media', 'sidebar')}.querySelector('.tree-category')`,
-            `${treeCategory('Games', 'sidebar')}.querySelector('.tree-category-drop')`,
-        );
-        // Bob has no reordering privilege; the API and UI both leave category order intact.
-        assert.deepEqual(
-            (await api(bob, '/state')).categories.map((c) => c.id),
-            state.categories.map((c) => c.id),
-        );
         await js(a, 'document.querySelector(".settings-header .modal-close").click()');
-        await drag(
-            a,
-            `${treeCategory('Media', 'sidebar')}.querySelector('.tree-channel')`,
-            "document.querySelector('.channel-tree-sidebar .tree-uncategorized')",
-        );
-        await wait(
-            a,
-            "document.querySelector('.channel-tree-sidebar .tree-uncategorized').textContent.includes('music')",
-            'sidebar drag moves a channel out of a category',
-        );
+        for (const win of [a, b]) {
+            assert.equal(
+                await js(
+                    win,
+                    'document.querySelectorAll(".channel-tree-sidebar [draggable=true]").length',
+                ),
+                0,
+            );
+            assert.equal(
+                await js(
+                    win,
+                    'document.querySelector(".sidebar-content").firstElementChild.classList.contains("direct-messages")',
+                ),
+                true,
+            );
+            await drag(
+                win,
+                `${treeCategory('Media', 'sidebar')}.querySelector('.tree-category')`,
+                `${treeCategory('Games', 'sidebar')}.querySelector('.tree-category-drop')`,
+            );
+            await drag(
+                win,
+                `${treeCategory('Media', 'sidebar')}.querySelector('.tree-channel')`,
+                "document.querySelector('.channel-tree-sidebar .tree-uncategorized')",
+            );
+            await js(
+                win,
+                `for (const selector of ['.tree-category-name', '.tree-channel .channel']) {
+                document.querySelector('.channel-tree-sidebar ' + selector).dispatchEvent(
+                    new KeyboardEvent('keydown', {key:'ArrowUp', altKey:true, bubbles:true})
+                );
+            }`,
+            );
+        }
+        await pause(200);
         const final = await api(alice, '/state');
-        assert.equal(final.channels.find((c) => c.name === 'music').category, null);
+        assert.deepEqual(final.categories, state.categories);
+        assert.deepEqual(final.channels, state.channels);
+        console.log(
+            'PASS sidebar drag and keyboard reorder attempts leave owner and member layouts unchanged',
+        );
+        await screenshot(a, 'sidebar-messages-first.png');
         await click(a, `document.querySelector('button[aria-label="Edit general"]')`);
         await wait(
             a,
@@ -410,9 +525,53 @@ app.whenReady()
             'sidebar edit opens the exact channel',
         );
 
+        // Overflow fixture: drag beyond the original viewport without scrollIntoView during the drag.
+        for (let i = 0; i < 18; i++) {
+            await api(alice, '/categories', 'POST', { name: `Overflow ${i}` });
+        }
+        const scrollState = await api(alice, '/state');
+        const lastCategory = scrollState.categories.find((c) => c.name === 'Overflow 17');
+        const bottomChannel = await api(alice, '/channels', 'POST', {
+            name: 'bottom-channel',
+            kind: 'text',
+            category: lastCategory.id,
+        });
+        await wait(
+            a,
+            'document.querySelector(".channel-tree-settings").textContent.includes("bottom-channel")',
+            'overflow fixture reaches the organizer',
+        );
+        await browserScrollDrag(
+            a,
+            `${treeCategory('Community')}.querySelector('.tree-category')`,
+            `${treeCategory('Overflow 17')}.querySelector('.tree-category-drop')`,
+            'down',
+        );
+        await wait(
+            a,
+            `[...document.querySelectorAll('.channel-tree-settings .tree-category-name')].at(-2)?.textContent==='Community'`,
+            'category reorder persists after scrolling down',
+        );
+        await browserScrollDrag(
+            a,
+            treeChannel('bottom-channel'),
+            treeChannel('introductions'),
+            'up',
+        );
+        await wait(
+            a,
+            `document.querySelector('.channel-tree-settings .tree-uncategorized').textContent.includes('bottom-channel')`,
+            'channel move persists after scrolling up',
+        );
+        assert.equal(
+            (await api(alice, '/state')).channels.find((c) => c.id === bottomChannel.id).category,
+            null,
+        );
+        await screenshot(a, 'drag-scroll-organizer.png');
+
         assert.deepEqual(failures, []);
         console.log(
-            'PASS nested settings, channel/category dragging, mixed ordering, direct creation, permission choices, role controls, inherited/custom policies, cross-window revocation, collapsed unread, persistence and sidebar dragging',
+            'PASS nested settings, channel/category dragging, mixed ordering, direct creation, permission choices, role controls, inherited/custom policies, cross-window revocation, collapsed unread, persistence and settings-only reordering',
         );
         a.destroy();
         b.destroy();

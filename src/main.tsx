@@ -1606,6 +1606,29 @@ function App() {
                             <ChevronDown size={18} />
                         </button>
                         <div className="sidebar-content">
+                            <DirectMessages
+                                key={`${url}:${state.me.id}`}
+                                storageKey={`direct-messages:${url}:${state.me.id}`}
+                                storage={storage}
+                                state={state}
+                                socket={socket}
+                                room={room}
+                                unread={unread}
+                                color={color}
+                                dm={dm}
+                                close={(destination) => {
+                                    setUnread((previous) => ({
+                                        ...previous,
+                                        [destination]: 0,
+                                    }));
+                                    if (room === destination)
+                                        selectRoom(
+                                            state.channels.find(
+                                                (channel) => channel.kind === 'text',
+                                            )?.id || '',
+                                        );
+                                }}
+                            />
                             <ChannelGroups
                                 api={api}
                                 refresh={refresh}
@@ -1775,29 +1798,7 @@ function App() {
                                     )
                                 }
                             />
-                            <DirectMessages
-                                key={`${url}:${state.me.id}`}
-                                storageKey={`direct-messages:${url}:${state.me.id}`}
-                                storage={storage}
-                                state={state}
-                                socket={socket}
-                                room={room}
-                                unread={unread}
-                                color={color}
-                                dm={dm}
-                                close={(destination) => {
-                                    setUnread((previous) => ({
-                                        ...previous,
-                                        [destination]: 0,
-                                    }));
-                                    if (room === destination)
-                                        selectRoom(
-                                            state.channels.find(
-                                                (channel) => channel.kind === 'text',
-                                            )?.id || '',
-                                        );
-                                }}
-                            />
+
                             {(state.directCalls || [])
                                 .filter((c) => c.members.includes(state.me.id))
                                 .map((c) => (
@@ -2390,7 +2391,6 @@ function App() {
                                     role={state.roles.find((r) => r.id === modal.split(':')[1])}
                                     busy={busy}
                                     state={state}
-                                    canEditAccess={permission('channels.access')}
                                     canEditRole={
                                         permission('roles.manage') &&
                                         (!state.roles.find((r) => r.id === modal.split(':')[1]) ||
@@ -2406,14 +2406,8 @@ function App() {
                                         act(async () => {
                                             const id = modal.split(':')[1];
                                             await api(
-                                                id === 'new'
-                                                    ? '/roles'
-                                                    : `/roles/${id}${permission('roles.manage') ? '' : '/access'}`,
-                                                id === 'new'
-                                                    ? 'POST'
-                                                    : permission('roles.manage')
-                                                      ? 'PATCH'
-                                                      : 'PUT',
+                                                id === 'new' ? '/roles' : `/roles/${id}`,
+                                                id === 'new' ? 'POST' : 'PATCH',
                                                 data,
                                             );
                                             setModal('settings');

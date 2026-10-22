@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, GripVertical, Hash, Lock, Settings, Volume2 } from 'lucide-react';
 import type { State, Channel } from './types';
 import type { ApiClient } from './api';
 import { useChannelOrdering } from './useChannelOrdering';
+import { useChannelDragScroll } from './useChannelDragScroll';
 
 export function ChannelTree({
     state,
@@ -46,11 +47,21 @@ export function ChannelTree({
     useEffect(() => {
         if (storage && storageKey) storage.setItem(storageKey, JSON.stringify(collapsed));
     }, [collapsed, storage, storageKey]);
-    const ordering = useChannelOrdering({ state, api, refresh, permission, busy });
+    const ordering = useChannelOrdering({
+        state,
+        api,
+        refresh,
+        permission,
+        busy,
+        allowReordering: mode === 'settings',
+    });
+    const tree = useRef<HTMLDivElement>(null);
+    useChannelDragScroll(tree, mode === 'settings' && ordering.enabled && !!ordering.dragging);
     const categories = state.categories || [];
     const groups = [{ id: null, name: 'Uncategorized' }, ...categories];
     return (
         <div
+            ref={tree}
             className={`channel-tree channel-tree-${mode}`}
             aria-label="Channel organization"
             aria-busy={!ordering.enabled && !!ordering.dragging}
@@ -309,7 +320,7 @@ export function ChannelTree({
                     </section>
                 );
             })}
-            {ordering.feedback}
+            {mode === 'settings' && ordering.feedback}
         </div>
     );
 }

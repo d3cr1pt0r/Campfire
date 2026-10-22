@@ -1099,6 +1099,11 @@ export function SettingsPanel({
                         act={act}
                         refresh={refresh}
                         edit={(id) => setModal(`role:${id}`)}
+                        manageChannels={
+                            permission('channels.access')
+                                ? () => setSettingsTab('channels')
+                                : undefined
+                        }
                     />
                 )}
 

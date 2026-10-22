@@ -18,9 +18,10 @@ type Props = {
     refresh: () => Promise<void>;
     act: (fn: () => Promise<void>) => unknown;
     edit: (id: string) => void;
+    manageChannels?: () => void;
 };
 export function RolesSettings(props: Props) {
-    const { state, api, busy, act, refresh, edit } = props;
+    const { state, api, busy, act, refresh, edit, manageChannels } = props;
     const [deleting, setDeleting] = useState<string | null>(null);
     const can = (id: string) => hasPermission(state.me, state.roles, id);
     return (
@@ -32,6 +33,15 @@ export function RolesSettings(props: Props) {
                     replaces Default; multiple assigned roles combine. Higher roles control
                     management authority and name color.
                 </p>
+                <p className="muted">
+                    Roles define server-wide permissions. Channel and category overrides are managed
+                    in Channels.
+                </p>
+                {manageChannels && (
+                    <button className="secondary" onClick={manageChannels}>
+                        Manage channel access
+                    </button>
+                )}
                 <p className="owner-notice">
                     Server ownership is protected and cannot be assigned, removed or transferred
                     through roles.
@@ -111,7 +121,7 @@ export function RolesSettings(props: Props) {
                             disabled={
                                 busy ||
                                 !canManageRole(state.me, state.roles, role) ||
-                                (!can('roles.manage') && !can('channels.access'))
+                                !can('roles.manage')
                             }
                             onClick={() => edit(role.id)}
                         >

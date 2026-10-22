@@ -3980,14 +3980,12 @@ body.stream-popout-body {
 .role-card p {
     margin-bottom: 0;
 }
-.role-channel-overrides,
 .member-roles-card {
     border: 1px solid var(--line);
     border-radius: 10px;
     padding: 12px;
     margin: 10px 0;
 }
-.role-channel-overrides summary,
 .member-roles-card summary {
     cursor: pointer;
     font-weight: 650;
@@ -4000,17 +3998,7 @@ body.stream-popout-body {
     margin-top: 5px;
     font-weight: 400;
 }
-.override-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-top: 8px;
-}
-.override-row select {
-    width: 112px;
-    flex-shrink: 0;
-}
+
 .member-role-options {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -4050,23 +4038,6 @@ body.stream-popout-body {
 }
 .modal:has(.role-editor) {
     width: min(760px, calc(100vw - 40px));
-}
-.role-editor-tabs {
-    display: flex;
-    gap: 8px;
-    border-bottom: 1px solid var(--line);
-    margin: 20px 0 12px;
-    padding-bottom: 8px;
-}
-.role-editor-tabs button {
-    flex: 1;
-    min-height: 38px;
-    padding: 8px;
-    color: var(--muted);
-}
-.role-editor-tabs button[aria-selected='true'] {
-    color: var(--ink);
-    background: var(--soft-accent);
 }
 .member-role-options > .role-badge {
     grid-column: 1 / -1;

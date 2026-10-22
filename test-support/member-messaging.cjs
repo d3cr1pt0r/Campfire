@@ -175,6 +175,16 @@ app.whenReady()
             ),
             false,
         );
+        for (const win of [a, b]) {
+            assert.equal(
+                await js(
+                    win,
+                    'document.querySelector(".sidebar-content").firstElementChild.classList.contains("direct-messages")',
+                ),
+                true,
+            );
+        }
+        console.log('PASS Messages is first in both clients’ navigation');
         console.log('PASS Messages navigation visible without friendship system');
         await clickMember(b, 'Alice');
         await wait(
