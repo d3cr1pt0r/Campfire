@@ -180,7 +180,16 @@ export type Preferences = {
     inputLabel?: string;
     output: string;
     outputLabel?: string;
+    // Camera height in pixels ('360', '720' or '1080'); the name predates screen settings.
     quality: string;
+    cameraFrameRate?: number;
+    cameraBitrate?: number;
+    cameraAdaptation?: VideoAdaptation;
+    // Height in pixels, or 'source' for the shared screen's own resolution.
+    screenResolution?: string;
+    screenFrameRate?: number;
+    screenBitrate?: number;
+    screenAdaptation?: VideoAdaptation;
     noise: boolean;
     echoCancellation?: boolean;
     autoGainControl?: boolean;
@@ -197,6 +206,13 @@ export type Preferences = {
     retentionNotices?: Record<string, number>;
 };
 
+// What video gives up first when the connection cannot carry it: frame rate (sharp),
+// resolution (smooth), or some of each (balanced).
+export type VideoAdaptation = 'sharp' | 'smooth' | 'balanced';
+// Why the sender reduced video to one viewer: that viewer's connection, the sender's upload,
+// the connection between the two when it cannot tell which side, or the sender's computer.
+export type VideoLimit = 'viewer' | 'sender' | 'connection' | 'cpu';
+
 export type MediaRole = 'voice' | 'video' | 'streamAudio';
 export type MediaState = { sharing: boolean; camera: boolean; shareId: string | null };
 export type CallSignal = {
@@ -206,6 +222,7 @@ export type CallSignal = {
     media?: MediaState;
     watch?: { shareId: string; enabled: boolean; revision: number };
     watchAck?: { shareId: string; enabled: boolean; revision: number };
+    quality?: { limit: VideoLimit | null };
 };
 
 export type JoinResult = { peers: CallMember[]; error?: never } | { error: string; peers?: never };

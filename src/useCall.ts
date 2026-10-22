@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AppSocket } from './types';
-import type { CallMember, Preferences } from './types';
+import type { CallMember, Preferences, VideoLimit } from './types';
 import { formatMicrophoneError } from './media';
 import { openProcessedMicrophone } from './microphoneProcessing';
 import { createNotificationSound } from './notifications';
@@ -14,6 +14,22 @@ import {
     type CallSignal,
     type MediaState,
 } from './peerMedia';
+import {
+    attributeLimits,
+    captureConstraints,
+    contentHint,
+    observedLimit,
+    settleLimit,
+    summarizeVideo,
+    validQualityNotice,
+    videoEncoding,
+    videoSettings,
+    type LimitState,
+    type ObservedLimit,
+    type StatsEntry,
+    type VideoSample,
+    type VideoSummary,
+} from './videoQuality';
 type Peer = {
     pc: RTCPeerConnection;
     stream: MediaStream;
@@ -29,6 +45,11 @@ type Peer = {
     watchRevision: number;
     requestedRevision: number;
     watchTimer?: ReturnType<typeof setTimeout>;
+    // What this peer last told us limits their video to us, and what we last told them.
+    videoLimit: VideoLimit | null;
+    sentLimit: VideoLimit | null;
+    limitState?: LimitState;
+    sample: VideoSample | null;
 };
 export function useCall(
     socket: AppSocket | null,
@@ -60,6 +81,7 @@ export function useCall(
                 camera: boolean;
                 watching: boolean;
                 watchPending: boolean;
+                videoLimit: VideoLimit | null;
             }[]
         >([]);
     const [showDetails, setShowDetails] = useState(false);
@@ -79,8 +101,15 @@ export function useCall(
             receivedLevel: number | null;
             mediaSent: number | null;
             mediaReceived: number | null;
+            video: VideoSummary;
         }[]
     >([]);
+    // Viewers whose video from us is reduced, and why.
+    const [videoWarnings, setVideoWarnings] = useState<
+        { id: string; user: string; limit: VideoLimit }[]
+    >([]);
+    const showDetailsRef = useRef(showDetails);
+    showDetailsRef.current = showDetails;
     const operation = useRef(0);
     const shareId = useRef<string | null>(null);
     const incompatible = useRef(new Set<string>());
@@ -139,6 +168,7 @@ export function useCall(
                 camera: p.media.camera,
                 watching: p.watching,
                 watchPending: p.watchPending,
+                videoLimit: p.videoLimit,
             })),
         );
     const disposePeer = (peer: Peer | undefined) => {
@@ -177,6 +207,7 @@ export function useCall(
         screen.current = null;
         setLocal(null);
         setRemote([]);
+        setVideoWarnings([]);
         setCamera(false);
         setSharing(false);
         joinedMembers.current = null;
@@ -184,6 +215,12 @@ export function useCall(
     };
     const currentVideo = () =>
         screen.current?.getVideoTracks()[0] || video.current?.getVideoTracks()[0] || null;
+    const encodingFor = (track: MediaStreamTrack) =>
+        track === screen.current?.getVideoTracks()[0]
+            ? videoEncoding(track, prefsRef.current, 'screen')
+            : track === video.current?.getVideoTracks()[0]
+              ? videoEncoding(track, prefsRef.current, 'camera')
+              : null;
     const localMedia = (): MediaState => ({
         sharing: !!screen.current,
         camera: !!video.current,
@@ -233,8 +270,10 @@ export function useCall(
         const pc = new RTCPeerConnection({ iceServers: iceRef.current });
         let p: Peer;
         let preparing = false;
-        const routing = createPeerMedia(pc, () =>
-            outgoingTracks(audio.current, video.current, screen.current, p.wantsStream),
+        const routing = createPeerMedia(
+            pc,
+            () => outgoingTracks(audio.current, video.current, screen.current, p.wantsStream),
+            { videoEncoding: encodingFor },
         );
         const prepareTracks = async () => {
             preparing = true;
@@ -265,6 +304,9 @@ export function useCall(
             watchPending: false,
             watchRevision: 0,
             requestedRevision: 0,
+            videoLimit: null,
+            sentLimit: null,
+            sample: null,
         };
         peers.current.set(id, p);
         pc.onicecandidate = (event) => {
@@ -362,6 +404,10 @@ export function useCall(
                         request.shareId === shareId.current
                     )
                         send(from, { watchAck: request });
+                }
+                if (validQualityNotice(data.quality) && data.quality.limit !== peer.videoLimit) {
+                    peer.videoLimit = data.quality.limit;
+                    updateRemote();
                 }
                 const ack = data.watchAck;
                 if (
@@ -474,8 +520,9 @@ export function useCall(
             window.removeEventListener('blur', blur);
         };
     }, [muted, deafened, prefs.pushToTalk, channel]);
+    // Sampled throughout a call: video warnings need it even while diagnostics are closed.
     useEffect(() => {
-        if (!channel || !showDetails) {
+        if (!channel) {
             setDetails([]);
             return;
         }
@@ -492,10 +539,13 @@ export function useCall(
                             inputLevel: number | null = null,
                             receivedLevel: number | null = null,
                             mediaSent: number | null = null,
-                            mediaReceived: number | null = null;
+                            mediaReceived: number | null = null,
+                            video: VideoSummary | null = null;
                         try {
                             const stats = await peer.pc.getStats();
+                            const entries: StatsEntry[] = [];
                             stats.forEach((stat) => {
+                                entries.push(stat);
                                 const role = peer.routing.roleForMid(stat.mid);
                                 if (role === 'video' || role === 'streamAudio') {
                                     if (stat.type === 'outbound-rtp')
@@ -521,9 +571,22 @@ export function useCall(
                                 )
                                     inputLevel = stat.audioLevel;
                             });
+                            const result = summarizeVideo(entries, {
+                                isVideo: (mid) => peer.routing.roleForMid(String(mid)) === 'video',
+                                previous: peer.sample,
+                                ceiling: peer.routing.videoCeiling(),
+                                sending: peer.routing.sendingVideo(),
+                                receiving: peer.media.sharing ? peer.watching : peer.media.camera,
+                            });
+                            peer.sample = result.sample;
+                            video = result.summary;
                         } catch {
                             /* Peer may close during a sample. */
                         }
+                        peer.limitState = settleLimit(
+                            peer.limitState,
+                            observedLimit(video?.sending ?? null),
+                        );
                         return {
                             id,
                             user: peer.user,
@@ -540,10 +603,41 @@ export function useCall(
                             receivedLevel,
                             mediaSent,
                             mediaReceived,
+                            video: video ?? {
+                                sending: null,
+                                receiving: null,
+                                roundTrip: null,
+                                availableUpload: null,
+                                upload: null,
+                                download: null,
+                            },
                         };
                     }),
                 );
-                if (!canceled) setDetails(rows);
+                if (canceled) return;
+                // Only viewers currently receiving our video take part in attributing limits.
+                const limits = new Map<string, ObservedLimit>();
+                for (const row of rows) {
+                    const peer = peers.current.get(row.id);
+                    if (peer && row.video.sending)
+                        limits.set(row.id, peer.limitState?.limit ?? null);
+                }
+                const attributed = attributeLimits(limits);
+                const warnings: { id: string; user: string; limit: VideoLimit }[] = [];
+                peers.current.forEach((peer, id) => {
+                    const limit = attributed.get(id) ?? null;
+                    if (limit !== peer.sentLimit) {
+                        peer.sentLimit = limit;
+                        send(id, { quality: { limit } });
+                    }
+                    if (limit) warnings.push({ id, user: peer.user, limit });
+                });
+                setVideoWarnings((previous) =>
+                    JSON.stringify(previous) === JSON.stringify(warnings) ? previous : warnings,
+                );
+                setDetails((previous) =>
+                    showDetailsRef.current ? rows : previous.length ? [] : previous,
+                );
             } finally {
                 pending = false;
             }
@@ -554,7 +648,48 @@ export function useCall(
             canceled = true;
             clearInterval(timer);
         };
-    }, [channel, showDetails]);
+    }, [channel]);
+    // Settings changed during a call apply to the running capture and to every viewer.
+    const resyncTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const resyncVideo = () => {
+        const sync = () =>
+            Promise.all([...peers.current.values()].map((peer) => peer.routing.sync())).catch(
+                (error) => report(`Video settings could not be applied: ${error.message}`),
+            );
+        void sync();
+        // A new resolution reaches the track's reported size with its next frames; the ceiling
+        // follows the captured size, so it is set again once those have arrived.
+        clearTimeout(resyncTimer.current);
+        resyncTimer.current = setTimeout(() => void sync(), 1500);
+    };
+    useEffect(() => () => clearTimeout(resyncTimer.current), []);
+    useEffect(() => {
+        if (!channel) return;
+        const cameraTrack = video.current?.getVideoTracks()[0];
+        const screenTrack = screen.current?.getVideoTracks()[0];
+        const screenSettings = videoSettings(prefs, 'screen');
+        if (screenTrack) screenTrack.contentHint = contentHint(screenSettings, 'screen');
+        void Promise.all([
+            cameraTrack?.applyConstraints(
+                captureConstraints(videoSettings(prefs, 'camera'), 'camera'),
+            ),
+            screenTrack?.applyConstraints(captureConstraints(screenSettings, 'screen')),
+        ])
+            .catch((error) =>
+                report(`Video settings could not be applied: ${error.message || error.name}`),
+            )
+            .finally(resyncVideo);
+    }, [
+        channel,
+        prefs.quality,
+        prefs.cameraFrameRate,
+        prefs.cameraBitrate,
+        prefs.cameraAdaptation,
+        prefs.screenResolution,
+        prefs.screenFrameRate,
+        prefs.screenBitrate,
+        prefs.screenAdaptation,
+    ]);
     const join = async (id: string, target?: { socket: string; shareId: string }) => {
         if (!permissionRef.current('calls.join', id)) {
             report('You do not have permission to join calls.');
@@ -694,7 +829,7 @@ export function useCall(
                 setCamera(false);
             } else {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { height: { ideal: Number(prefs.quality) }, frameRate: { ideal: 30 } },
+                    video: captureConstraints(videoSettings(prefsRef.current, 'camera'), 'camera'),
                 });
                 if (attempt !== operation.current || !permissionRef.current('calls.camera')) {
                     stream.getTracks().forEach((t) => t.stop());
@@ -726,8 +861,9 @@ export function useCall(
                 await syncMedia();
                 return;
             }
+            const settings = videoSettings(prefsRef.current, 'screen');
             const stream = (captured = await navigator.mediaDevices.getDisplayMedia({
-                video: { height: { ideal: Number(prefs.quality) }, frameRate: { ideal: 30 } },
+                video: captureConstraints(settings, 'screen'),
                 audio: {
                     echoCancellation: false,
                     noiseSuppression: false,
@@ -756,6 +892,7 @@ export function useCall(
             }
             if (!stream.getVideoTracks().some((track) => track.readyState === 'live'))
                 throw new Error('Screen capture ended before sharing started.');
+            stream.getVideoTracks()[0].contentHint = contentHint(settings, 'screen');
             screen.current = stream;
             shareId.current = crypto.randomUUID();
             peers.current.forEach((p) => {
@@ -864,6 +1001,7 @@ export function useCall(
         showDetails,
         setShowDetails,
         details,
+        videoWarnings,
         channel,
         join,
         leave,

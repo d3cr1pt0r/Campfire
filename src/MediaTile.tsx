@@ -1,7 +1,7 @@
 import { ParticipantAudioContext } from './ParticipantAudio';
 import { VolumeControl } from './VolumeControl';
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { HeadphoneOff, Maximize2, MicOff, PictureInPicture2 } from 'lucide-react';
+import { HeadphoneOff, Maximize2, MicOff, PictureInPicture2, TriangleAlert } from 'lucide-react';
 import { AuthImage } from './ChatContent';
 import { ExpandedVideo } from './ExpandedVideo';
 import { AudioPlayback, type AudioPlaybackHandle } from './AudioPlayback';
@@ -30,6 +30,7 @@ export function MediaTile({
     speaking = false,
     onOutputFallback,
     onPopoutBlocked,
+    videoWarning,
 }: {
     participant?: string;
     stream: MediaStream | null;
@@ -51,6 +52,8 @@ export function MediaTile({
     speaking?: boolean;
     onOutputFallback?: () => void;
     onPopoutBlocked?: () => void;
+    // Why the sender is reducing this video, as they reported it.
+    videoWarning?: string;
 }) {
     const voice = useRef<AudioPlaybackHandle>(null),
         program = useRef<AudioPlaybackHandle>(null),
@@ -184,6 +187,16 @@ export function MediaTile({
                 }}
             />
             {status}
+            {videoWarning && hasVideo && allowVideo && (
+                <span
+                    className="media-video-warning"
+                    role="img"
+                    aria-label={videoWarning}
+                    title={videoWarning}
+                >
+                    <TriangleAlert size={14} />
+                </span>
+            )}
             {!preview && sharing && (
                 <button
                     type="button"
