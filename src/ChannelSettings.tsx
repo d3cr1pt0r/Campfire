@@ -27,7 +27,7 @@ export function ChannelSettings(props: Props) {
                 ? `category:${state.categories[0].id}`
                 : state.channels[0]?.id || ''),
     );
-    const [tab, setTab] = useState<'overview' | 'permissions'>('permissions');
+    const [tab, setTab] = useState<'overview' | 'permissions'>('overview');
     const [creating, setCreating] = useState(false);
     const [dirty, setDirty] = useState(false);
     const [pending, setPending] = useState<{
@@ -44,12 +44,13 @@ export function ChannelSettings(props: Props) {
     const category = state.categories?.find((entry) => `category:${entry.id}` === selected);
     const parent = state.categories?.find((entry) => entry.id === channel?.category);
     const scope = channel || category;
-    const select = (id: string) => {
-        if (dirty && id !== selected) {
-            setPending({ id });
+    const select = (id: string, nextTab: 'overview' | 'permissions' = 'overview') => {
+        if (dirty && (id !== selected || nextTab !== tab)) {
+            setPending({ id, tab: nextTab });
             return;
         }
         setSelected(id);
+        setTab(nextTab);
         setCreating(false);
     };
     return (
@@ -70,7 +71,10 @@ export function ChannelSettings(props: Props) {
                         </button>
                         <button
                             onClick={() => {
-                                if (pending.id) setSelected(pending.id);
+                                if (pending.id) {
+                                    setSelected(pending.id);
+                                    setCreating(false);
+                                }
                                 if (pending.tab) setTab(pending.tab);
                                 setDirty(false);
                                 setPending(null);
@@ -99,7 +103,7 @@ export function ChannelSettings(props: Props) {
                     category={category || parent}
                     done={(id) => {
                         setCreating(false);
-                        setSelected(id);
+                        select(id);
                     }}
                 />
             )}
@@ -197,7 +201,10 @@ export function ChannelSettings(props: Props) {
                                                             <button
                                                                 className="permission-link"
                                                                 onClick={() =>
-                                                                    select(`category:${parent.id}`)
+                                                                    select(
+                                                                        `category:${parent.id}`,
+                                                                        'permissions',
+                                                                    )
                                                                 }
                                                             >
                                                                 Edit {parent.name} permissions →

@@ -318,6 +318,23 @@ app.whenReady()
             '!!document.querySelector(".channel-workspace")',
             'nested channel workspace opens',
         );
+        assert.equal(
+            await js(
+                a,
+                'document.querySelector(\'.inspector-tabs [aria-selected="true"]\').textContent',
+            ),
+            'Overview',
+        );
+        await click(a, button('Permissions'));
+        await click(a, `${treeChannel('lounge')}.querySelector('button')`);
+        assert.equal(
+            await js(
+                a,
+                'document.querySelector(\'.inspector-tabs [aria-selected="true"]\').textContent',
+            ),
+            'Overview',
+        );
+        console.log('PASS initial selection and switching channels default to Overview');
         for (const width of [1440, 960, 600]) {
             a.setSize(width, 1000);
             await pause(100);
@@ -365,6 +382,7 @@ app.whenReady()
                 ),
                 true,
             );
+            await click(a, button('Permissions'));
             if (width >= 960) {
                 assert.equal(
                     await js(
@@ -513,6 +531,15 @@ app.whenReady()
             'collapse persists across reload',
         );
         await click(a, `${treeChannel('general')}.querySelector('button')`);
+        assert.equal(
+            await js(
+                a,
+                'document.querySelector(\'.inspector-tabs [aria-selected="true"]\').textContent',
+            ),
+            'Overview',
+        );
+        await screenshot(a, 'channel-default-overview.png');
+        await click(a, button('Permissions'));
         await wait(
             a,
             'document.querySelector(".permission-source-card")?.textContent.includes("Synced with Community")',
@@ -529,6 +556,31 @@ app.whenReady()
             true,
         );
         await screenshot(a, 'inherited-channel-permissions.png');
+        await click(a, button('Edit Community permissions →'));
+        assert.equal(
+            await js(
+                a,
+                'document.querySelector(\'.inspector-tabs [aria-selected="true"]\').textContent',
+            ),
+            'Permissions',
+        );
+        assert.equal(
+            await js(a, 'document.querySelector(".inspector-heading h3").textContent'),
+            'Community',
+        );
+        await click(a, `${treeChannel('general')}.querySelector('button')`);
+        assert.equal(
+            await js(
+                a,
+                'document.querySelector(\'.inspector-tabs [aria-selected="true"]\').textContent',
+            ),
+            'Overview',
+        );
+        await click(a, button('Permissions'));
+        console.log(
+            'PASS explicit category permissions link opens Permissions while ordinary selections open Overview',
+        );
+
         await click(a, button('Customize this channel’s permissions'));
         await wait(
             a,

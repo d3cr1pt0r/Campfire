@@ -220,6 +220,10 @@ app.whenReady()
         );
         await js(
             a,
+            '[...document.querySelectorAll(".inspector-tabs button")].find(node=>node.textContent==="Permissions").click()',
+        );
+        await js(
+            a,
             '[...document.querySelectorAll(".permission-role-list button")].find(node=>node.textContent.trim()==="Presenter").click()',
         );
         await js(
