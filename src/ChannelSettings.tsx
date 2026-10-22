@@ -192,15 +192,42 @@ export function ChannelSettings(props: Props) {
                                                               ? `Changes to ${parent.name} do not affect this channel.`
                                                               : 'Start with server roles, then choose exceptions for this channel.'}
                                                     </p>
-                                                    {parent && channel.synced && (
-                                                        <button
-                                                            className="permission-link"
-                                                            onClick={() =>
-                                                                select(`category:${parent.id}`)
-                                                            }
-                                                        >
-                                                            Edit {parent.name} permissions →
-                                                        </button>
+                                                    {parent && (
+                                                        <div className="permission-source-actions">
+                                                            <button
+                                                                className="permission-link"
+                                                                onClick={() =>
+                                                                    select(`category:${parent.id}`)
+                                                                }
+                                                            >
+                                                                Edit {parent.name} permissions →
+                                                            </button>
+                                                            {permission('channels.access') &&
+                                                                permission('channels.edit') && (
+                                                                    <button
+                                                                        className="permission-link"
+                                                                        disabled={busy}
+                                                                        onClick={() =>
+                                                                            void act(async () => {
+                                                                                await api(
+                                                                                    `/channels/${channel.id}/category`,
+                                                                                    'PUT',
+                                                                                    {
+                                                                                        category:
+                                                                                            parent.id,
+                                                                                        synced: !channel.synced,
+                                                                                    },
+                                                                                );
+                                                                                await refresh();
+                                                                            })
+                                                                        }
+                                                                    >
+                                                                        {channel.synced
+                                                                            ? 'Customize this channel’s permissions'
+                                                                            : `Replace with ${parent.name} permissions`}
+                                                                    </button>
+                                                                )}
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
@@ -214,28 +241,6 @@ export function ChannelSettings(props: Props) {
                                                     category
                                                     readOnly
                                                 />
-                                                {permission('channels.access') &&
-                                                    permission('channels.edit') && (
-                                                        <button
-                                                            className="secondary"
-                                                            disabled={busy}
-                                                            onClick={() =>
-                                                                void act(async () => {
-                                                                    await api(
-                                                                        `/channels/${channel.id}/category`,
-                                                                        'PUT',
-                                                                        {
-                                                                            category: parent.id,
-                                                                            synced: false,
-                                                                        },
-                                                                    );
-                                                                    await refresh();
-                                                                })
-                                                            }
-                                                        >
-                                                            Customize this channel’s permissions
-                                                        </button>
-                                                    )}
                                             </>
                                         ) : (
                                             <>
@@ -277,30 +282,6 @@ export function ChannelSettings(props: Props) {
                                                     category={!!category}
                                                     readOnly={!permission('channels.access')}
                                                 />
-                                                {channel &&
-                                                    parent &&
-                                                    permission('channels.access') &&
-                                                    permission('channels.edit') && (
-                                                        <button
-                                                            className="secondary"
-                                                            disabled={busy}
-                                                            onClick={() =>
-                                                                void act(async () => {
-                                                                    await api(
-                                                                        `/channels/${channel.id}/category`,
-                                                                        'PUT',
-                                                                        {
-                                                                            category: parent.id,
-                                                                            synced: true,
-                                                                        },
-                                                                    );
-                                                                    await refresh();
-                                                                })
-                                                            }
-                                                        >
-                                                            Replace with {parent.name} permissions
-                                                        </button>
-                                                    )}
                                             </>
                                         )}
                                     </>

@@ -223,6 +223,13 @@ const browserScrollDrag = async (win, source, destination, direction) => {
             button: 'left',
             buttons: 1,
         });
+        await debug.sendCommand('Input.dispatchMouseEvent', {
+            type: 'mouseMoved',
+            x: from.x + 24,
+            y: from.y + 10,
+            button: 'left',
+            buttons: 1,
+        });
         const data = await intercepted;
         edge = await js(
             win,
@@ -323,6 +330,7 @@ app.whenReady()
             }`,
                 );
             const expected = await bounds();
+            if (width >= 960) assert.equal(expected.width, Math.min(1120, width - 40));
             const sections = await js(
                 a,
                 '[...document.querySelectorAll("#settings-section option")].map(node=>node.value)',
@@ -345,6 +353,26 @@ app.whenReady()
                     const editor=document.querySelector('.channel-workspace').getBoundingClientRect();
                     const signout=document.querySelector('.settings-mobile-signout').getBoundingClientRect();
                     signout.top>=editor.bottom-1;
+                }`,
+                    ),
+                    true,
+                );
+            }
+            assert.equal(
+                await js(
+                    a,
+                    `[...document.querySelectorAll('.organizer-inspector, .permission-choice-row')].every(node=>node.scrollWidth<=node.clientWidth+1)`,
+                ),
+                true,
+            );
+            if (width >= 960) {
+                assert.equal(
+                    await js(
+                        a,
+                        `{
+                    const list=document.querySelector('.permission-role-list').getBoundingClientRect();
+                    const editor=document.querySelector('.permission-role-editor').getBoundingClientRect();
+                    editor.left>=list.right && Math.abs(editor.top-list.top)<1;
                 }`,
                     ),
                     true,
@@ -490,6 +518,16 @@ app.whenReady()
             'document.querySelector(".permission-source-card")?.textContent.includes("Synced with Community")',
             'selected channel names its permission source',
         );
+        assert.equal(
+            await js(
+                a,
+                `{
+            const customize=[...document.querySelectorAll('.inspector-body button')].find(node=>node.textContent.trim()==='Customize this channel’s permissions');
+            !!customize.closest('.permission-source-actions') && !customize.classList.contains('secondary');
+        }`,
+            ),
+            true,
+        );
         await screenshot(a, 'inherited-channel-permissions.png');
         await click(a, button('Customize this channel’s permissions'));
         await wait(
@@ -514,12 +552,46 @@ app.whenReady()
             'custom channel permission saves',
         );
         await screenshot(a, 'custom-channel-permissions.png');
+
         assert.equal(
             (await api(bob, '/state')).channels
                 .find((c) => c.id === 'general')
                 .permissions.includes('messages.send'),
             true,
         );
+        const generalCategory = (await api(alice, '/state')).channels.find(
+            (c) => c.id === 'general',
+        ).category;
+        const categoryName = (await api(alice, '/state')).categories.find(
+            (c) => c.id === generalCategory,
+        ).name;
+        assert.equal(
+            await js(
+                a,
+                `{
+            const replace=[...document.querySelectorAll('.permission-source-actions button')].find(node=>node.textContent.trim()===${JSON.stringify('Replace with ')}+${JSON.stringify(categoryName)}+${JSON.stringify(' permissions')});
+            !!replace && replace.classList.contains('permission-link') && !replace.classList.contains('secondary');
+        }`,
+            ),
+            true,
+        );
+        await click(a, button(`Replace with ${categoryName} permissions`));
+        await wait(
+            a,
+            'document.querySelector(".permission-source-card")?.textContent.includes("Synced with Community")',
+            'inline replace restores category inheritance',
+        );
+        assert.equal(
+            (await api(alice, '/state')).channels.find((c) => c.id === 'general').synced,
+            true,
+        );
+        await click(a, button('Customize this channel’s permissions'));
+        await wait(
+            a,
+            'document.querySelector(".permission-source-card")?.textContent.includes("own permissions")',
+            'inline customize restores custom editing',
+        );
+
         // Navigation cannot reorder channels or categories, including for the owner.
         const state = await api(alice, '/state');
         assert.equal(state.channels.find((c) => c.name === 'music').synced, true);

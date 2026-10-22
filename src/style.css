@@ -1241,7 +1241,7 @@ small {
     margin-top: 15px;
 }
 .settings-modal {
-    width: min(1280px, 96vw);
+    width: 1120px;
     padding: 0;
     display: grid;
     grid-template-columns: 210px minmax(0, 1fr);
@@ -5235,6 +5235,12 @@ body.stream-popout-body {
     margin: 5px 0 0;
     font-size: 11px;
 }
+.permission-source-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 18px;
+}
 .permission-link {
     font-size: 11px;
     color: var(--accent);
@@ -5540,10 +5546,7 @@ body.stream-popout-body {
     font-size: 11px;
     line-height: 1.5;
 }
-@media (max-width: 1100px) {
-    .organizer-layout {
-        grid-template-columns: 190px minmax(0, 1fr);
-    }
+@media (max-width: 700px) {
     .permissions-layout {
         grid-template-columns: minmax(0, 1fr);
         gap: 10px;
@@ -5558,8 +5561,6 @@ body.stream-popout-body {
     .permission-role-list > button {
         width: auto;
     }
-}
-@media (max-width: 700px) {
     .organizer-layout {
         grid-template-columns: 145px minmax(0, 1fr);
     }
