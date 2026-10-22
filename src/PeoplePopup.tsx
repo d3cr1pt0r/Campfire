@@ -1,7 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Avatar } from './Avatar';
-import { displayName } from './profiles';
+import { MemberIdentity } from './MemberIdentity';
 import type { User } from './types';
 
 // A list of people that opens on hover or keyboard focus of a button, such as who
@@ -112,8 +111,7 @@ export function usePeoplePopup(enabled: boolean, count: number) {
                 <ul>
                     {people.map((person) => (
                         <li key={person.id}>
-                            <Avatar user={person.user} small />
-                            <span>{displayName(person.user)}</span>
+                            <MemberIdentity user={person.user} />
                         </li>
                     ))}
                 </ul>

@@ -638,12 +638,24 @@ app.whenReady()
             'PASS sidebar drag and keyboard reorder attempts leave owner and member layouts unchanged',
         );
         await screenshot(a, 'sidebar-messages-first.png');
-        await click(a, `document.querySelector('button[aria-label="Edit general"]')`);
+        for (const win of [a, b])
+            assert.equal(
+                await js(
+                    win,
+                    'document.querySelectorAll(".channel-tree-sidebar .tree-channel-manage, .channel-tree-sidebar .tree-category-manage").length',
+                ),
+                0,
+            );
+        await js(
+            a,
+            'document.dispatchEvent(new KeyboardEvent("keydown",{key:",",ctrlKey:true,bubbles:true}))',
+        );
         await wait(
             a,
-            'document.querySelector(".inspector-heading h3")?.textContent==="general"',
-            'sidebar edit opens the exact channel',
+            '!!document.querySelector("#settings-section")',
+            'settings opens from the app control',
         );
+        await select(a, '#settings-section', 'channels');
 
         // Overflow fixture: drag beyond the original viewport without scrollIntoView during the drag.
         for (let i = 0; i < 18; i++) {

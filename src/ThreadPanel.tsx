@@ -317,6 +317,7 @@ export function ThreadPanel(props: Props) {
                 canAttach={canPost && permission('files.attach')}
                 uploadLimit={state.maxUploadBytes}
                 users={state.users}
+                state={state}
                 emojis={state.emojis}
                 attachments={attachments}
                 setAttachments={setAttachments}

@@ -7,11 +7,12 @@ import { mentionQuery, completeMention } from './mentions';
 import { CaseSensitive, Paperclip, X, Plus, Smile, Send, Vote } from 'lucide-react';
 import { pollCommand } from './polls';
 import { displayName } from './profiles';
+import { MemberIdentity } from './MemberIdentity';
 import { FormattingToolbar, RichEditor, type RichEditorHandle } from './RichEditor';
 import { GifPicker } from './GifPicker';
 import type { Gif } from './klipy';
 import { inCodeBlock } from './richText';
-import type { User } from './types';
+import type { State, User } from './types';
 import { formatUploadLimit } from '../shared/uploads.js';
 
 // The text around the caret, for mention and emoji suggestions.
@@ -51,6 +52,7 @@ type Props = {
     label?: string;
     focusRequest?: number;
     users: User[];
+    state?: State;
     emojis?: { id: string; name: string; author: string | null }[];
     // Opens the poll dialog, with a question when typed as "/poll Question".
     onPoll?: (question: string) => void;
@@ -83,6 +85,7 @@ export function ChatComposer({
     label = 'Message',
     focusRequest,
     users,
+    state,
     emojis = [],
     onPoll,
     klipyKey,
@@ -286,8 +289,11 @@ export function ChatComposer({
                             onMouseDown={(event) => event.preventDefault()}
                             onClick={() => complete(candidate)}
                         >
-                            <strong>@{candidate.username}</strong>
-                            <span>{displayName(candidate)}</span>
+                            <MemberIdentity
+                                user={candidate}
+                                state={state}
+                                secondary={'@' + candidate.username}
+                            />
                         </button>
                     ))}
                 </div>

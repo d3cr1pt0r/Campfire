@@ -21,7 +21,7 @@ import {
     Check,
 } from 'lucide-react';
 import { MediaTile } from './MediaTile';
-import { Avatar } from './Avatar';
+import { MemberIdentity } from './MemberIdentity';
 import { fitCallParticipants } from './callLayout';
 
 export type CallAreaMode = 'split' | 'call' | 'conversation';
@@ -285,11 +285,13 @@ export function CallPanel({
                                                     aria-label={`Show ${name} in main view`}
                                                     onClick={() => setSelectedParticipant(id)}
                                                 >
-                                                    <Avatar
+                                                    <MemberIdentity
                                                         user={member}
+                                                        state={state}
                                                         speaking={speaking.has(member?.id || '')}
+                                                        secondary={false}
+                                                        showOwner={false}
                                                     />
-                                                    <span>{name}</span>
                                                 </button>
                                             );
                                         })}
@@ -326,9 +328,11 @@ export function CallPanel({
                                 {call.details.length ? (
                                     call.details.map((detail) => (
                                         <div key={detail.id}>
-                                            <strong>
-                                                {displayName(user(detail.user)) || 'Participant'}
-                                            </strong>
+                                            <MemberIdentity
+                                                user={user(detail.user)}
+                                                state={state}
+                                                secondary={false}
+                                            />
                                             <span>
                                                 Connection: {detail.connection} · ICE: {detail.ice}{' '}
                                                 · Audio: {detail.direction}

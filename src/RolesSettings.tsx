@@ -10,6 +10,7 @@ import {
 import type { State, User } from './types';
 import type { ApiClient } from './api';
 import { displayName } from './profiles';
+import { MemberIdentity } from './MemberIdentity';
 
 type Props = {
     state: State;
@@ -235,16 +236,20 @@ function MemberRoles({ state, api, busy, refresh, act, user }: Props & { user: U
     return (
         <details className="member-roles-card">
             <summary>
-                <strong style={{ color: roleColor(user, state.roles) }}>{displayName(user)}</strong>
-                <span>
-                    {user.owner ? 'Owner · ' : ''}
-                    {state.roles
-                        .filter((role) => selected.includes(role.id))
-                        .map((role) => role.name)
-                        .join(' · ') ||
-                        state.roles.find((role) => role.id === 'everyone')?.name ||
-                        'Default'}
-                </span>
+                <MemberIdentity
+                    user={user}
+                    state={state}
+                    color={roleColor(user, state.roles)}
+                    secondary={
+                        (user.owner ? 'Owner · ' : '') +
+                        (state.roles
+                            .filter((role) => selected.includes(role.id))
+                            .map((role) => role.name)
+                            .join(' · ') ||
+                            state.roles.find((role) => role.id === 'everyone')?.name ||
+                            'Default')
+                    }
+                />
             </summary>
             {user.owner && !state.me.owner ? (
                 <p className="owner-notice">

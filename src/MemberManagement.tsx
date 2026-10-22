@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { highestPosition } from '../shared/permissions.js';
-import { Avatar } from './Avatar';
+import { MemberIdentity } from './MemberIdentity';
 import { displayName } from './profiles';
 import type { ApiClient } from './api';
 import type { State } from './types';
@@ -93,11 +93,12 @@ export function MemberManagement({
                             }}
                         >
                             <summary>
-                                <Avatar user={user} small />
-                                <span className="server-member-identity">
-                                    <strong>{name}</strong>
-                                    <small>@{user.username}</small>
-                                </span>
+                                <MemberIdentity
+                                    user={user}
+                                    state={state}
+                                    status={disabled ? 'offline' : undefined}
+                                    secondary={'@' + user.username}
+                                />
                                 <span
                                     className={`server-member-status ${disabled ? 'is-disabled' : ''}`}
                                 >

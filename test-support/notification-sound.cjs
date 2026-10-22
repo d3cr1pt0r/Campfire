@@ -149,10 +149,6 @@ app.whenReady()
         const setMode = async (mode, settings = false) => {
             if (!settings) await openNotifications();
             const label = '#general notifications';
-            await js(`if (!document.querySelector('select[aria-label="#general notifications"]')) {
-                const add=document.querySelector('select[aria-label="Add notification override"]');
-                add.value='channel:general';add.dispatchEvent(new Event('change',{bubbles:true}));
-            }`);
             await js(
                 `{ const select = [...document.querySelectorAll('select')].find(node => node.getAttribute('aria-label') === ${JSON.stringify(label)}); select.value = ${JSON.stringify(mode)}; select.dispatchEvent(new Event('change', { bubbles: true })); }`,
             );
@@ -319,9 +315,7 @@ app.whenReady()
                     ';node.dispatchEvent(new Event("change",{bubbles:true}));}',
             );
         await wait(
-            '!!document.querySelector(\'select[aria-label="Add notification override"] option[value="category:' +
-                category.id +
-                '"]\')',
+            '!!document.querySelector(\'select[aria-label="Notification category category notifications"]\')',
             'new notification category is visible',
         );
         await js(
@@ -333,7 +327,6 @@ app.whenReady()
             'window.__notificationAudio.tones > window.__expectedToneCheckpoint',
             'server All messages reaches actual playback',
         );
-        await choose('select[aria-label="Add notification override"]', 'category:' + category.id);
         await choose('select[aria-label="Notification category category notifications"]', 'muted');
         await pause(800);
         await send('@Alice category suppresses this mention', 'introductions');
@@ -342,7 +335,6 @@ app.whenReady()
             await js('window.__notificationAudio.tones'),
             await js('window.__expectedToneCheckpoint'),
         );
-        await choose('select[aria-label="Add notification override"]', 'channel:introductions');
         await choose('select[aria-label="#introductions notifications"]', 'all');
         await pause(800);
         await send('explicit channel wins over muted category', 'introductions');
@@ -358,8 +350,9 @@ app.whenReady()
             await js('window.__notificationAudio.tones'),
             await js('window.__expectedToneCheckpoint'),
         );
-        await js(
-            'document.querySelector(\'button[aria-label="Remove Category · Notification category override"]\').click()',
+        await choose(
+            'select[aria-label="Notification category category notifications"]',
+            'inherit',
         );
         await pause(800);
         await send('removed category falls back to server all', 'introductions');

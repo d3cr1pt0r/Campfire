@@ -706,6 +706,9 @@ export function SettingsPanel({
                         act={act}
                         testSound={testNotificationSound}
                         openSettings={setSettingsTab}
+                        api={api}
+                        refresh={refresh}
+                        permission={permission}
                     />
                 )}
                 {settingsTab === 'server' && (

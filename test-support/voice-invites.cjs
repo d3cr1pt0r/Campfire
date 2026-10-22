@@ -100,7 +100,7 @@ app.whenReady()
                 alice,
                 "getComputedStyle(document.querySelector('.voice-channel-invite')).opacity",
             ),
-            '0',
+            '1',
         );
         const bounds = await js(
             alice,
@@ -111,7 +111,7 @@ app.whenReady()
         await wait(
             alice,
             "getComputedStyle(document.querySelector('.voice-channel-invite')).opacity==='1'",
-            'invite icons appear on voice-channel hover',
+            'invite icons stay visible on voice-channel hover',
         );
         await click(alice, '[aria-label="Invite to lounge"]');
         await wait(
@@ -182,8 +182,8 @@ app.whenReady()
         await click(alice, '[aria-label="Invite to lounge"]');
         await wait(
             alice,
-            "[...document.querySelectorAll('.voice-invite-member')].some(row=>row.textContent.includes('Bob')&&row.querySelector('button').disabled&&row.querySelector('button').textContent==='Sent')",
-            'Sent state survives reopening',
+            "[...document.querySelectorAll('.voice-invite-member')].some(row=>row.textContent.includes('Bob')&&!row.querySelector('button').disabled&&row.querySelector('button').textContent==='Invite')",
+            'reopening allows a fresh invitation',
         );
         await js(
             alice,
@@ -200,6 +200,26 @@ app.whenReady()
                 (call) => call.user === bobAccount.user.id && call.channel === 'lounge',
             ),
         );
+        await wait(
+            alice,
+            '!!document.querySelector(".voice-member > .avatar.small")',
+            'joined voice user uses the original small avatar row',
+        );
+        assert.equal(
+            await js(
+                alice,
+                'document.querySelectorAll(".voice-member .member-identity, .voice-member .presence-dot, .tree-channel-manage, .tree-category-manage").length',
+            ),
+            0,
+        );
+        assert.equal(
+            await js(
+                alice,
+                '[...document.querySelectorAll(".voice-member > span:not(.avatar)")].some(node=>node.textContent==="Bob")',
+            ),
+            true,
+        );
+        await screenshot(alice, 'restored-voice-user-layout');
         await bob.reload();
         await wait(
             bob,

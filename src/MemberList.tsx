@@ -1,8 +1,7 @@
 import { Fragment } from 'react';
-import { Phone, Shield, X } from 'lucide-react';
+import { Phone, X } from 'lucide-react';
 import { hasPermission } from '../shared/permissions.js';
-import { Avatar } from './Avatar';
-import { PresenceDot } from './PresenceDot';
+import { MemberIdentity } from './MemberIdentity';
 import { displayName } from './profiles';
 import { statusLabels, userStatus } from './presence';
 import type { State, User } from './types';
@@ -62,37 +61,13 @@ export function MemberList({
                                         title={`@${user.username}`}
                                         onClick={() => dm(user.id)}
                                     >
-                                        <div className="avatar-status">
-                                            <Avatar
-                                                user={user}
-                                                color={color(user)}
-                                                frame={user.frame}
-                                            />
-                                            <PresenceDot status={status} />
-                                        </div>
-                                        <span>
-                                            <strong style={{ color: color(user) }}>
-                                                {name}
-                                                {self && <small>you</small>}
-                                            </strong>
-                                            <small>
-                                                {user.owner
-                                                    ? 'Owner'
-                                                    : state.roles
-                                                          .filter((role) =>
-                                                              user.roles.includes(role.id),
-                                                          )
-                                                          .map((role) => role.name)
-                                                          .join(' · ') ||
-                                                      state.roles.find(
-                                                          (role) => role.id === 'everyone',
-                                                      )?.name ||
-                                                      'Default'}
-                                            </small>
-                                        </span>
-                                        {user.owner && (
-                                            <Shield size={14} className="owner-shield" />
-                                        )}
+                                        <MemberIdentity
+                                            user={user}
+                                            state={state}
+                                            color={color(user)}
+                                            self={self}
+                                            status={status}
+                                        />
                                     </button>
                                     {!self && (
                                         <button

@@ -61,6 +61,23 @@ app.whenReady()
             "document.querySelector('.server-heading small')?.textContent.includes('Connected')",
             'connected',
         );
+        assert.equal(
+            await js(
+                'document.querySelectorAll(".tree-channel-manage,.tree-category-manage").length',
+            ),
+            0,
+        );
+        for (const width of [960, 1440]) {
+            win.setSize(width, 1000);
+            await pause(100);
+            assert.equal(
+                await js(
+                    `(()=>{const icon=document.querySelector('.voice-channel-invite');const rect=icon.getBoundingClientRect();return getComputedStyle(icon).opacity==='1' && document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2)?.closest('.voice-channel-invite')===icon;})()`,
+                ),
+                true,
+                'invite icon is visible and unobstructed at ' + width,
+            );
+        }
         await click('Invite to lounge');
         await wait(
             "document.querySelectorAll('.voice-invite-member').length===5",

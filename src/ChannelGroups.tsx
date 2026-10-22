@@ -8,7 +8,6 @@ export function ChannelGroups(props: {
     unread: Record<string, number>;
     storage: Pick<Storage, 'getItem' | 'setItem'>;
     storageKey: string;
-    manage?: (id: string) => void;
     renderChannel: (channel: Channel) => ReactNode;
     api: ApiClient;
     refresh: () => Promise<void>;

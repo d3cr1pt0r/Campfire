@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, GripVertical, Hash, Lock, Settings, Volume2 } from 'lucide-react';
-import type { State, Channel } from './types';
+import { ChevronDown, GripVertical, Hash, Lock, Volume2, Folder } from 'lucide-react';
+import type { State, Channel, Category } from './types';
 import type { ApiClient } from './api';
 import { useChannelOrdering } from './useChannelOrdering';
 import { useChannelDragScroll } from './useChannelDragScroll';
@@ -15,24 +15,24 @@ export function ChannelTree({
     selected,
     select,
     renderChannel,
+    renderCategoryControl,
     unread = {},
     storage,
     storageKey,
-    manage,
 }: {
     state: State;
     api: ApiClient;
     refresh: () => Promise<void>;
     permission: (id: string) => boolean;
     busy?: boolean;
-    mode: 'settings' | 'sidebar';
+    mode: 'settings' | 'sidebar' | 'notifications';
     selected?: string;
     select?: (id: string) => void;
     renderChannel?: (channel: Channel) => ReactNode;
+    renderCategoryControl?: (category: Category) => ReactNode;
     unread?: Record<string, number>;
     storage?: Pick<Storage, 'getItem' | 'setItem'>;
     storageKey?: string;
-    manage?: (id: string) => void;
 }) {
     const [collapsed, setCollapsed] = useState<string[]>(() => {
         try {
@@ -121,12 +121,13 @@ export function ChannelTree({
                                     {mode === 'settings' && (
                                         <GripVertical className="tree-grip" size={13} />
                                     )}
-                                    {mode === 'settings' ? (
+                                    {mode !== 'sidebar' ? (
                                         <>
                                             <button
                                                 className="tree-collapse"
                                                 aria-label={`${closed ? 'Expand' : 'Collapse'} ${group.name}`}
                                                 aria-expanded={!closed}
+                                                aria-controls={`tree-${mode}-${key}`}
                                                 onClick={() =>
                                                     setCollapsed((previous) =>
                                                         closed
@@ -140,22 +141,37 @@ export function ChannelTree({
                                                     className={closed ? 'collapsed' : ''}
                                                 />
                                             </button>
-                                            <button
-                                                className="tree-category-name"
-                                                onClick={() => select?.(`category:${group.id}`)}
-                                            >
-                                                {group.name}
-                                            </button>
-                                            <span className="tree-channel-count">
-                                                {channels.length}
-                                            </span>
+                                            {mode === 'settings' ? (
+                                                <button
+                                                    className="tree-category-name"
+                                                    onClick={() => select?.('category:' + group.id)}
+                                                >
+                                                    {group.name}
+                                                </button>
+                                            ) : (
+                                                <span className="tree-category-name">
+                                                    <Folder size={15} />
+                                                    <span>{group.name}</span>
+                                                </span>
+                                            )}
+                                            {mode === 'settings' && (
+                                                <span className="tree-channel-count">
+                                                    {channels.length}
+                                                </span>
+                                            )}
+                                            {group.id &&
+                                                renderCategoryControl?.(
+                                                    categories.find(
+                                                        (entry) => entry.id === group.id,
+                                                    )!,
+                                                )}
                                         </>
                                     ) : (
                                         <>
                                             <button
                                                 className="tree-category-name category-toggle"
                                                 aria-expanded={!closed}
-                                                aria-controls={`tree-${key}`}
+                                                aria-controls={`tree-${mode}-${key}`}
                                                 onClick={() =>
                                                     setCollapsed((previous) =>
                                                         closed
@@ -178,24 +194,15 @@ export function ChannelTree({
                                                     {count}
                                                 </span>
                                             )}
-                                            {manage && (
-                                                <button
-                                                    className="tree-category-manage"
-                                                    aria-label={`Edit ${group.name}`}
-                                                    onClick={() => manage?.(`category:${group.id}`)}
-                                                >
-                                                    <Settings size={13} />
-                                                </button>
-                                            )}
                                         </>
                                     )}
                                 </div>
                             </div>
                         )}
-                        {!group.id && mode === 'settings' && (
+                        {!group.id && mode !== 'sidebar' && (
                             <div className="tree-uncategorized-heading">Uncategorized</div>
                         )}
-                        <div className="tree-children" id={`tree-${key}`} hidden={closed}>
+                        <div className="tree-children" id={`tree-${mode}-${key}`} hidden={closed}>
                             {channels.map((channel, channelIndex) => {
                                 const before = `before:${channel.id}`;
                                 const after = `after:${channel.id}`;
@@ -286,18 +293,7 @@ export function ChannelTree({
                                                 </small>
                                             </button>
                                         ) : (
-                                            <>
-                                                {renderChannel?.(channel)}
-                                                {manage && (
-                                                    <button
-                                                        className="tree-channel-manage"
-                                                        aria-label={`Edit ${channel.name}`}
-                                                        onClick={() => manage(channel.id)}
-                                                    >
-                                                        <Settings size={13} />
-                                                    </button>
-                                                )}
-                                            </>
+                                            <>{renderChannel?.(channel)}</>
                                         )}
                                     </div>
                                 );

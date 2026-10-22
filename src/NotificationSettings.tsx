@@ -1,5 +1,8 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { Hash, Folder, X } from 'lucide-react';
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { Hash, Lock } from 'lucide-react';
+import { ChannelTree } from './ChannelTree';
+import { MemberIdentity } from './MemberIdentity';
+import type { ApiClient } from './api';
 import type { ChannelNotificationMode, Preferences, State } from './types';
 import { Toggle } from './forms';
 import { ChannelNotificationSelect } from './ChannelNotificationSelect';
@@ -22,6 +25,9 @@ type Props = {
     act: (action: () => Promise<unknown>) => Promise<void>;
     testSound: () => Promise<void>;
     openSettings: (section: string) => void;
+    api: ApiClient;
+    refresh: () => Promise<void>;
+    permission: (id: string) => boolean;
 };
 export function NotificationSettings({
     state,
@@ -32,13 +38,13 @@ export function NotificationSettings({
     act,
     testSound,
     openSettings,
+    api,
+    refresh,
+    permission: can,
 }: Props) {
     const [permission, setPermission] = useState(
         typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
     );
-    const addRef = useRef<HTMLSelectElement>(null);
-    const [added, setAdded] = useState<string[]>([]);
-    const [query, setQuery] = useState('');
     const [dmQuery, setDmQuery] = useState('');
     useEffect(() => {
         const update = () =>
@@ -62,46 +68,45 @@ export function NotificationSettings({
             else overrides[key(scope)] = value;
             return { ...previous, [field]: overrides };
         });
-    const targets = [
-        ...(state.categories || []).map((category) => ({
-            id: 'category:' + category.id,
-            scope: category.id,
-            name: category.name,
-            label: 'Category · ' + category.name,
-            category: null,
-            kind: 'category' as const,
-        })),
-        ...state.channels
-            .filter((channel) => channel.kind === 'text')
-            .map((channel) => ({
-                id: 'channel:' + channel.id,
-                scope: channel.id,
-                name: channel.name,
-                label:
-                    '#' +
-                    channel.name +
-                    (channel.category
-                        ? ' · ' +
-                          (state.categories?.find((category) => category.id === channel.category)
-                              ?.name || 'Category')
-                        : ''),
-                category: channel.category,
-                kind: 'channel' as const,
-            })),
-    ];
-    const fieldFor = (kind: 'category' | 'channel') =>
-        kind === 'category' ? 'categoryNotifications' : 'channelNotifications';
-    const configured = targets.filter(
-        (target) =>
-            explicitNotificationMode(prefs[fieldFor(target.kind)]?.[key(target.scope)]) ||
-            added.includes(target.id),
-    );
-    const available = targets.filter(
-        (target) => !configured.some((entry) => entry.id === target.id),
-    );
-    const visible = configured.filter((target) =>
-        target.label.toLowerCase().includes(query.trim().toLowerCase()),
-    );
+    const notificationMode = (
+        kind: 'category' | 'channel',
+        id: string,
+        name: string,
+        category?: string | null,
+    ) => {
+        const field = kind === 'category' ? 'categoryNotifications' : 'channelNotifications';
+        const inherited =
+            kind === 'category'
+                ? serverMode
+                : effectiveChannelNotificationMode(
+                      { ...prefs, channelNotifications: {} },
+                      url,
+                      state.me.id,
+                      id,
+                      category,
+                  );
+        const categoryOverride =
+            kind === 'channel' &&
+            category &&
+            explicitNotificationMode(prefs.categoryNotifications?.[key(category)]);
+        return (
+            <ChannelNotificationSelect
+                label={
+                    kind === 'category'
+                        ? name + ' category notifications'
+                        : '#' + name + ' notifications'
+                }
+                mode={explicitNotificationMode(prefs[field]?.[key(id)]) || 'inherit'}
+                inheritLabel={
+                    'Use ' +
+                    (categoryOverride ? 'category' : 'server') +
+                    ' default · ' +
+                    modeNames[inherited]
+                }
+                onChange={(value) => updateOverride(field, id, value)}
+            />
+        );
+    };
     const dmUsers = state.users.filter(
         (user) =>
             user.id !== state.me.id &&
@@ -247,129 +252,39 @@ export function NotificationSettings({
             <section className="settings-section" aria-label="Notification overrides">
                 <h3>Notification overrides</h3>
                 <p className="muted">
-                    Channels follow their category, then the server default. Add an override only
-                    where you want different alerts. These choices do not change channel access.
+                    Text channels follow their category, then the server default. Choose an option
+                    on the right, or return to the inherited default. These choices do not change
+                    channel access.
                 </p>
-                <label className="notification-add">
-                    Add a channel or category
-                    <select
-                        ref={addRef}
-                        aria-label="Add notification override"
-                        value=""
-                        onChange={(event) => {
-                            const id = event.target.value;
-                            if (id) setAdded((previous) => [...previous, id]);
-                        }}
-                        disabled={!available.length}
-                    >
-                        <option value="">
-                            {available.length
-                                ? 'Choose a channel or category…'
-                                : 'All channels and categories are listed'}
-                        </option>
-                        {available.map((target) => (
-                            <option key={target.id} value={target.id}>
-                                {target.label}
-                            </option>
-                        ))}
-                    </select>
-                </label>
-                {(configured.length > 3 || query) && (
-                    <label className="notification-search">
-                        Filter overrides
-                        <input
-                            type="search"
-                            value={query}
-                            onChange={(event) => setQuery(event.target.value)}
-                            placeholder="Channel or category name"
-                        />
-                    </label>
-                )}
-                <div className="notification-overrides">
-                    {!configured.length && (
-                        <p className="field-help">
-                            No overrides. All channels use the server default.
-                        </p>
+                <ChannelTree
+                    mode="notifications"
+                    state={{
+                        ...state,
+                        channels: state.channels.filter((channel) => channel.kind === 'text'),
+                    }}
+                    api={api}
+                    refresh={refresh}
+                    permission={can}
+                    busy={busy}
+                    renderCategoryControl={(category) =>
+                        notificationMode('category', category.id, category.name)
+                    }
+                    renderChannel={(channel) => (
+                        <>
+                            <span className="notification-channel-name">
+                                <Hash size={15} />
+                                <span>{channel.name}</span>
+                                {channel.private && <Lock size={11} />}
+                            </span>
+                            {notificationMode(
+                                'channel',
+                                channel.id,
+                                channel.name,
+                                channel.category,
+                            )}
+                        </>
                     )}
-                    {!!configured.length && !visible.length && (
-                        <p className="field-help">No overrides match your search.</p>
-                    )}
-                    {visible.map((target) => {
-                        const field = fieldFor(target.kind);
-                        const inherited =
-                            target.kind === 'category'
-                                ? serverMode
-                                : effectiveChannelNotificationMode(
-                                      { ...prefs, channelNotifications: {} },
-                                      url,
-                                      state.me.id,
-                                      target.scope,
-                                      target.category,
-                                  );
-                        const categoryOverride =
-                            target.kind === 'channel' &&
-                            target.category &&
-                            explicitNotificationMode(
-                                prefs.categoryNotifications?.[key(target.category)],
-                            );
-                        return (
-                            <div className="notification-override" key={target.id}>
-                                <div className="notification-override-title">
-                                    {target.kind === 'category' ? (
-                                        <Folder size={15} />
-                                    ) : (
-                                        <Hash size={15} />
-                                    )}
-                                    <div>
-                                        <strong>{target.name}</strong>
-                                        <small>
-                                            {target.kind === 'category'
-                                                ? 'Category · Applies to its channels'
-                                                : target.category
-                                                  ? state.categories?.find(
-                                                        (entry) => entry.id === target.category,
-                                                    )?.name
-                                                  : 'Uncategorized'}
-                                        </small>
-                                    </div>
-                                </div>
-                                <ChannelNotificationSelect
-                                    label={
-                                        target.kind === 'category'
-                                            ? target.name + ' category notifications'
-                                            : '#' + target.name + ' notifications'
-                                    }
-                                    mode={
-                                        explicitNotificationMode(
-                                            prefs[field]?.[key(target.scope)],
-                                        ) || 'inherit'
-                                    }
-                                    inheritLabel={
-                                        'Use ' +
-                                        (categoryOverride ? 'category' : 'server') +
-                                        ' default · ' +
-                                        modeNames[inherited]
-                                    }
-                                    onChange={(value) => updateOverride(field, target.scope, value)}
-                                />
-                                <button
-                                    className="notification-remove"
-                                    aria-label={'Remove ' + target.label + ' override'}
-                                    title="Remove override"
-                                    onClick={() => {
-                                        updateOverride(field, target.scope, 'inherit');
-                                        setAdded((previous) =>
-                                            previous.filter((id) => id !== target.id),
-                                        );
-                                        addRef.current?.focus();
-                                    }}
-                                >
-                                    <X size={16} />
-                                </button>
-                            </div>
-                        );
-                    })}
-                </div>
+                />
             </section>
             <section className="settings-section" aria-label="Direct message notifications">
                 <h3>Direct messages</h3>
@@ -401,19 +316,25 @@ export function NotificationSettings({
                             prefs.channelNotifications?.[key(room)],
                         );
                         return (
-                            <ChannelNotificationSelect
-                                key={user.id}
-                                label={displayName(user) + ' DM notifications'}
-                                mode={override === 'mentions' ? 'inherit' : override || 'inherit'}
-                                directMessage
-                                inheritLabel={
-                                    'Use DM default · ' +
-                                    (prefs.dmNotifications === false ? 'Nothing' : 'All messages')
-                                }
-                                onChange={(value) =>
-                                    updateOverride('channelNotifications', room, value)
-                                }
-                            />
+                            <div className="member-preference-row" key={user.id}>
+                                <MemberIdentity user={user} state={state} />
+                                <ChannelNotificationSelect
+                                    label={displayName(user) + ' DM notifications'}
+                                    mode={
+                                        override === 'mentions' ? 'inherit' : override || 'inherit'
+                                    }
+                                    directMessage
+                                    inheritLabel={
+                                        'Use DM default · ' +
+                                        (prefs.dmNotifications === false
+                                            ? 'Nothing'
+                                            : 'All messages')
+                                    }
+                                    onChange={(value) =>
+                                        updateOverride('channelNotifications', room, value)
+                                    }
+                                />
+                            </div>
                         );
                     })}
                     {!dmUsers.length && <p className="field-help">No members match your search.</p>}

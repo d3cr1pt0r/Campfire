@@ -1260,23 +1260,9 @@ label,
 .server-member-card > summary:hover {
     background: var(--soft-accent);
 }
-.server-member-identity {
-    display: grid;
-    gap: 3px;
-    flex: 1;
-    min-width: 0;
-}
-.server-member-identity > * {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.server-member-identity small,
 .server-member-status {
     color: var(--muted);
     font-size: 11px;
-}
-.server-member-status {
     padding: 4px 7px;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -4122,92 +4108,97 @@ label,
     color: var(--muted);
     margin-top: 4px;
 }
-.notification-add select,
 .notification-search input {
     width: 100%;
     min-width: 0;
 }
 .settings-content .notification-search {
     display: block;
-    margin-top: 12px;
-}
-.notification-overrides {
     margin-top: 10px;
-}
-.notification-override {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(180px, 280px) 28px;
-    gap: 10px;
-    align-items: center;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--line);
-}
-.notification-override:last-child {
-    border-bottom: 0;
-}
-.notification-override-title {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    min-width: 0;
-}
-.notification-override-title > svg {
-    flex-shrink: 0;
-    color: var(--muted);
-}
-.notification-override-title strong,
-.notification-override-title small {
-    display: block;
-    overflow-wrap: anywhere;
-}
-.notification-override-title strong {
-    font-size: 13px;
-}
-.notification-override-title small {
-    color: var(--muted);
-    font-size: 11px;
-    margin-top: 3px;
-}
-.notification-override .channel-notification-select {
-    min-width: 0;
-    padding: 0;
-}
-.notification-override .channel-notification-select > span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-}
-.notification-override select {
-    width: 100%;
-    min-width: 0;
-    margin-top: 0;
-    font-size: 12px;
-}
-.notification-remove {
-    color: var(--muted);
-    padding: 5px;
-}
-.notification-remove:hover {
-    color: var(--ink);
-    background: var(--raised);
 }
 .notification-settings .dm-notification-settings {
     border-top: 1px solid var(--line);
     padding-top: 10px;
     margin-top: 10px;
 }
-.notification-settings .dm-notification-settings .channel-notification-select {
-    border-bottom: 1px solid var(--line);
-    padding: 8px 0;
-    gap: 8px;
-    flex-wrap: wrap;
+.channel-tree-notifications {
+    margin-top: 12px;
 }
-.notification-settings .dm-notification-settings .channel-notification-select > span {
-    overflow-wrap: anywhere;
+.channel-tree-notifications .tree-category {
+    padding: 4px 0;
+    gap: 6px;
+}
+.channel-tree-notifications .tree-category-name {
+    flex: 1;
+    font-size: 12px;
+    font-weight: 650;
+}
+.channel-tree-notifications .tree-channel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 3px 0;
+}
+.channel-tree-notifications .tree-children {
+    padding-left: 18px;
+    margin-left: 6px;
+    border-left: 1px solid var(--line);
+}
+.channel-tree-notifications .tree-uncategorized .tree-children {
+    padding-left: 24px;
+    margin-left: 0;
+    border: 0;
+}
+.channel-tree-notifications .tree-group + .tree-group {
+    margin-top: 10px;
+}
+.notification-channel-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
     min-width: 0;
-    flex: 1 1 160px;
+    font-size: 12px;
+}
+.notification-channel-name > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.notification-channel-name > svg {
+    flex-shrink: 0;
+    color: var(--muted);
+}
+.settings-content
+    :is(.channel-tree-notifications, .member-preference-row)
+    .channel-notification-select {
+    flex: 0 1 235px;
+    width: 235px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+}
+:is(.channel-tree-notifications, .member-preference-row) .channel-notification-select > span {
+    display: none;
+}
+.settings-content :is(.channel-tree-notifications, .member-preference-row) select {
+    width: 100%;
+    min-width: 0;
+    min-height: 30px;
+    margin: 0;
+    padding: 5px 8px;
+    font-size: 12px;
+}
+.member-preference-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 0;
+    min-height: 38px;
+}
+.member-preference-row + .member-preference-row {
+    border-top: 1px solid var(--line);
 }
 @media (max-width: 700px) {
     .notification-sound-row {
@@ -4217,16 +4208,11 @@ label,
     .notification-sound-row .toggle-label {
         flex-basis: 100%;
     }
-    .notification-override {
-        grid-template-columns: minmax(0, 1fr) 28px;
-    }
-    .notification-override .channel-notification-select {
-        grid-column: 1 / -1;
-        grid-row: 2;
-    }
-    .notification-remove {
-        grid-column: 2;
-        grid-row: 1;
+    .settings-content
+        :is(.channel-tree-notifications, .member-preference-row)
+        .channel-notification-select {
+        flex-basis: 190px;
+        width: 190px;
     }
 }
 @media (max-width: 480px) {
@@ -4243,4 +4229,158 @@ label,
 .notification-mode-option > span {
     min-width: 0;
     flex: 1;
+}
+
+/* All compact user lists share the Members directory's identity and hierarchy. */
+:is(.member, .mention-suggestions button, .reaction-popup li, .call-thumbnail) > .member-identity,
+.member-identity {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+}
+.member-identity > .avatar-status {
+    display: inline-flex;
+    position: relative;
+    flex: 0 0 28px;
+    width: 28px;
+}
+.member-identity .avatar-status .avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+.member-identity .avatar-status i {
+    width: 8px;
+    height: 8px;
+    border-width: 2px;
+    right: -2px;
+    bottom: -2px;
+}
+.member-identity > .member-identity-text {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+.member-identity .member-identity-text > strong {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    line-height: 15px;
+    font-weight: 600;
+    margin: 0;
+}
+.member-identity .member-identity-text > small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+    font-size: 10px;
+    line-height: 12px;
+    margin: 0;
+}
+.member-identity .member-identity-text .member-self {
+    display: inline;
+    font-size: 10px;
+    color: var(--muted);
+    font-weight: 400;
+    background: none;
+    padding: 0;
+    margin: 0;
+}
+.member-identity .owner-shield {
+    flex: 0 0 13px;
+    color: var(--muted);
+}
+.member-row .member {
+    padding: 4px 6px;
+    gap: 8px;
+    min-height: 38px;
+}
+.voice-invite-member {
+    padding: 4px 0;
+    min-height: 38px;
+}
+.mention-suggestions > button {
+    padding: 5px 8px;
+    min-height: 38px;
+}
+.reaction-popup li {
+    padding: 4px 0;
+    min-height: 36px;
+}
+.roles-settings .member-roles-card {
+    padding: 0;
+    margin: 0;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+}
+.roles-settings .member-roles-card > summary {
+    display: flex;
+    align-items: center;
+    padding: 5px 6px;
+    min-height: 38px;
+    cursor: pointer;
+}
+.roles-settings .member-roles-card > summary::after {
+    content: '⌄';
+    color: var(--muted);
+    margin-left: 8px;
+}
+.roles-settings .member-roles-card[open] > summary::after {
+    content: '⌃';
+}
+.roles-settings .member-roles-card > form {
+    padding: 4px 8px 10px;
+}
+.server-member-list {
+    gap: 0;
+    margin-top: 8px;
+}
+.server-member-card {
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+}
+.server-member-card > summary {
+    padding: 5px 6px;
+    gap: 8px;
+    min-height: 38px;
+}
+.server-member-card[open] {
+    background: var(--field);
+}
+.call-thumbnail {
+    flex-basis: 150px;
+    flex-direction: row;
+    padding: 6px;
+}
+@media (max-width: 480px) {
+    .channel-tree-notifications .tree-category,
+    .channel-tree-notifications .tree-channel,
+    .member-preference-row {
+        flex-wrap: wrap;
+    }
+    .settings-content
+        :is(.channel-tree-notifications, .member-preference-row)
+        .channel-notification-select {
+        flex-basis: 100%;
+        width: 100%;
+    }
+    .channel-tree-notifications .tree-category-name {
+        flex-basis: calc(100% - 60px);
+    }
 }

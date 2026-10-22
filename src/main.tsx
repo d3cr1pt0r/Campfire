@@ -1649,17 +1649,6 @@ function App() {
                                 unread={unread}
                                 storage={storage}
                                 storageKey={`categories:${url}:${state.me.id}`}
-                                manage={
-                                    [
-                                        'channels.create',
-                                        'channels.edit',
-                                        'channels.reorder',
-                                        'channels.delete',
-                                        'channels.access',
-                                    ].some(permission)
-                                        ? (id) => openSettings('channels', id)
-                                        : undefined
-                                }
                                 renderChannel={(c) =>
                                     c.kind === 'text' ? (
                                         <button
@@ -2186,6 +2175,7 @@ function App() {
                                     canAttach={canPost && conversationPermission('files.attach')}
                                     uploadLimit={state.maxUploadBytes}
                                     users={state.users}
+                                    state={state}
                                     emojis={state.emojis}
                                     attachments={attachments}
                                     setAttachments={setAttachments}

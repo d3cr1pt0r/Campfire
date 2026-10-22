@@ -112,6 +112,37 @@ app.whenReady()
         };
         const key = (scope) => JSON.stringify([new URL(origin).host, alice.user.id, scope]);
         await open();
+        const originalOrder = await api(alice, '/state');
+        assert.equal(
+            await js(
+                a,
+                'document.querySelectorAll(".channel-tree-notifications [draggable=true], .channel-tree-notifications .tree-grip").length',
+            ),
+            0,
+        );
+        assert.equal(
+            await js(
+                a,
+                'document.querySelectorAll(".channel-tree-notifications .tree-channel select").length',
+            ),
+            originalOrder.channels.filter((channel) => channel.kind === 'text').length,
+        );
+        await click(a, 'document.querySelector(\'button[aria-label="Collapse Community"]\')');
+        assert.equal(
+            await js(
+                a,
+                'document.querySelector(\'select[aria-label="#general notifications"]\').closest(".tree-children").hidden',
+            ),
+            true,
+        );
+        await click(a, 'document.querySelector(\'button[aria-label="Expand Community"]\')');
+        await js(
+            a,
+            'document.querySelectorAll(".channel-tree-notifications .tree-channel, .channel-tree-notifications .tree-category").forEach(row=>{row.dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowUp",altKey:true,bubbles:true}));row.dispatchEvent(new DragEvent("dragstart",{bubbles:true,dataTransfer:new DataTransfer()}));row.dispatchEvent(new DragEvent("drop",{bubbles:true,dataTransfer:new DataTransfer()}));})',
+        );
+        const afterOrder = await api(alice, '/state');
+        assert.deepEqual(afterOrder.channels, originalOrder.channels);
+        assert.deepEqual(afterOrder.categories, originalOrder.categories);
         assert.equal(
             await js(
                 a,
@@ -121,13 +152,7 @@ app.whenReady()
         );
         await click(a, 'document.querySelector("input[name=server-notification-mode][value=all]")');
         assert.equal((await saved()).serverNotificationModes[key('*')], 'all');
-        await select(
-            a,
-            'select[aria-label="Add notification override"]',
-            'category:' + category.id,
-        );
         await select(a, 'select[aria-label="Community category notifications"]', 'muted');
-        await select(a, 'select[aria-label="Add notification override"]', 'channel:general');
         assert.equal(
             await js(
                 a,
@@ -140,10 +165,7 @@ app.whenReady()
         await select(a, 'select[aria-label="#general notifications"]', 'inherit');
         assert.equal((await saved()).channelNotifications[key('general')], undefined);
         await select(a, 'select[aria-label="#general notifications"]', 'mentions');
-        await click(
-            a,
-            'document.querySelector(\'button[aria-label="Remove Category · Community override"]\')',
-        );
+        await select(a, 'select[aria-label="Community category notifications"]', 'inherit');
         assert.equal((await saved()).categoryNotifications[key(category.id)], undefined);
         assert.equal(
             await js(
@@ -152,18 +174,9 @@ app.whenReady()
             ),
             'Use server default · All messages',
         );
-        assert.equal(
-            await js(a, 'document.activeElement.getAttribute("aria-label")'),
-            'Add notification override',
-        );
-        await select(
-            a,
-            'select[aria-label="Add notification override"]',
-            'category:' + category.id,
-        );
         await select(a, 'select[aria-label="Community category notifications"]', 'muted');
         console.log(
-            'PASS server defaults, category/channel overrides, reset to inheritance, and remove focus',
+            'PASS server defaults, category/channel overrides, reset to inheritance, and read-only tree',
         );
         await click(
             a,
@@ -238,7 +251,7 @@ app.whenReady()
                 );
                 const overflow = await js(
                     a,
-                    '[...document.querySelectorAll(".settings-content,.notification-override")].filter(node=>node.scrollWidth>node.clientWidth+1).map(node=>({class:node.className,client:node.clientWidth,scroll:node.scrollWidth,children:[...node.children].map(child=>({tag:child.tagName,class:child.className,width:child.getBoundingClientRect().width,scroll:child.scrollWidth}))}))',
+                    '[...document.querySelectorAll(".settings-content,.channel-tree-notifications,.member-preference-row")].filter(node=>node.scrollWidth>node.clientWidth+1).map(node=>({class:node.className,client:node.clientWidth,scroll:node.scrollWidth,children:[...node.children].map(child=>({tag:child.tagName,class:child.className,width:child.getBoundingClientRect().width,scroll:child.scrollWidth}))}))',
                 );
                 assert.deepEqual(overflow, [], width + ' ' + label);
                 await screenshot(
@@ -249,6 +262,113 @@ app.whenReady()
         }
         console.log(
             'PASS persistence, DM overrides, delivery permissions, dark/light, and three window sizes',
+        );
+        a.setSize(1440, 1000);
+        await select(a, '#settings-section', 'appearance');
+        await js(a, 'document.querySelector(\'input[name=theme][value="dark"]\').click()');
+        const identityMetrics = (selector) =>
+            js(
+                a,
+                `(() => {
+            const root=document.querySelector(${JSON.stringify(selector)});
+            const avatar=getComputedStyle(root.querySelector('.avatar'));
+            const name=getComputedStyle(root.querySelector('strong'));
+            return {avatar:avatar.width,avatarHeight:avatar.height,font:name.fontSize,line:name.lineHeight,display:getComputedStyle(root).display,direction:getComputedStyle(root).flexDirection,compact:root.getBoundingClientRect().height<=32};
+        })()`,
+            );
+        const members = await identityMetrics('.member-list .member-identity');
+        assert.deepEqual(members, {
+            avatar: '28px',
+            avatarHeight: '28px',
+            font: '12px',
+            line: '15px',
+            display: 'flex',
+            direction: 'row',
+            compact: true,
+        });
+        for (const [section, selector] of [
+            ['notifications', '.member-preference-row .member-identity'],
+            ['roles', '.member-roles-card .member-identity'],
+            ['server', '.server-member-card .member-identity'],
+        ]) {
+            await select(a, '#settings-section', section);
+            if (section === 'server')
+                await wait(
+                    a,
+                    '!!document.querySelector(\".storage-overview\") && !!document.querySelector(\".registration-settings select\")',
+                    'server sections load before member review',
+                );
+            if (section === 'notifications')
+                await js(a, 'document.querySelector(".dm-notification-settings").open=true');
+            assert.deepEqual(
+                await identityMetrics(selector),
+                members,
+                section + ' matches Members panel',
+            );
+            if (section === 'notifications')
+                assert.equal(
+                    await js(
+                        a,
+                        'getComputedStyle(document.querySelector(".member-preference-row .channel-notification-select > span")).display',
+                    ),
+                    'none',
+                );
+            await js(
+                a,
+                'document.querySelector(' +
+                    JSON.stringify(selector) +
+                    ').scrollIntoView({block:"center",behavior:"instant"})',
+            );
+            await screenshot(a, 'compact-members-' + section + '.png');
+        }
+        await click(a, 'document.querySelector(\'button[aria-label="Close dialog"]\')');
+        await click(a, 'document.querySelector(\'.member[aria-label="Message Bob"]\')');
+        assert.equal(
+            await js(
+                a,
+                'document.querySelector(".direct-message .direct-message-name").textContent',
+            ),
+            'Bob',
+        );
+        assert.equal(
+            await js(a, 'document.querySelectorAll(".direct-message .member-identity").length'),
+            0,
+        );
+        await screenshot(a, 'compact-members-main.png');
+        await js(a, 'document.querySelector(".composer [contenteditable=true]").focus()');
+        await a.webContents.insertText('@B');
+        await wait(
+            a,
+            '!!document.querySelector(".mention-suggestions .member-identity")',
+            'mention suggestions open',
+        );
+        assert.deepEqual(await identityMetrics('.mention-suggestions .member-identity'), members);
+        await screenshot(a, 'compact-members-mentions.png');
+        await click(a, 'document.querySelector(".mention-suggestions button")');
+        assert.equal(
+            await js(
+                a,
+                'document.querySelector(".composer .rich-input").textContent.includes("@Bob")',
+            ),
+            true,
+        );
+        const message = await api(bob, '/messages', 'POST', {
+            room: dm,
+            body: 'Member list review',
+        });
+        await api(bob, '/messages/' + message.id + '/reaction', 'POST', { emoji: '👍' });
+        await wait(a, '!!document.querySelector(".reactions button")', 'reaction arrives');
+        await js(a, 'document.querySelector(".reactions button").focus()');
+        await wait(
+            a,
+            '!!document.querySelector(".reaction-popup .member-identity")',
+            'reaction member popup opens',
+        );
+        assert.deepEqual(await identityMetrics('.reaction-popup .member-identity'), members);
+        await screenshot(a, 'compact-members-reactions.png');
+
+        console.log(
+            'PASS compact shared identity matches Members panel in notifications, roles, and management; sidebar DMs retain their original layout',
         );
         assert.deepEqual(failures, []);
         a.destroy();

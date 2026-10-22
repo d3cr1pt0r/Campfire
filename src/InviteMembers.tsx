@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Check, Search } from 'lucide-react';
 import type { State, User } from './types';
-import { Avatar } from './Avatar';
+import { MemberIdentity } from './MemberIdentity';
 import { displayName } from './profiles';
-import { statusLabels, userStatus } from './presence';
 import { inviteMembers } from './inviteCandidates';
 
 // Mount once per open dialog: delivery feedback belongs to that opening only.
@@ -104,14 +103,12 @@ export function InviteMembers({
                             reason = unavailable(member);
                         return (
                             <div className="voice-invite-member" key={member.id}>
-                                <Avatar user={member} color={color(member)} small />
-                                <div className="voice-invite-identity">
-                                    <strong>{displayName(member)}</strong>
-                                    <small>
-                                        @{member.username} ·{' '}
-                                        {statusLabels[userStatus(state, member.id)]}
-                                    </small>
-                                </div>
+                                <MemberIdentity
+                                    user={member}
+                                    state={state}
+                                    color={color(member)}
+                                    textClassName="voice-invite-identity"
+                                />
                                 <button
                                     type="button"
                                     className={`secondary ${delivered ? 'invite-sent' : ''}`}
