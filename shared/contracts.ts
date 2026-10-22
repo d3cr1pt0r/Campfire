@@ -173,6 +173,8 @@ export type Preferences = {
     mentionNotifications?: boolean;
     channelNotifications?: Record<string, ChannelNotificationMode>;
     serverNotifications?: Record<string, boolean>;
+    serverNotificationModes?: Record<string, ChannelNotificationMode>;
+    categoryNotifications?: Record<string, ChannelNotificationMode>;
     closeToTray?: boolean;
     input: string;
     inputLabel?: string;

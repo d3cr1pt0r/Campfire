@@ -1,4 +1,4 @@
-import type { ChannelNotificationMode, Message, Preferences, State, User } from './types';
+import type { Channel, ChannelNotificationMode, Message, Preferences, State, User } from './types';
 import { mentionSegments } from './mentions.ts';
 import { messageParts } from './messageText.ts';
 import { messageTexts } from './messageFormat.ts';
@@ -24,22 +24,71 @@ export function channelNotificationMode(value: unknown): ChannelNotificationMode
     return value === 'all' || value === 'muted' ? value : 'mentions';
 }
 
+export const explicitNotificationMode = (value: unknown): ChannelNotificationMode | undefined =>
+    value === 'all' || value === 'mentions' || value === 'muted' ? value : undefined;
+
+export function serverNotificationMode(
+    prefs: Preferences,
+    server: string,
+    user: string,
+): ChannelNotificationMode {
+    return (
+        explicitNotificationMode(
+            prefs.serverNotificationModes?.[notificationKey(server, user, '*')],
+        ) ?? (prefs.mentionNotifications === false ? 'muted' : 'mentions')
+    );
+}
+
+// Notification inheritance follows category membership, independently of access-permission sync.
+export function effectiveChannelNotificationMode(
+    prefs: Preferences,
+    server: string,
+    user: string,
+    channel: string,
+    category?: string | null,
+): ChannelNotificationMode {
+    return (
+        explicitNotificationMode(
+            prefs.channelNotifications?.[notificationKey(server, user, channel)],
+        ) ??
+        (category
+            ? explicitNotificationMode(
+                  prefs.categoryNotifications?.[notificationKey(server, user, category)],
+              )
+            : undefined) ??
+        serverNotificationMode(prefs, server, user)
+    );
+}
+
 export function shouldNotify(
     message: Message,
     me: User,
     prefs: Preferences,
     server: string,
     users: User[] = [me],
+    channels: Pick<Channel, 'id' | 'category'>[] = [],
 ) {
     if (message.author === me.id || me.status === 'dnd') return false;
     if (prefs.serverNotifications?.[notificationKey(server, me.id, '*')] === false) return false;
-    const mode = channelNotificationMode(
-        prefs.channelNotifications?.[notificationKey(server, me.id, message.room)],
+    if (message.room.startsWith('dm:')) {
+        const override = explicitNotificationMode(
+            prefs.channelNotifications?.[notificationKey(server, me.id, message.room)],
+        );
+        if (override === 'muted') return false;
+        if (override === 'all') return true;
+        return prefs.dmNotifications !== false;
+    }
+    const channel = channels.find((entry) => entry.id === message.room);
+    const mode = effectiveChannelNotificationMode(
+        prefs,
+        server,
+        me.id,
+        message.room,
+        channel?.category,
     );
     if (mode === 'muted') return false;
-    if (message.room.startsWith('dm:')) return prefs.dmNotifications !== false;
     if (mode === 'all') return true;
-    return prefs.mentionNotifications !== false && mentions(message, me, users);
+    return mentions(message, me, users);
 }
 
 // Mentions inside code are quoted text, not pings.

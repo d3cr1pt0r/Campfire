@@ -7,10 +7,14 @@ export function ChannelNotificationSelect({
     mode,
     onChange,
     compact = false,
+    inheritLabel,
+    directMessage = false,
 }: {
     label: string;
-    mode: ChannelNotificationMode;
-    onChange: (mode: ChannelNotificationMode) => void;
+    mode: ChannelNotificationMode | 'inherit';
+    onChange: (mode: ChannelNotificationMode | 'inherit') => void;
+    inheritLabel?: string;
+    directMessage?: boolean;
     compact?: boolean;
 }) {
     return (
@@ -27,11 +31,18 @@ export function ChannelNotificationSelect({
             <select
                 aria-label={label}
                 value={mode}
-                onChange={(event) => onChange(channelNotificationMode(event.target.value))}
+                onChange={(event) =>
+                    onChange(
+                        event.target.value === 'inherit'
+                            ? 'inherit'
+                            : channelNotificationMode(event.target.value),
+                    )
+                }
             >
+                {inheritLabel && <option value="inherit">{inheritLabel}</option>}
                 <option value="all">All messages</option>
-                <option value="mentions">Mentions only</option>
-                <option value="muted">Muted</option>
+                {!directMessage && <option value="mentions">Mentions only</option>}
+                <option value="muted">Nothing</option>
             </select>
         </label>
     );

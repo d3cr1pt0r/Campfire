@@ -3947,19 +3947,6 @@ label,
     margin: 8px 0;
     border-radius: 6px;
 }
-.settings-preference-list .channel-notification-select {
-    padding: 8px 0;
-    border-bottom: 1px solid var(--line);
-}
-.settings-preference-list .channel-notification-select:last-child {
-    border-bottom: 0;
-}
-.settings-preference-list .channel-notification-select select {
-    margin-top: 0;
-}
-.notification-settings .dm-notification-settings {
-    margin: 0;
-}
 .emoji-settings .custom-emoji-list {
     gap: 8px;
     margin-top: 10px;
@@ -4049,4 +4036,211 @@ label,
     border-radius: 8px;
     padding: 12px;
     background: transparent;
+}
+/* Notification delivery, server defaults, and explicit conversation overrides. */
+.notification-sound-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+.notification-sound-row .toggle-label {
+    flex: 1;
+    min-width: 0;
+}
+.notification-sound-row .secondary {
+    flex-shrink: 0;
+    margin: 0;
+}
+.notification-delivery-footer {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.notification-delivery-footer .field-help {
+    flex: 1 1 350px;
+}
+.notification-delivery-footer .permission-link {
+    padding: 0;
+}
+.notification-status {
+    border-left: 3px solid var(--accent);
+    background: var(--soft-accent);
+    padding: 8px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+.notification-status .permission-link {
+    padding: 0;
+}
+.notification-mode-options {
+    border: 0;
+    padding: 0;
+    margin: 14px 0 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    min-width: 0;
+}
+.notification-mode-options legend {
+    padding: 0;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+.settings-content .notification-mode-option {
+    display: flex;
+    align-items: start;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    cursor: pointer;
+    min-width: 0;
+}
+.notification-mode-option.is-selected {
+    background: var(--soft-accent);
+    border-color: var(--accent);
+}
+.notification-mode-option input {
+    accent-color: var(--accent);
+    margin: 3px 0 0;
+    flex-shrink: 0;
+}
+.notification-mode-option strong,
+.notification-mode-option small {
+    display: block;
+}
+.notification-mode-option strong {
+    font-size: 12px;
+}
+.notification-mode-option small {
+    font-size: 11px;
+    line-height: 1.5;
+    font-weight: 400;
+    color: var(--muted);
+    margin-top: 4px;
+}
+.notification-add select,
+.notification-search input {
+    width: 100%;
+    min-width: 0;
+}
+.settings-content .notification-search {
+    display: block;
+    margin-top: 12px;
+}
+.notification-overrides {
+    margin-top: 10px;
+}
+.notification-override {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 280px) 28px;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+}
+.notification-override:last-child {
+    border-bottom: 0;
+}
+.notification-override-title {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+}
+.notification-override-title > svg {
+    flex-shrink: 0;
+    color: var(--muted);
+}
+.notification-override-title strong,
+.notification-override-title small {
+    display: block;
+    overflow-wrap: anywhere;
+}
+.notification-override-title strong {
+    font-size: 13px;
+}
+.notification-override-title small {
+    color: var(--muted);
+    font-size: 11px;
+    margin-top: 3px;
+}
+.notification-override .channel-notification-select {
+    min-width: 0;
+    padding: 0;
+}
+.notification-override .channel-notification-select > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+}
+.notification-override select {
+    width: 100%;
+    min-width: 0;
+    margin-top: 0;
+    font-size: 12px;
+}
+.notification-remove {
+    color: var(--muted);
+    padding: 5px;
+}
+.notification-remove:hover {
+    color: var(--ink);
+    background: var(--raised);
+}
+.notification-settings .dm-notification-settings {
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+    margin-top: 10px;
+}
+.notification-settings .dm-notification-settings .channel-notification-select {
+    border-bottom: 1px solid var(--line);
+    padding: 8px 0;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.notification-settings .dm-notification-settings .channel-notification-select > span {
+    overflow-wrap: anywhere;
+    min-width: 0;
+    flex: 1 1 160px;
+}
+@media (max-width: 700px) {
+    .notification-sound-row {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .notification-sound-row .toggle-label {
+        flex-basis: 100%;
+    }
+    .notification-override {
+        grid-template-columns: minmax(0, 1fr) 28px;
+    }
+    .notification-override .channel-notification-select {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+    .notification-remove {
+        grid-column: 2;
+        grid-row: 1;
+    }
+}
+@media (max-width: 480px) {
+    .notification-mode-options {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+.settings-content .notification-mode-option input[type='radio'] {
+    width: 16px;
+    height: 16px;
+    min-height: 0;
+    padding: 0;
+}
+.notification-mode-option > span {
+    min-width: 0;
+    flex: 1;
 }

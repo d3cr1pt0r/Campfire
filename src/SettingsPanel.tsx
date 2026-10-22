@@ -2,9 +2,7 @@ import { MessageAppearanceSettings } from './MessageAppearanceSettings';
 import { RolesSettings } from './RolesSettings';
 import { MemberManagement } from './MemberManagement';
 import { RegistrationSettings } from './RegistrationSettings';
-import { notificationKey, channelNotificationMode } from './notifications';
-import { ChannelNotificationSelect } from './ChannelNotificationSelect';
-import { canonicalRoom } from '../shared/rooms.js';
+import { NotificationSettings } from './NotificationSettings';
 import { formatUploadLimit, uploadLimitCeiling } from '../shared/uploads.js';
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { formatFingerprint, serverLink } from './serverLink';
@@ -699,168 +697,16 @@ export function SettingsPanel({
                     </div>
                 )}
                 {settingsTab === 'notifications' && (
-                    <div className="settings-page notification-settings">
-                        <section className="settings-section" aria-label="Alerts and sounds">
-                            <h3>Alerts & sounds</h3>
-                            <p className="muted">
-                                Get a desktop notification for new messages while the app is in the
-                                background for DMs and channel activity you choose below. Message
-                                text stays out of notifications.
-                            </p>
-                            <Toggle
-                                title="Desktop notifications"
-                                value={prefs.notifications}
-                                set={(v) =>
-                                    void act(async () => {
-                                        if (v) {
-                                            if (!('Notification' in window))
-                                                throw new Error(
-                                                    'Desktop notifications are unavailable',
-                                                );
-                                            const result = await Notification.requestPermission();
-                                            if (result !== 'granted')
-                                                throw new Error(
-                                                    'Notifications were not allowed. Check your operating system settings.',
-                                                );
-                                        }
-                                        setPrefs({ ...prefs, notifications: v });
-                                    })
-                                }
-                            />
-                            <Toggle
-                                title="Message notification sound"
-                                value={prefs.messageSounds !== false}
-                                set={(value) =>
-                                    setPrefs((previous) => ({ ...previous, messageSounds: value }))
-                                }
-                            />
-                            <button
-                                className="secondary"
-                                disabled={busy}
-                                onClick={() => void act(testNotificationSound)}
-                            >
-                                Test notification sound
-                            </button>
-                            <Toggle
-                                title="Notify for direct messages"
-                                value={prefs.dmNotifications !== false}
-                                set={(value) =>
-                                    setPrefs((previous) => ({
-                                        ...previous,
-                                        dmNotifications: value,
-                                    }))
-                                }
-                            />
-                            <Toggle
-                                title="Notify for direct @mentions"
-                                value={prefs.mentionNotifications !== false}
-                                set={(value) =>
-                                    setPrefs((previous) => ({
-                                        ...previous,
-                                        mentionNotifications: value,
-                                    }))
-                                }
-                            />
-                            <p className="muted">
-                                Do not disturb silences sounds and desktop alerts. Sounds use your
-                                selected audio output; use Test notification sound to check
-                                playback. Device preferences save automatically. Conversation
-                                overrides below apply to your account on this server.
-                            </p>
-                        </section>
-                        <section className="settings-section" aria-label="Server notifications">
-                            <h3>Server notifications</h3>
-                            <Toggle
-                                title={`Mute ${state.name}`}
-                                value={
-                                    prefs.serverNotifications?.[
-                                        notificationKey(url, state.me.id, '*')
-                                    ] === false
-                                }
-                                set={(muted) =>
-                                    setPrefs((previous) => ({
-                                        ...previous,
-                                        serverNotifications: {
-                                            ...previous.serverNotifications,
-                                            [notificationKey(url, state.me.id, '*')]: !muted,
-                                        },
-                                    }))
-                                }
-                            />
-                            <p className="muted">
-                                Server mute silences message sounds and desktop alerts, including
-                                direct messages. Unread indicators remain visible.
-                            </p>
-                        </section>
-                        <section
-                            className="settings-section settings-preference-list"
-                            aria-label="Text channels"
-                        >
-                            <h3>Text channels</h3>
-                            <p className="muted">
-                                Choose All messages, Mentions only, or Muted for each channel. These
-                                choices include thread replies. Mentions only uses the @mention
-                                preference above; All messages includes every message. Server mute
-                                and Do not disturb silence all modes. Unread indicators remain
-                                visible.
-                            </p>
-                            {state.channels
-                                .filter((channel) => channel.kind === 'text')
-                                .map((channel) => {
-                                    const key = notificationKey(url, state.me.id, channel.id);
-                                    return (
-                                        <ChannelNotificationSelect
-                                            key={key}
-                                            label={`#${channel.name} notifications`}
-                                            mode={channelNotificationMode(
-                                                prefs.channelNotifications?.[key],
-                                            )}
-                                            onChange={(value) =>
-                                                setPrefs((previous) => ({
-                                                    ...previous,
-                                                    channelNotifications: {
-                                                        ...previous.channelNotifications,
-                                                        [key]: value,
-                                                    },
-                                                }))
-                                            }
-                                        />
-                                    );
-                                })}
-                        </section>
-                        <details className="settings-section account-details dm-notification-settings">
-                            <summary>Individual direct messages</summary>
-                            {state.users
-                                .filter((candidate) => candidate.id !== state.me.id)
-                                .map((candidate) => {
-                                    const key = notificationKey(
-                                        url,
-                                        state.me.id,
-                                        canonicalRoom(`dm:${state.me.id}:${candidate.id}`),
-                                    );
-                                    return (
-                                        <Toggle
-                                            key={key}
-                                            title={`@${candidate.username} notifications`}
-                                            value={
-                                                channelNotificationMode(
-                                                    prefs.channelNotifications?.[key],
-                                                ) !== 'muted'
-                                            }
-                                            set={(value) =>
-                                                setPrefs((previous) => ({
-                                                    ...previous,
-                                                    channelNotifications: {
-                                                        ...previous.channelNotifications,
-                                                        [key]: value ? 'all' : 'muted',
-                                                    },
-                                                }))
-                                            }
-                                        />
-                                    );
-                                })}
-                        </details>
-                    </div>
+                    <NotificationSettings
+                        state={state}
+                        prefs={prefs}
+                        setPrefs={setPrefs}
+                        url={url}
+                        busy={busy}
+                        act={act}
+                        testSound={testNotificationSound}
+                        openSettings={setSettingsTab}
+                    />
                 )}
                 {settingsTab === 'server' && (
                     <div className="account-settings server-settings">

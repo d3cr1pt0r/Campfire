@@ -16,7 +16,7 @@ The sidebar places uncategorized channels at the top, followed by categories wit
 
 Category management uses the corresponding channel creation, editing, ordering, deletion, and permission-management privileges. Delegates can change permissions only for lower roles and permissions they have, and category-wide edits require access to every child channel. Moving a channel between categories requires reordering, channel editing, and permission-management privileges. Permission changes immediately update connected clients and enforce call access.
 
-Click the chevron beside a sidebar category to collapse or expand it. A category header displays the combined unread count of its visible child channels, including while collapsed. Existing channel notification preferences continue to apply. Collapse preferences are stored separately for each server and account, including in Electron.
+Click the chevron beside a sidebar category to collapse or expand it. A category header displays the combined unread count of its visible child channels, including while collapsed. Personal [notification settings](Notifications.md) let channels inherit category and server defaults, with individual channel overrides. Notification choices are independent of access-permission sync. Collapse preferences are stored separately for each server and account, including in Electron.
 
 Deleting a category requires confirmation. Its channels become uncategorized, keep their messages, and retain their effective permissions. Protected text and voice channels remain protected. Setup capture/reset includes categories, role overrides, membership, and sync choices.
 

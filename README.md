@@ -6,7 +6,7 @@ A place to catch up, share what you're working on, or just hang out together. Us
 
 ![Campfire desktop client showing a voice call with screen sharing, a populated conversation, reactions, and an open thread](Docs/screenshots/campfire-desktop.png)
 
-*A demo community with sample messages, avatars, an active voice channel, and a thread conversation.*
+_A demo community with sample messages, avatars, an active voice channel, and a thread conversation._
 
 ## What you can do
 
@@ -17,7 +17,7 @@ A place to catch up, share what you're working on, or just hang out together. Us
 - **Decide together:** post a poll with up to ten answers, public or anonymous, and see the results once you've voted.
 - **Pick up where you left off:** browse older messages, search conversations, pin useful messages, and return to your saved reading position.
 - **Make it yours:** choose a nickname, profile picture, status, and light or dark appearance.
-- **Keep things comfortable:** adjust notifications, audio devices, and individual call volumes.
+- **Keep things comfortable:** adjust [notification defaults and overrides](Docs/Notifications.md), audio devices, and individual call volumes.
 - **Look after your community:** manage invitations, roles, and who can see or post in each channel.
 
 ## Join a campfire

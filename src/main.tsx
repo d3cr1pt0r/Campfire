@@ -704,7 +704,18 @@ function App() {
                 setUnread((prev) => ({ ...prev, [m.room]: (prev[m.room] || 0) + 1 }));
             const me = stateRef.current?.me;
             const preferences = prefsRef.current;
-            if (!me || !shouldNotify(m, me, preferences, url, stateRef.current?.users)) return;
+            if (
+                !me ||
+                !shouldNotify(
+                    m,
+                    me,
+                    preferences,
+                    url,
+                    stateRef.current?.users,
+                    stateRef.current?.channels,
+                )
+            )
+                return;
             if (
                 preferences.messageSounds !== false &&
                 (m.room !== roomRef.current ||

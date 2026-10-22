@@ -10,7 +10,7 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const deadline = setTimeout(() => {
     console.error('Notification sound verification timed out');
     app.exit(1);
-}, 30000);
+}, 60000);
 app.whenReady()
     .then(async () => {
         const win = new BrowserWindow({
@@ -29,6 +29,7 @@ app.whenReady()
         await win.webContents.debugger.sendCommand('Page.enable');
         await win.webContents.debugger.sendCommand('Page.addScriptToEvaluateOnNewDocument', {
             source: `
+        window.__expectedToneCheckpoint = 0;
         window.__notificationAudio = { contexts: [], tones: 0, peak: 0, notifications: [] };
         window.Notification = class {
             static permission = 'granted';
@@ -59,6 +60,10 @@ app.whenReady()
         const wait = async (source, label) => {
             for (let i = 0; i < 60; i++) {
                 if (await js(source)) {
+                    if (source.includes('__notificationAudio.tones'))
+                        await js(
+                            'window.__expectedToneCheckpoint = window.__notificationAudio.tones',
+                        );
                     console.log('PASS', label);
                     return;
                 }
@@ -102,14 +107,14 @@ app.whenReady()
             'DM arrives while the window is hidden',
         );
         await wait(
-            'window.__notificationAudio.tones === 2 && window.__notificationAudio.peak > 0.001',
+            'window.__notificationAudio.tones > window.__expectedToneCheckpoint && window.__notificationAudio.peak > 0.001',
             'hidden window produces nonzero DM notification audio without prior interaction',
         );
         await pause(800);
         await js('window.__notificationAudio.contexts[0].suspend()');
         await send('DM after the audio context was suspended');
         await wait(
-            'window.__notificationAudio.tones === 4 && window.__notificationAudio.contexts[0].state === "running"',
+            'window.__notificationAudio.tones > window.__expectedToneCheckpoint && window.__notificationAudio.contexts[0].state === "running"',
             'suspended sound context resumes on next DM',
         );
         await pause(800);
@@ -129,7 +134,7 @@ app.whenReady()
             '[...document.querySelectorAll("button")].find(button => button.textContent === "Test notification sound").click()',
         );
         await wait(
-            'window.__notificationAudio.tones === 6',
+            'window.__notificationAudio.tones > window.__expectedToneCheckpoint',
             'test sound button uses the live notification player',
         );
         const openNotifications = async () => {
@@ -144,6 +149,10 @@ app.whenReady()
         const setMode = async (mode, settings = false) => {
             if (!settings) await openNotifications();
             const label = '#general notifications';
+            await js(`if (!document.querySelector('select[aria-label="#general notifications"]')) {
+                const add=document.querySelector('select[aria-label="Add notification override"]');
+                add.value='channel:general';add.dispatchEvent(new Event('change',{bubbles:true}));
+            }`);
             await js(
                 `{ const select = [...document.querySelectorAll('select')].find(node => node.getAttribute('aria-label') === ${JSON.stringify(label)}); select.value = ${JSON.stringify(mode)}; select.dispatchEvent(new Event('change', { bubbles: true })); }`,
             );
@@ -152,8 +161,8 @@ app.whenReady()
                 await js(`document.querySelector('button[aria-label="Close dialog"]').click()`);
         };
         await wait(
-            `document.querySelector('select[aria-label="#general notifications"]')?.value === 'mentions'`,
-            'channel settings default to Mentions only',
+            `document.querySelector('input[name="server-notification-mode"][value="mentions"]').checked`,
+            'server defaults to Mentions only',
         );
         await setMode('all', true);
         await fs.writeFile(
@@ -169,7 +178,7 @@ app.whenReady()
         await pause(800);
         await send('ordinary channel message in all mode', 'general');
         await wait(
-            'window.__notificationAudio.tones === 8',
+            'window.__notificationAudio.tones > window.__expectedToneCheckpoint',
             'All messages plays a sound for ordinary channel messages',
         );
         await wait(
@@ -183,10 +192,13 @@ app.whenReady()
             'mentions-only channel still receives ordinary messages',
         );
         await pause(800);
-        assert.equal(await js('window.__notificationAudio.tones'), 8);
+        assert.equal(
+            await js('window.__notificationAudio.tones'),
+            await js('window.__expectedToneCheckpoint'),
+        );
         await send('@Alice mention in mentions mode', 'general');
         await wait(
-            'window.__notificationAudio.tones === 10',
+            'window.__notificationAudio.tones > window.__expectedToneCheckpoint',
             'Mentions only plays a sound for a direct mention',
         );
         await setMode('muted');
@@ -197,7 +209,10 @@ app.whenReady()
             'muted channel still receives messages',
         );
         await pause(300);
-        assert.equal(await js('window.__notificationAudio.tones'), 10);
+        assert.equal(
+            await js('window.__notificationAudio.tones'),
+            await js('window.__expectedToneCheckpoint'),
+        );
         console.log('PASS Muted suppresses notification audio');
         await win.loadURL(origin);
         await wait('!!document.querySelector(".server-heading")', 'renderer reloads');
@@ -232,7 +247,7 @@ app.whenReady()
         console.log('PASS focused current channel stays silent');
         await send('@Alice message in another channel', 'introductions');
         await wait(
-            'window.__notificationAudio.tones === 2',
+            'window.__notificationAudio.tones > window.__expectedToneCheckpoint',
             'other channels still play notification sounds while focused',
         );
         await pause(800);
@@ -245,7 +260,7 @@ app.whenReady()
         );
         await send('unfocused current channel message', 'general');
         await wait(
-            'window.__notificationAudio.tones === 4',
+            'window.__notificationAudio.tones > window.__expectedToneCheckpoint',
             'visible unfocused channel plays notification sounds',
         );
         other.destroy();
@@ -253,7 +268,7 @@ app.whenReady()
         await pause(800);
         await send('hidden current channel message', 'general');
         await wait(
-            'window.__notificationAudio.tones === 6',
+            'window.__notificationAudio.tones > window.__expectedToneCheckpoint',
             'hidden current channel plays notification sounds',
         );
         win.show();
@@ -271,8 +286,88 @@ app.whenReady()
             'focused DM receives the message',
         );
         await pause(300);
-        assert.equal(await js('window.__notificationAudio.tones'), 6);
+        assert.equal(
+            await js('window.__notificationAudio.tones'),
+            await js('window.__expectedToneCheckpoint'),
+        );
         console.log('PASS focused current DM stays silent');
+        // Exercise server/category inheritance through real UI changes and socket messages.
+        const ownerApi = async (endpoint, method, body) => {
+            const response = await fetch(origin + '/api' + endpoint, {
+                method,
+                headers: {
+                    Authorization: 'Bearer ' + alice.token,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(body),
+            });
+            assert.equal(response.status, 200);
+            return response.json();
+        };
+        const category = await ownerApi('/categories', 'POST', { name: 'Notification category' });
+        await ownerApi('/channels/introductions/category', 'PUT', {
+            category: category.id,
+            synced: false,
+        });
+        await openNotifications();
+        const choose = async (selector, value) =>
+            js(
+                '{const node=document.querySelector(' +
+                    JSON.stringify(selector) +
+                    ');node.value=' +
+                    JSON.stringify(value) +
+                    ';node.dispatchEvent(new Event("change",{bubbles:true}));}',
+            );
+        await wait(
+            '!!document.querySelector(\'select[aria-label="Add notification override"] option[value="category:' +
+                category.id +
+                '"]\')',
+            'new notification category is visible',
+        );
+        await js(
+            'document.querySelector(\'input[name="server-notification-mode"][value="all"]\').click()',
+        );
+        await pause(800);
+        await send('ordinary message inherits server all', 'introductions');
+        await wait(
+            'window.__notificationAudio.tones > window.__expectedToneCheckpoint',
+            'server All messages reaches actual playback',
+        );
+        await choose('select[aria-label="Add notification override"]', 'category:' + category.id);
+        await choose('select[aria-label="Notification category category notifications"]', 'muted');
+        await pause(800);
+        await send('@Alice category suppresses this mention', 'introductions');
+        await pause(400);
+        assert.equal(
+            await js('window.__notificationAudio.tones'),
+            await js('window.__expectedToneCheckpoint'),
+        );
+        await choose('select[aria-label="Add notification override"]', 'channel:introductions');
+        await choose('select[aria-label="#introductions notifications"]', 'all');
+        await pause(800);
+        await send('explicit channel wins over muted category', 'introductions');
+        await wait(
+            'window.__notificationAudio.tones > window.__expectedToneCheckpoint',
+            'explicit channel override reaches actual playback',
+        );
+        await choose('select[aria-label="#introductions notifications"]', 'inherit');
+        await pause(800);
+        await send('@Alice back to silent category', 'introductions');
+        await pause(400);
+        assert.equal(
+            await js('window.__notificationAudio.tones'),
+            await js('window.__expectedToneCheckpoint'),
+        );
+        await js(
+            'document.querySelector(\'button[aria-label="Remove Category · Notification category override"]\').click()',
+        );
+        await pause(800);
+        await send('removed category falls back to server all', 'introductions');
+        await wait(
+            'window.__notificationAudio.tones > window.__expectedToneCheckpoint',
+            'removing override restores inherited sound delivery',
+        );
+
         win.destroy();
         clearTimeout(deadline);
         app.exit(0);

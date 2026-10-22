@@ -186,7 +186,7 @@ test('all-message channels remain scoped and respect server mute, DND, and self-
             server,
             users,
         ),
-        false,
+        true,
     );
     assert.equal(
         shouldNotify(
@@ -227,4 +227,131 @@ test('emoji completion uses the caret, avoids URLs and resolves standard and cus
     assert.equal(emojiMatches('camp', [{ name: 'campfire' }])[0].value, ':campfire:');
     assert.equal(emojiMatches('smile', [{ name: 'smile' }])[0].value, ':smile:');
     assert.equal(emojiMatches('', []).length, 8);
+});
+
+test('server defaults inherit into channels and threads but remain separate from DMs', () => {
+    const server = 'https://chat.example';
+    const serverKey = notificationKey(server, me.id, '*');
+    for (const [mode, ordinary, mention] of [
+        ['all', true, true],
+        ['mentions', false, true],
+        ['muted', false, false],
+    ]) {
+        const prefs = { serverNotificationModes: { [serverKey]: mode } };
+        for (const thread of [undefined, 'parent']) {
+            assert.equal(
+                shouldNotify(message('ordinary', { thread }), me, prefs, server, users),
+                ordinary,
+            );
+            assert.equal(
+                shouldNotify(message('@d3cr1pt0r', { thread }), me, prefs, server, users),
+                mention,
+            );
+        }
+        assert.equal(
+            shouldNotify(message('hello', { room: 'dm:bob:me' }), me, prefs, server, users),
+            true,
+        );
+    }
+});
+
+test('channel overrides beat category overrides, which beat server defaults independently of access sync', () => {
+    const server = 'https://chat.example';
+    const channels = [
+        { id: 'general', category: 'community', synced: false },
+        { id: 'other', category: 'community', synced: true },
+    ];
+    const prefs = {
+        serverNotificationModes: { [notificationKey(server, me.id, '*')]: 'muted' },
+        categoryNotifications: { [notificationKey(server, me.id, 'community')]: 'all' },
+        channelNotifications: { [notificationKey(server, me.id, 'general')]: 'mentions' },
+    };
+    const notify = (body, room = 'general', extra = {}) =>
+        shouldNotify(message(body, { room, ...extra }), me, prefs, server, users, channels);
+    assert.equal(notify('ordinary'), false);
+    assert.equal(notify('@d3cr1pt0r'), true);
+    assert.equal(notify('ordinary', 'other'), true);
+    assert.equal(notify('ordinary', 'unknown'), false);
+    delete prefs.channelNotifications[notificationKey(server, me.id, 'general')];
+    assert.equal(notify('ordinary', 'general', { thread: 'parent' }), true);
+    prefs.categoryNotifications[notificationKey(server, me.id, 'community')] = 'muted';
+    assert.equal(notify('@d3cr1pt0r'), false);
+    delete prefs.categoryNotifications[notificationKey(server, me.id, 'community')];
+    prefs.serverNotificationModes[notificationKey(server, me.id, '*')] = 'all';
+    assert.equal(notify('ordinary'), true);
+});
+
+test('inherited notification rules remain account/server scoped and respect master exclusions', () => {
+    const server = 'https://chat.example';
+    const channels = [{ id: 'general', category: 'community' }];
+    const prefs = {
+        categoryNotifications: { [notificationKey(server, me.id, 'community')]: 'all' },
+    };
+    assert.equal(shouldNotify(message('ordinary'), me, prefs, server, users, channels), true);
+    assert.equal(
+        shouldNotify(message('ordinary'), me, prefs, 'https://elsewhere.example', users, channels),
+        false,
+    );
+    assert.equal(
+        shouldNotify(message('ordinary'), { ...me, id: 'other' }, prefs, server, users, channels),
+        false,
+    );
+    assert.equal(
+        shouldNotify(message('ordinary'), { ...me, status: 'dnd' }, prefs, server, users, channels),
+        false,
+    );
+    assert.equal(
+        shouldNotify(message('ordinary', { author: me.id }), me, prefs, server, users, channels),
+        false,
+    );
+    assert.equal(
+        shouldNotify(
+            message('@d3cr1pt0r'),
+            me,
+            { ...prefs, serverNotifications: { [notificationKey(server, me.id, '*')]: false } },
+            server,
+            users,
+            channels,
+        ),
+        false,
+    );
+});
+
+test('legacy preferences retain their default until an explicit server policy replaces it', () => {
+    const server = 'https://chat.example';
+    const prefs = { mentionNotifications: false };
+    assert.equal(shouldNotify(message('@d3cr1pt0r'), me, prefs, server, users), false);
+    prefs.serverNotificationModes = { [notificationKey(server, me.id, '*')]: 'mentions' };
+    assert.equal(shouldNotify(message('@d3cr1pt0r'), me, prefs, server, users), true);
+    prefs.serverNotificationModes[notificationKey(server, me.id, '*')] = 'corrupt';
+    assert.equal(shouldNotify(message('@d3cr1pt0r'), me, prefs, server, users), false);
+});
+
+test('DM overrides can opt in or out of their default while server mute and DND still win', () => {
+    const server = 'https://chat.example',
+        room = 'dm:bob:me';
+    const prefs = {
+        dmNotifications: false,
+        channelNotifications: { [notificationKey(server, me.id, room)]: 'all' },
+    };
+    assert.equal(shouldNotify(message('hello', { room }), me, prefs, server, users), true);
+    assert.equal(
+        shouldNotify(message('hello', { room }), { ...me, status: 'dnd' }, prefs, server, users),
+        false,
+    );
+    assert.equal(
+        shouldNotify(
+            message('hello', { room }),
+            me,
+            { ...prefs, serverNotifications: { [notificationKey(server, me.id, '*')]: false } },
+            server,
+            users,
+        ),
+        false,
+    );
+    delete prefs.channelNotifications[notificationKey(server, me.id, room)];
+    assert.equal(shouldNotify(message('hello', { room }), me, prefs, server, users), false);
+    prefs.dmNotifications = true;
+    prefs.channelNotifications[notificationKey(server, me.id, room)] = 'muted';
+    assert.equal(shouldNotify(message('hello', { room }), me, prefs, server, users), false);
 });
