@@ -311,6 +311,54 @@ app.whenReady()
             '!!document.querySelector(".channel-workspace")',
             'nested channel workspace opens',
         );
+        for (const width of [1440, 960, 600]) {
+            a.setSize(width, 1000);
+            await pause(100);
+            const bounds = () =>
+                js(
+                    a,
+                    `{
+                const r=document.querySelector('.settings-modal').getBoundingClientRect();
+                ({x:r.x,y:r.y,width:r.width,height:r.height});
+            }`,
+                );
+            const expected = await bounds();
+            const sections = await js(
+                a,
+                '[...document.querySelectorAll("#settings-section option")].map(node=>node.value)',
+            );
+            for (const section of sections) {
+                await select(a, '#settings-section', section);
+                assert.deepEqual(
+                    await bounds(),
+                    expected,
+                    `Settings geometry changes on ${section} at ${width}px`,
+                );
+                assert.equal(await js(a, 'document.documentElement.scrollWidth<=innerWidth'), true);
+            }
+            await select(a, '#settings-section', 'channels');
+            if (width === 600) {
+                assert.equal(
+                    await js(
+                        a,
+                        `{
+                    const editor=document.querySelector('.channel-workspace').getBoundingClientRect();
+                    const signout=document.querySelector('.settings-mobile-signout').getBoundingClientRect();
+                    signout.top>=editor.bottom-1;
+                }`,
+                    ),
+                    true,
+                );
+            }
+            console.log(`PASS all settings sections keep identical bounds at ${width}px`);
+        }
+        await screenshot(a, 'settings-consistent-width-mobile.png');
+        a.setSize(1440, 1000);
+        await pause(100);
+        await screenshot(a, 'settings-consistent-width-channels.png');
+        await select(a, '#settings-section', 'account');
+        await screenshot(a, 'settings-consistent-width-account.png');
+        await select(a, '#settings-section', 'channels');
         await createItem(a, 'category', 'Community');
         await browserDrag(
             a,

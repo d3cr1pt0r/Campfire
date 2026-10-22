@@ -31,7 +31,8 @@ export function useChannelDragScroll(tree: RefObject<HTMLDivElement | null>, act
             pointer = { x: event.clientX, y: event.clientY };
         };
         const leave = (event: DragEvent) => {
-            if (!event.relatedTarget) pointer = null;
+            // Scrolling can fire dragleave on a row without leaving the list.
+            if (!event.relatedTarget && event.target === document.documentElement) pointer = null;
         };
         const wheel = (event: WheelEvent) => {
             if (!inside(event.clientX, event.clientY)) return;

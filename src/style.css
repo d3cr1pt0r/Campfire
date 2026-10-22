@@ -1241,7 +1241,7 @@ small {
     margin-top: 15px;
 }
 .settings-modal {
-    width: 850px;
+    width: min(1280px, 96vw);
     padding: 0;
     display: grid;
     grid-template-columns: 210px minmax(0, 1fr);
@@ -2613,7 +2613,6 @@ label textarea {
 }
 .settings-modal {
     padding: 0;
-    width: 920px;
 }
 .settings-nav {
     width: 210px;
@@ -5055,16 +5054,15 @@ body.stream-popout-body {
     margin: 0 0 24px;
 }
 
-.settings-modal:has(.channel-workspace) {
-    width: min(1280px, 96vw);
-}
 .settings-content:has(.channel-workspace) {
     padding: 0;
     overflow: hidden;
     scrollbar-gutter: auto;
     display: flex;
+    flex-direction: column;
 }
 .channel-workspace {
+    flex: 1;
     width: 100%;
     min-height: 0;
     display: flex;
