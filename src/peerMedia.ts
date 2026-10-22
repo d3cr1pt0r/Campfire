@@ -1,4 +1,5 @@
 import type { MediaRole, MediaState, CallSignal } from '../shared/contracts';
+import type { VideoEncoding } from './videoQuality';
 export type { MediaRole, MediaState, CallSignal } from '../shared/contracts';
 export function validMediaState(value: unknown): value is MediaState {
     if (!value || typeof value !== 'object') return false;
@@ -48,12 +49,41 @@ export function preferHardwareVideoCodec(codecs: RTCRtpCodec[]): RTCRtpCodec[] {
     const h264 = codecs.filter((codec) => codec.mimeType.toLowerCase() === 'video/h264');
     return [...h264, ...codecs.filter((codec) => !h264.includes(codec))];
 }
+// Encoding limits survive renegotiation and track replacement, so they are only set when the
+// wanted values differ. A sender not yet given an encoding gets them on a later sync.
+async function limitVideo(sender: RTCRtpSender, wanted: VideoEncoding | null) {
+    if (!wanted) return;
+    const parameters = sender.getParameters();
+    const encoding = parameters.encodings?.[0];
+    if (
+        !encoding ||
+        (encoding.maxBitrate === wanted.maxBitrate &&
+            encoding.maxFramerate === wanted.maxFramerate &&
+            parameters.degradationPreference === wanted.degradationPreference)
+    )
+        return;
+    encoding.maxBitrate = wanted.maxBitrate;
+    encoding.maxFramerate = wanted.maxFramerate;
+    parameters.degradationPreference = wanted.degradationPreference;
+    try {
+        await sender.setParameters(parameters);
+    } catch {
+        /* Chromium's default limits still carry the video. */
+    }
+}
 // Reserve separate voice, video, and system-audio transceivers. No screen media
 // is attached for a peer unless that peer has subscribed to the current share.
 export function createPeerMedia(
     pc: RTCPeerConnection,
     tracks: () => Record<MediaRole, MediaStreamTrack | null>,
-    videoCodecs = globalThis.RTCRtpReceiver?.getCapabilities('video')?.codecs,
+    {
+        videoCodecs = globalThis.RTCRtpReceiver?.getCapabilities('video')?.codecs,
+        videoEncoding,
+    }: {
+        videoCodecs?: RTCRtpCodec[];
+        // Limits for the camera or screen track being sent; null keeps the current ones.
+        videoEncoding?: (track: MediaStreamTrack) => VideoEncoding | null;
+    } = {},
 ) {
     const slots: Partial<Record<MediaRole, RTCRtpTransceiver>> = {};
     let queue = Promise.resolve(),
@@ -71,6 +101,9 @@ export function createPeerMedia(
             const sender = slots[role]?.sender;
             if (sender && sender.track !== current[role]) await sender.replaceTrack(current[role]);
         }
+        const video = slots.video?.sender;
+        if (!closed && video?.track && videoEncoding)
+            await limitVideo(video, videoEncoding(video.track));
     };
     const enqueue = (operation: () => Promise<void>) => {
         const next = queue.then(async () => {
@@ -108,6 +141,12 @@ export function createPeerMedia(
         role(transceiver: RTCRtpTransceiver): MediaRole {
             if (transceiver.receiver.track.kind === 'video') return 'video';
             return transceiver === (slots.voice || find('voice')) ? 'voice' : 'streamAudio';
+        },
+        sendingVideo(): boolean {
+            return !!slots.video?.sender.track;
+        },
+        videoCeiling(): number | null {
+            return slots.video?.sender.getParameters?.().encodings?.[0]?.maxBitrate ?? null;
         },
         roleForMid(mid: string): MediaRole | undefined {
             return (['voice', 'video', 'streamAudio'] as const).find(

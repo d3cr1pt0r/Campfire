@@ -19,6 +19,7 @@
         ui-monospace, 'Cascadia Mono', 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
     --code-bg: #00000038;
     --code-ink: #f0c48f;
+    --warning: #f2b84b;
     color: var(--ink);
     background: #151715;
 }
@@ -39,6 +40,7 @@
     --nav-muted: #bcad95;
     --code-bg: #4c49360f;
     --code-ink: #8f3d22;
+    --warning: #95600a;
 }
 body {
     color: var(--ink);
@@ -652,6 +654,38 @@ label,
     justify-content: center;
     width: 64px;
     height: 64px;
+}
+.call-heading-actions > .call-video-warning {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    min-height: 28px;
+    padding: 4px 8px;
+    border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--warning) 12%, transparent);
+    color: var(--warning);
+    font-size: 12px;
+    white-space: nowrap;
+}
+.call-dock.compact .call-video-warning > span {
+    display: none;
+}
+.call-details .call-video-limit {
+    color: var(--warning);
+}
+.media-video-warning {
+    position: absolute;
+    z-index: 5;
+    left: 10px;
+    top: 10px;
+    display: flex;
+    padding: 4px;
+    border: 1px solid color-mix(in srgb, var(--warning) 60%, transparent);
+    border-radius: 12px;
+    background: var(--panel);
+    color: var(--warning);
 }
 .call-media-status {
     position: absolute;
@@ -3917,6 +3951,35 @@ label,
 }
 .audio-settings-section .audio-slider {
     padding: 10px 0 4px;
+}
+.video-quality-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 4px 24px;
+}
+.video-quality-columns fieldset {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+.video-quality-columns legend {
+    padding: 0;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+}
+.video-advanced {
+    border-top: 1px solid var(--border);
+    margin-top: 12px;
+    padding-top: 12px;
+}
+.video-advanced[open] > summary {
+    margin-bottom: 12px;
 }
 .roles-settings .owner-notice {
     padding: 8px 10px;

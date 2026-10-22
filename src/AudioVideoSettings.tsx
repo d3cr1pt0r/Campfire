@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { RefreshCw } from 'lucide-react';
-import type { Preferences } from './types';
+import type { Preferences, VideoAdaptation } from './types';
 import { Toggle } from './forms';
 import { MicrophoneMeter } from './MicrophoneMeter';
 import { formatMicrophoneError, openMicrophone } from './media';
@@ -8,6 +8,19 @@ import { audioLevel } from './audioPreferences';
 import { ActivationThreshold } from './ActivationThreshold';
 import type { MicrophoneReading } from './microphoneMonitor';
 import { createNotificationSound } from './notifications';
+import {
+    adaptations,
+    bitrateScales,
+    cameraFrameRates,
+    cameraHeights,
+    captureSize,
+    formatBitrate,
+    maxBitrate,
+    screenFrameRates,
+    screenHeights,
+    videoSettings,
+    type VideoSource,
+} from './videoQuality';
 
 function AudioSlider({
     label,
@@ -52,6 +65,11 @@ function AudioSlider({
         </label>
     );
 }
+
+const screenFrameRateHints: Record<number, string> = {
+    5: ' · documents and code',
+    60: ' · games and video',
+};
 
 export function AudioVideoSettings({
     prefs,
@@ -98,6 +116,63 @@ export function AudioVideoSettings({
         } finally {
             setRefreshing(false);
         }
+    };
+    const camera = videoSettings(prefs, 'camera'),
+        screen = videoSettings(prefs, 'screen');
+    const advancedVideo = (source: VideoSource) => {
+        const settings = source === 'camera' ? camera : screen;
+        const { width, height } = captureSize(null, settings);
+        const ceiling = formatBitrate(maxBitrate(source, width, height, settings));
+        const step = Math.max(
+            0,
+            bitrateScales.findIndex((scale) => scale.value === settings.bitrateScale),
+        );
+        const name = source === 'camera' ? 'Camera' : 'Screen sharing';
+        const shown = `${bitrateScales[step].label} · up to ${ceiling} per viewer`;
+        return (
+            <fieldset key={source}>
+                <legend>{name}</legend>
+                <label className="audio-slider">
+                    <span>
+                        Bitrate
+                        <output>{shown}</output>
+                    </span>
+                    <input
+                        type="range"
+                        min={0}
+                        max={bitrateScales.length - 1}
+                        step={1}
+                        value={step}
+                        aria-label={`${name} bitrate`}
+                        aria-valuetext={shown}
+                        onChange={(event) =>
+                            change(
+                                source === 'camera' ? 'cameraBitrate' : 'screenBitrate',
+                                bitrateScales[Number(event.target.value)].value,
+                            )
+                        }
+                    />
+                </label>
+                <label>
+                    When the connection cannot keep up
+                    <select
+                        value={settings.adaptation}
+                        onChange={(event) =>
+                            change(
+                                source === 'camera' ? 'cameraAdaptation' : 'screenAdaptation',
+                                event.target.value as VideoAdaptation,
+                            )
+                        }
+                    >
+                        {adaptations.map((mode) => (
+                            <option key={mode.value} value={mode.value}>
+                                {mode.label}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+            </fieldset>
+        );
     };
     const deviceSelect = (kind: 'input' | 'output') => {
         const deviceKind = kind === 'input' ? 'audioinput' : 'audiooutput';
@@ -286,22 +361,89 @@ export function AudioVideoSettings({
                 aria-labelledby="audio-video-title"
             >
                 <h3 id="audio-video-title">Video & screen sharing</h3>
-                <label>
-                    Preferred resolution
-                    <select
-                        value={prefs.quality}
-                        onChange={(event) => change('quality', event.target.value)}
-                    >
-                        <option value="360">360p · Save bandwidth</option>
-                        <option value="720">720p · Balanced</option>
-                        <option value="1080">1080p · Higher quality</option>
-                    </select>
-                </label>
+                <div className="video-quality-columns">
+                    <fieldset>
+                        <legend>Camera</legend>
+                        <label>
+                            Resolution
+                            <select
+                                value={String(camera.height)}
+                                onChange={(event) => change('quality', event.target.value)}
+                            >
+                                {cameraHeights.map((height) => (
+                                    <option key={height} value={String(height)}>
+                                        {height}p
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <label>
+                            Frame rate
+                            <select
+                                value={camera.frameRate}
+                                onChange={(event) =>
+                                    change('cameraFrameRate', Number(event.target.value))
+                                }
+                            >
+                                {cameraFrameRates.map((rate) => (
+                                    <option key={rate} value={rate}>
+                                        {rate} fps
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                    </fieldset>
+                    <fieldset>
+                        <legend>Screen sharing</legend>
+                        <label>
+                            Resolution
+                            <select
+                                value={screen.height === null ? 'source' : String(screen.height)}
+                                onChange={(event) => change('screenResolution', event.target.value)}
+                            >
+                                <option value="source">Source · sharpest</option>
+                                {screenHeights.map((height) => (
+                                    <option key={height} value={String(height)}>
+                                        Up to {height}p
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <label>
+                            Frame rate
+                            <select
+                                value={screen.frameRate}
+                                onChange={(event) =>
+                                    change('screenFrameRate', Number(event.target.value))
+                                }
+                            >
+                                {screenFrameRates.map((rate) => (
+                                    <option key={rate} value={rate}>
+                                        {rate} fps{screenFrameRateHints[rate] ?? ''}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                    </fieldset>
+                </div>
                 <p className="audio-help">
-                    Applies the next time you start your camera or share a screen. Preview your
+                    Changes apply right away, also during a call. Source sends your screen at its
+                    own resolution; a lower one scales it down, which blurs small text. Preview your
                     camera in a voice channel. Screen sharing replaces your outgoing camera; on
                     Windows, enable system audio in the share picker.
                 </p>
+                <details className="account-details video-advanced">
+                    <summary>Advanced</summary>
+                    <div className="video-quality-columns">
+                        {advancedVideo('camera')}
+                        {advancedVideo('screen')}
+                    </div>
+                    <p className="audio-help">
+                        Bitrate is the most your video may use for each viewer. A slower connection
+                        still lowers it, and still images use far less. Everyone watching gets a
+                        copy, so your upload carries it once per viewer.
+                    </p>
+                </details>
             </section>
         </div>
     );

@@ -19,10 +19,12 @@ import {
     Maximize2,
     Ellipsis,
     Check,
+    TriangleAlert,
 } from 'lucide-react';
 import { MediaTile } from './MediaTile';
 import { MemberIdentity } from './MemberIdentity';
 import { fitCallParticipants } from './callLayout';
+import { describeVideo, formatBitrate, limitMessage } from './videoQuality';
 
 export type CallAreaMode = 'split' | 'call' | 'conversation';
 
@@ -145,6 +147,31 @@ export function CallPanel({
         call.setPanelOpen(!panelOpen);
         if (panelOpen) call.setShowDetails(false);
     };
+    const showDetails = (show: boolean) => {
+        if (show && !call.showDetails) {
+            if (areaMode === 'conversation') onAreaModeChange('split');
+            setExpandedHeight((previous) =>
+                Math.max(previous ?? workspaceHeight * 0.43, minimum + 180),
+            );
+            call.setPanelOpen(true);
+        }
+        call.setShowDetails(show);
+    };
+    const memberName = (id: string) => displayName(user(id)) || 'Member';
+    const sentWarning = (id: string) => {
+        const warning = call.videoWarnings.find((entry) => entry.id === id);
+        return warning && limitMessage(warning.limit, memberName(warning.user), 'sender');
+    };
+    const warningSummary = [
+        ...new Set(call.videoWarnings.map((warning) => sentWarning(warning.id))),
+    ].join(' ');
+    const totals = call.details.reduce(
+        (sum, detail) => ({
+            upload: sum.upload + (detail.video.upload ?? 0),
+            download: sum.download + (detail.video.download ?? 0),
+        }),
+        { upload: 0, download: 0 },
+    );
     return (
         <>
             <div
@@ -169,6 +196,18 @@ export function CallPanel({
                             </div>
                         </div>
                         <div className="call-heading-actions">
+                            {warningSummary && (
+                                <button
+                                    type="button"
+                                    className="call-video-warning"
+                                    title={`${warningSummary} Open connection diagnostics for details.`}
+                                    aria-label={`Reduced video quality. ${warningSummary}`}
+                                    onClick={() => showDetails(true)}
+                                >
+                                    <TriangleAlert size={16} />
+                                    <span>Reduced quality</span>
+                                </button>
+                            )}
                             <span className="live-badge">LIVE</span>
                             <button
                                 className="panel-expand"
@@ -242,6 +281,15 @@ export function CallPanel({
                                                 )
                                             }
                                             name={displayName(user(p.user)) || 'Member'}
+                                            videoWarning={
+                                                p.videoLimit
+                                                    ? limitMessage(
+                                                          p.videoLimit,
+                                                          memberName(p.user),
+                                                          'viewer',
+                                                      )
+                                                    : undefined
+                                            }
                                             avatar={user(p.user)?.avatar}
                                             speaking={speaking.has(p.user)}
                                             muted={call.deafened}
@@ -325,40 +373,92 @@ export function CallPanel({
                                     . Speak while checking whether audio levels and packet counts
                                     change.
                                 </p>
+                                {call.details.length > 0 && (
+                                    <p>
+                                        Total upload: {formatBitrate(totals.upload)} · download:{' '}
+                                        {formatBitrate(totals.download)}
+                                    </p>
+                                )}
                                 {call.details.length ? (
-                                    call.details.map((detail) => (
-                                        <div key={detail.id}>
-                                            <MemberIdentity
-                                                user={user(detail.user)}
-                                                state={state}
-                                                secondary={false}
-                                            />
-                                            <span>
-                                                Connection: {detail.connection} · ICE: {detail.ice}{' '}
-                                                · Audio: {detail.direction}
-                                            </span>
-                                            <span>
-                                                Sent packets: {detail.sent ?? '—'} · Received
-                                                packets: {detail.received ?? '—'}
-                                            </span>
-                                            <span>
-                                                Video/system audio bytes sent:{' '}
-                                                {detail.mediaSent ?? '—'} · received:{' '}
-                                                {detail.mediaReceived ?? '—'}
-                                            </span>
-                                            <span>
-                                                Your input level:{' '}
-                                                {detail.inputLevel === null
-                                                    ? 'unavailable'
-                                                    : (detail.inputLevel * 100).toFixed(1) +
-                                                      '%'}{' '}
-                                                · Incoming level:{' '}
-                                                {detail.receivedLevel === null
-                                                    ? 'unavailable'
-                                                    : (detail.receivedLevel * 100).toFixed(1) + '%'}
-                                            </span>
-                                        </div>
-                                    ))
+                                    call.details.map((detail) => {
+                                        const { sending, receiving, roundTrip } = detail.video;
+                                        const sent = sentWarning(detail.id);
+                                        const limit = call.remote.find(
+                                            (p) => p.id === detail.id,
+                                        )?.videoLimit;
+                                        const received =
+                                            limit &&
+                                            limitMessage(limit, memberName(detail.user), 'viewer');
+                                        return (
+                                            <div key={detail.id}>
+                                                <MemberIdentity
+                                                    user={user(detail.user)}
+                                                    state={state}
+                                                    secondary={false}
+                                                />
+                                                <span>
+                                                    Connection: {detail.connection} · ICE:{' '}
+                                                    {detail.ice} · Audio: {detail.direction}
+                                                </span>
+                                                <span>
+                                                    Round trip:{' '}
+                                                    {roundTrip === null
+                                                        ? '—'
+                                                        : `${Math.round(roundTrip * 1000)} ms`}{' '}
+                                                    · Upload: {formatBitrate(detail.video.upload)} ·
+                                                    Download: {formatBitrate(detail.video.download)}{' '}
+                                                    · Estimated available upload:{' '}
+                                                    {formatBitrate(detail.video.availableUpload)}
+                                                </span>
+                                                {sending && (
+                                                    <span
+                                                        className={
+                                                            sent ? 'call-video-limit' : undefined
+                                                        }
+                                                        title={sending.encoder ?? undefined}
+                                                    >
+                                                        Your video to them: {describeVideo(sending)}
+                                                        {sent && ` · ${sent}`}
+                                                    </span>
+                                                )}
+                                                {receiving && (
+                                                    <span
+                                                        className={
+                                                            received
+                                                                ? 'call-video-limit'
+                                                                : undefined
+                                                        }
+                                                        title={receiving.decoder ?? undefined}
+                                                    >
+                                                        Their video to you:{' '}
+                                                        {describeVideo(receiving)}
+                                                        {received && ` · ${received}`}
+                                                    </span>
+                                                )}
+                                                <span>
+                                                    Sent packets: {detail.sent ?? '—'} · Received
+                                                    packets: {detail.received ?? '—'}
+                                                </span>
+                                                <span>
+                                                    Video/system audio bytes sent:{' '}
+                                                    {detail.mediaSent ?? '—'} · received:{' '}
+                                                    {detail.mediaReceived ?? '—'}
+                                                </span>
+                                                <span>
+                                                    Your input level:{' '}
+                                                    {detail.inputLevel === null
+                                                        ? 'unavailable'
+                                                        : (detail.inputLevel * 100).toFixed(1) +
+                                                          '%'}{' '}
+                                                    · Incoming level:{' '}
+                                                    {detail.receivedLevel === null
+                                                        ? 'unavailable'
+                                                        : (detail.receivedLevel * 100).toFixed(1) +
+                                                          '%'}
+                                                </span>
+                                            </div>
+                                        );
+                                    })
                                 ) : (
                                     <p>Waiting for another participant.</p>
                                 )}
@@ -527,20 +627,7 @@ export function CallPanel({
                                     aria-label="Connection diagnostics"
                                     aria-expanded={call.showDetails}
                                     aria-controls="call-connection-details"
-                                    onClick={() => {
-                                        if (!call.showDetails) {
-                                            if (areaMode === 'conversation')
-                                                onAreaModeChange('split');
-                                            setExpandedHeight((previous) =>
-                                                Math.max(
-                                                    previous ?? workspaceHeight * 0.43,
-                                                    minimum + 180,
-                                                ),
-                                            );
-                                            call.setPanelOpen(true);
-                                        }
-                                        call.setShowDetails(!call.showDetails);
-                                    }}
+                                    onClick={() => showDetails(!call.showDetails)}
                                 >
                                     <Activity />
                                 </button>

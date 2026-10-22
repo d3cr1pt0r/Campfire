@@ -27,9 +27,18 @@ function peer(offered = []) {
                 sender: {
                     track: null,
                     calls: [],
+                    parameters: { encodings: [{ active: true }] },
+                    limits: [],
                     async replaceTrack(value) {
                         this.calls.push(value);
                         this.track = value;
+                    },
+                    getParameters() {
+                        return structuredClone(this.parameters);
+                    },
+                    async setParameters(value) {
+                        this.limits.push(value);
+                        this.parameters = value;
                     },
                 },
             };
@@ -229,7 +238,7 @@ test('offerers and responders set the video codec order once, before negotiating
         const routing = createPeerMedia(
             pc,
             () => outgoingTracks(stream(s.mic), stream(s.camera), null, false),
-            codecs,
+            { videoCodecs: codecs },
         );
         await routing.prepare();
         await routing.prepare();
@@ -249,11 +258,71 @@ test('a rejected codec order leaves the default codecs and still attaches tracks
     const routing = createPeerMedia(
         pc,
         () => outgoingTracks(stream(s.mic), stream(s.camera), null, false),
-        videoCodecs(),
+        { videoCodecs: videoCodecs() },
     );
     await routing.prepare();
     assert.deepEqual(
         pc.transceivers.map((t) => t.sender.track),
         [s.mic, s.camera, null],
     );
+});
+const camera = { maxBitrate: 2_500_000, maxFramerate: 30, degradationPreference: 'balanced' };
+const screen = {
+    maxBitrate: 8_000_000,
+    maxFramerate: 15,
+    degradationPreference: 'maintain-resolution',
+};
+test('the video sender is limited for the track it carries and only updated on change', async () => {
+    const s = sources(),
+        pc = peer();
+    let sharing = false;
+    const routing = createPeerMedia(
+        pc,
+        () =>
+            outgoingTracks(
+                stream(s.mic),
+                stream(s.camera),
+                sharing ? stream(s.video, s.audio) : null,
+                true,
+            ),
+        {
+            videoCodecs: null,
+            videoEncoding: (track) =>
+                track === s.camera ? camera : track === s.video ? screen : null,
+        },
+    );
+    await routing.prepare();
+    const [voice, video, system] = pc.transceivers.map((t) => t.sender);
+    assert.deepEqual(video.parameters, {
+        encodings: [{ active: true, maxBitrate: 2_500_000, maxFramerate: 30 }],
+        degradationPreference: 'balanced',
+    });
+    await routing.sync();
+    assert.equal(video.limits.length, 1);
+    sharing = true;
+    await routing.sync();
+    assert.equal(video.track, s.video);
+    assert.equal(video.limits.length, 2);
+    assert.equal(video.parameters.encodings[0].maxBitrate, 8_000_000);
+    assert.equal(video.parameters.degradationPreference, 'maintain-resolution');
+    assert.equal(routing.videoCeiling(), 8_000_000);
+    assert.equal(voice.limits.length + system.limits.length, 0);
+});
+test('a rejected video limit keeps the media attached with the default limits', async () => {
+    const s = sources(),
+        pc = peer(['audio', 'video', 'audio']);
+    pc.transceivers[1].sender.setParameters = async () => {
+        throw new DOMException('Bad encoding', 'InvalidModificationError');
+    };
+    const routing = createPeerMedia(
+        pc,
+        () => outgoingTracks(stream(s.mic), stream(s.camera), null, false),
+        { videoCodecs: null, videoEncoding: () => camera },
+    );
+    await routing.prepare();
+    assert.deepEqual(
+        pc.transceivers.map((t) => t.sender.track),
+        [s.mic, s.camera, null],
+    );
+    assert.equal(routing.videoCeiling(), null);
 });
