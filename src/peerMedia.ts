@@ -41,11 +41,19 @@ export function outgoingTracks(
         streamAudio: screen && subscribed ? track(screen, 'audio') : null,
     };
 }
+// Chromium hands H.264 to the GPU's encoder (Media Foundation on Windows), while its
+// default VP8 always encodes on the CPU, once per receiving peer. Without a hardware
+// encoder H.264 falls back to software; a peer without H.264 negotiates the rest.
+export function preferHardwareVideoCodec(codecs: RTCRtpCodec[]): RTCRtpCodec[] {
+    const h264 = codecs.filter((codec) => codec.mimeType.toLowerCase() === 'video/h264');
+    return [...h264, ...codecs.filter((codec) => !h264.includes(codec))];
+}
 // Reserve separate voice, video, and system-audio transceivers. No screen media
 // is attached for a peer unless that peer has subscribed to the current share.
 export function createPeerMedia(
     pc: RTCPeerConnection,
     tracks: () => Record<MediaRole, MediaStreamTrack | null>,
+    videoCodecs = globalThis.RTCRtpReceiver?.getCapabilities('video')?.codecs,
 ) {
     const slots: Partial<Record<MediaRole, RTCRtpTransceiver>> = {};
     let queue = Promise.resolve(),
@@ -75,11 +83,23 @@ export function createPeerMedia(
         prepare: () =>
             enqueue(async () => {
                 for (const role of ['voice', 'video', 'streamAudio'] as const) {
-                    const transceiver = (slots[role] ||=
-                        find(role) ||
-                        pc.addTransceiver(role === 'video' ? 'video' : 'audio', {
-                            direction: 'sendrecv',
-                        }));
+                    let transceiver = slots[role];
+                    if (!transceiver) {
+                        transceiver = slots[role] =
+                            find(role) ||
+                            pc.addTransceiver(role === 'video' ? 'video' : 'audio', {
+                                direction: 'sendrecv',
+                            });
+                        // Set before the first offer or answer, which both follow it.
+                        if (role === 'video' && videoCodecs)
+                            try {
+                                transceiver.setCodecPreferences(
+                                    preferHardwareVideoCodec(videoCodecs),
+                                );
+                            } catch {
+                                /* The browser's default codec order still connects. */
+                            }
+                    }
                     transceiver.direction = 'sendrecv';
                 }
                 await attach();
