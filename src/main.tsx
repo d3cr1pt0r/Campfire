@@ -1,3 +1,4 @@
+import { DesktopUpdates } from './DesktopUpdates';
 import { CallInvite } from './CallInvite';
 import { VoiceChannelInvite } from './VoiceChannelInvite';
 import { ParticipantAudio, MediaContexts } from './ParticipantAudio';
@@ -2532,4 +2533,9 @@ function App() {
         </MediaContexts>
     );
 }
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(
+    <>
+        <App />
+        <DesktopUpdates banner />
+    </>,
+);

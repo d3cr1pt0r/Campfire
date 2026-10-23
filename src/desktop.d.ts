@@ -1,6 +1,14 @@
 /// <reference types="vite/client" />
 interface Window {
     campfire?: {
+        updates?: {
+            getState(): Promise<import('./DesktopUpdates').UpdateState>;
+            check(): Promise<import('./DesktopUpdates').UpdateState>;
+            install(): Promise<boolean>;
+            subscribe(
+                callback: (state: import('./DesktopUpdates').UpdateState) => void,
+            ): () => void;
+        };
         avatars?: {
             read(key: string): Promise<Uint8Array | null>;
             write(key: string, bytes: Uint8Array): Promise<boolean>;

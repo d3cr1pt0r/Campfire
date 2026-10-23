@@ -1,6 +1,16 @@
 const { contextBridge, ipcRenderer } = require('electron');
 // No arbitrary IPC, file access, shell commands, or Node APIs reach the renderer.
 contextBridge.exposeInMainWorld('campfire', {
+    updates: {
+        getState: () => ipcRenderer.invoke('updates:state'),
+        check: () => ipcRenderer.invoke('updates:check'),
+        install: () => ipcRenderer.invoke('updates:install'),
+        subscribe: (callback) => {
+            const listener = (_event, state) => callback(state);
+            ipcRenderer.on('updates:changed', listener);
+            return () => ipcRenderer.removeListener('updates:changed', listener);
+        },
+    },
     avatars: {
         read: (key) => ipcRenderer.invoke('avatars:read', key),
         write: (key, bytes) => ipcRenderer.invoke('avatars:write', key, bytes),

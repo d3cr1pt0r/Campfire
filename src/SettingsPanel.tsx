@@ -1,3 +1,4 @@
+import { DesktopUpdates } from './DesktopUpdates';
 import { MessageAppearanceSettings } from './MessageAppearanceSettings';
 import { RolesSettings } from './RolesSettings';
 import { MemberManagement } from './MemberManagement';
@@ -463,6 +464,7 @@ export function SettingsPanel({
                                 </details>
                             )}
                         </section>
+                        <DesktopUpdates />
                         <section
                             className="account-section account-behavior"
                             aria-labelledby="account-behavior-title"

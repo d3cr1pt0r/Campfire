@@ -11,8 +11,8 @@ module.exports = {
         '!node_modules/@img/**/*',
     ],
     asar: true,
-    npmRebuild: false, // The desktop shell uses only Electron/Node built-ins.
-    publish: null,
+    npmRebuild: false, // Packaged desktop dependencies do not need native rebuilding.
+    publish: { provider: 'github', owner: 'd3cr1pt0r', repo: 'Campfire', releaseType: 'draft' },
     linux: {
         icon: 'electron/icons/campfire.png',
         target: [
@@ -23,9 +23,14 @@ module.exports = {
         category: 'Network',
         artifactName: 'Campfire-${version}-linux-${arch}.${ext}',
     },
+    nsis: { oneClick: true, perMachine: false, deleteAppDataOnUninstall: false },
+    portable: { artifactName: 'Campfire-${version}-${arch}-Portable.${ext}' },
     win: {
         icon: 'electron/icons/campfire.ico',
-        target: [{ target: 'portable', arch: ['x64'] }],
-        artifactName: 'Campfire-${version}-${arch}-Portable.${ext}',
+        target: [
+            { target: 'nsis', arch: ['x64'] },
+            { target: 'portable', arch: ['x64'] },
+        ],
+        artifactName: 'Campfire-${version}-${arch}-Setup.${ext}',
     },
 };

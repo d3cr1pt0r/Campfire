@@ -145,12 +145,15 @@ test('desktop asset host serves UI with CSP and has no community API', async () 
         rmSync(directory, { recursive: true, force: true });
     }
 });
-test('Windows portable build is x64 and includes UI and desktop runtime', () => {
+test('Windows installer is per-user and includes UI and desktop runtime', () => {
     assert.equal(build.appId, 'org.campfire.desktop');
-    assert.equal(build.win.target[0].target, 'portable');
+    assert.equal(build.win.target[0].target, 'nsis');
+    assert.equal(build.win.target[1].target, 'portable');
     assert.deepEqual(build.win.target[0].arch, ['x64']);
-    assert.equal(build.nsis, undefined);
-    assert.match(build.win.artifactName, /-Portable\.\$\{ext\}$/);
+    assert.equal(build.nsis.perMachine, false);
+    assert.equal(build.nsis.deleteAppDataOnUninstall, false);
+    assert.equal(build.publish.provider, 'github');
+    assert.match(build.win.artifactName, /-Setup\.\$\{ext\}$/);
     assert.ok(build.files.includes('dist/**/*'));
     assert.ok(build.files.includes('electron/**/*'));
     assert.equal(

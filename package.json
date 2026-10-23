@@ -22,13 +22,14 @@
         "check": "tsc --noEmit",
         "test:unit": "node --experimental-strip-types test/theme.test.js && node test/permissions.test.js && node test/registration.test.js && node test/password-reset.test.js && node test/security.test.js && node test/schema.test.js && node test/server-setup.test.js && node test/member-messaging.test.js && node test/desktop.test.js && node --experimental-strip-types test/media.test.js && node --experimental-strip-types test/audio-settings.test.js && node --experimental-strip-types test/voice.test.js && node --experimental-strip-types test/microphone-monitor.test.js && node --experimental-strip-types test/features.test.js && node test/app.test.js && node --experimental-strip-types test/peer-media.test.js && node --experimental-strip-types test/video-quality.test.js && node test/rework.test.js && node --experimental-strip-types test/conversation.test.js && node test/channels.test.js && node test/categories.test.js && node test/roles.test.js && node --experimental-strip-types test/modal-navigation.test.js && node --experimental-strip-types test/avatar-crop.test.js && node --experimental-strip-types test/presence.test.js && node test/thumbnails.test.js && node test/threads.test.js && node test/voice-invitations.test.js && node test/polls.test.js && node --experimental-strip-types test/polls-ui.test.js && node test/thread-events.test.js && node --experimental-strip-types test/mentions-notifications.test.js && node --experimental-strip-types test/message-format.test.js && node --experimental-strip-types test/gifs.test.js && node test/link-previews.test.js && node test/config.test.js && node test/identity.test.js && node --experimental-strip-types test/server-link.test.js && node test/retention.test.js && node --experimental-strip-types test/retention-schedule.test.js && node test/reader.test.js",
         "dist:linux": "npm run check && npm run build && npm exec --yes --package=electron-builder@26.0.12 -- electron-builder --config electron-builder.cjs --linux --x64 --publish never",
-        "dist:win": "npm run check && npm run build && npm exec --yes --package=electron-builder@26.0.12 -- electron-builder --config electron-builder.cjs --win portable --x64 --publish never",
+        "dist:win": "npm run check && npm run build && npm exec --yes --package=electron-builder@26.0.12 -- electron-builder --config electron-builder.cjs --win --x64 --publish never",
         "format": "prettier --write src server shared test test-support electron electron-builder.cjs vite.config.ts tsconfig.json package.json .prettierrc.json .github/workflows",
         "format:check": "prettier --check src server shared test test-support electron electron-builder.cjs vite.config.ts tsconfig.json package.json .prettierrc.json .github/workflows"
     },
     "dependencies": {
         "@sapphi-red/web-noise-suppressor": "0.4.1",
         "@tanstack/react-virtual": "3.14.21",
+        "electron-updater": "6.8.9",
         "express": "5.3.0",
         "lucide-react": "1.58.0",
         "prosemirror-commands": "1.7.2",

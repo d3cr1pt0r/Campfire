@@ -30,5 +30,6 @@ jobs:
                   path: |
                       release/*.AppImage
                       release/*-linux-x64.tar.gz
+                      release/latest-linux.yml
                   if-no-files-found: error
-                  retention-days: 14
+                  retention-days: 1

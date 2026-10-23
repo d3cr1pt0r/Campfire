@@ -28,7 +28,7 @@ Links include the server's fingerprint, so the desktop app verifies it is talkin
 
 You can also open the link in a browser. Browsers can't verify the server's own certificate automatically, so they show a security warning the first time; accept it only for a server you trust. The desktop app is the safer way to connect.
 
-Visit [Releases](https://github.com/d3cr1pt0r/Campfire/releases) for available desktop downloads. Each community has its own accounts and conversations.
+Visit [Releases](https://github.com/d3cr1pt0r/Campfire/releases) for available desktop downloads. The Windows installer and Linux AppImage support automatic client updates; portable Windows and Linux tarball downloads use manual updates. See [Desktop updates](Docs/DesktopUpdates.md) for release and upgrade details. Each community has its own accounts and conversations.
 
 ## Host your own
 

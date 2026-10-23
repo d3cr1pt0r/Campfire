@@ -5559,3 +5559,25 @@ body.stream-popout-body {
     bottom: auto;
     margin: 0 0 12px;
 }
+
+.desktop-update-banner {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1500;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    max-width: calc(100vw - 40px);
+    padding: 14px 18px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel);
+    box-shadow: 0 8px 28px #0005;
+}
+.desktop-update-banner p {
+    margin: 0;
+}
+.desktop-update-banner button {
+    flex-shrink: 0;
+}

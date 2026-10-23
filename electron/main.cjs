@@ -13,6 +13,7 @@ const {
     clipboard,
 } = require('electron');
 const path = require('node:path');
+const { installUpdates } = require('./updates.cjs');
 const { installWindowPolicy } = require('./window-policy.cjs');
 const { clipboardAttachments } = require('./clipboard-files.cjs');
 const { createRendererServer, listenRendererServer } = require('./renderer-server.cjs');
@@ -74,6 +75,7 @@ else {
                     return false;
                 }
             };
+            installUpdates({ app, ipcMain, BrowserWindow, dialog, trusted });
             installHttpPolicy({
                 session: session.defaultSession,
                 ipcMain,

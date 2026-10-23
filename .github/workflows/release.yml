@@ -1,0 +1,100 @@
+name: Prepare desktop release
+on:
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: 'Existing stable version tag, e.g. v0.2.2'
+                required: true
+                type: string
+            default_server_url:
+                description: 'Optional public server URL'
+                required: false
+                type: string
+permissions:
+    contents: read
+concurrency:
+    group: desktop-release-${{ inputs.tag }}
+    cancel-in-progress: false
+jobs:
+    draft:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: ${{ inputs.tag }}
+                  fetch-depth: 0
+                  persist-credentials: false
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '24'
+            - name: Validate release tag and feed
+              shell: bash
+              env:
+                  RELEASE_TAG: ${{ inputs.tag }}
+                  RELEASE_REPOSITORY: ${{ github.repository }}
+              run: |
+                  node --input-type=commonjs <<'NODE'
+                  const { execFileSync } = require('node:child_process');
+                  const pkg = require('./package.json');
+                  const config = require('./electron-builder.cjs');
+                  const tag = process.env.RELEASE_TAG;
+                  if (!/^v\d+\.\d+\.\d+$/.test(tag) || tag !== `v${pkg.version}`) throw Error('Tag must match the stable package version');
+                  const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+                  if (git('rev-parse', 'HEAD') !== git('rev-parse', `refs/tags/${tag}^{commit}`)) throw Error('Checkout must match the release tag');
+                  if (process.env.RELEASE_REPOSITORY.toLowerCase() !== `${config.publish.owner}/${config.publish.repo}`.toLowerCase()) throw Error('Release repository does not match the packaged update feed');
+                  NODE
+            - name: Create draft release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  RELEASE_TAG: ${{ inputs.tag }}
+              run: |
+                  test -f "Docs/releases/$RELEASE_TAG.md"
+                  gh release create "$RELEASE_TAG" --verify-tag --draft --title "Campfire $RELEASE_TAG" --notes-file "Docs/releases/$RELEASE_TAG.md"
+    build:
+        needs: draft
+        permissions:
+            contents: write
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - os: ubuntu-latest
+                      platform: linux
+                    - os: windows-latest
+                      platform: win
+        runs-on: ${{ matrix.os }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  ref: ${{ inputs.tag }}
+                  persist-credentials: false
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '24'
+                  cache: npm
+            - run: npm ci
+            - run: npm run format:check
+            - run: npm test
+            - name: Build desktop packages and update metadata
+              run: npm run dist:${{ matrix.platform }}
+              env:
+                  VITE_DEFAULT_SERVER_URL: ${{ inputs.default_server_url }}
+                  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+            - name: Attach packages to the draft release
+              shell: bash
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  RELEASE_TAG: ${{ inputs.tag }}
+                  RELEASE_PLATFORM: ${{ matrix.platform }}
+              run: |
+                  if [ "$RELEASE_PLATFORM" = win ]; then
+                      test -f release/latest.yml
+                  else
+                      test -f release/latest-linux.yml
+                  fi
+                  test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+                  shopt -s nullglob
+                  assets=(release/*.exe release/*.AppImage release/*.tar.gz release/*.blockmap release/latest*.yml)
+                  gh release upload "$RELEASE_TAG" "${assets[@]}"
