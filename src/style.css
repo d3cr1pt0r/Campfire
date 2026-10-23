@@ -854,21 +854,13 @@ small {
 .message:hover {
     background: #0000000c;
 }
+/* Trails the message text; left out when the minute matches the row above. */
 .message-time {
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-end;
-    flex: 0 0 52px;
-    height: 28px;
+    margin-left: 8px;
     font-size: 10px;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
     color: color-mix(in srgb, var(--muted) 85%, var(--field, var(--surface)));
-}
-.message-time > span {
-    line-height: 1;
-    text-box-trim: trim-both;
-    text-box-edge: cap alphabetic;
 }
 .message .avatar {
     width: 28px;
@@ -3025,15 +3017,15 @@ label textarea {
         opacity: 1;
         pointer-events: auto;
         align-self: flex-end;
-        margin-left: 100px;
+        margin-left: 38px;
         width: max-content;
-        max-width: calc(100% - 100px);
+        max-width: calc(100% - 38px);
     }
     .message {
         flex-wrap: wrap;
     }
     .message-body {
-        flex-basis: calc(100% - 100px);
+        flex-basis: calc(100% - 38px);
     }
     .nav-item,
     .settings-nav button,
@@ -4593,10 +4585,6 @@ body.stream-popout-body {
     padding-block: 1px;
     gap: 8px;
 }
-.message.message-avatars-compact .message-time,
-.message.message-avatars-hidden .message-time {
-    height: 22px;
-}
 .message.message-avatars-compact .message-line,
 .message.message-avatars-hidden .message-line {
     padding-block: 0;
@@ -4857,18 +4845,18 @@ body.stream-popout-body {
 }
 @media (hover: none) {
     .message.message-avatars-compact .message-body {
-        flex-basis: calc(100% - 88px);
+        flex-basis: calc(100% - 28px);
     }
     .message.message-avatars-hidden .message-body {
-        flex-basis: calc(100% - 60px);
+        flex-basis: 100%;
     }
     .message.message-avatars-compact .message-actions {
-        margin-left: 88px;
-        max-width: calc(100% - 88px);
+        margin-left: 28px;
+        max-width: calc(100% - 28px);
     }
     .message.message-avatars-hidden .message-actions {
-        margin-left: 60px;
-        max-width: calc(100% - 60px);
+        margin-left: 0;
+        max-width: 100%;
     }
 }
 

@@ -6,6 +6,7 @@ const path = require('node:path');
 app.setPath('userData', process.env.APPEARANCE_PROFILE);
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('force-device-scale-factor', '1');
+app.commandLine.appendSwitch('mute-audio');
 app.on('window-all-closed', () => {});
 const [alice, bob] = JSON.parse(process.env.APPEARANCE_ACCOUNTS);
 const origin = process.env.APPEARANCE_ORIGIN,
@@ -222,11 +223,11 @@ app.whenReady()
             );
             const size = await js(
                 win,
-                `(()=>{const nodes=[...document.querySelectorAll('.chat-area .virtual-message .message')];const row=nodes.find(node=>node.querySelector('.message-text')?.textContent.startsWith('Short message'));if(!row) throw Error('No single-line sample');return {height:row.getBoundingClientRect().height,avatar:row.querySelector(':scope > .avatar')?.getBoundingClientRect().width||0,text:row.querySelector('.message-text').textContent,author:!!row.querySelector('.message-meta'),time:!!row.querySelector('time'),all:nodes.map(node=>({top:node.getBoundingClientRect().top,bottom:node.getBoundingClientRect().bottom}))};})()`,
+                `(()=>{const nodes=[...document.querySelectorAll('.chat-area .virtual-message .message')];const row=nodes.find(node=>node.querySelector('.message-text')?.textContent.startsWith('Short message'));if(!row) throw Error('No single-line sample');return {height:row.getBoundingClientRect().height,avatar:row.querySelector(':scope > .avatar')?.getBoundingClientRect().width||0,text:row.querySelector('.message-text').textContent,author:!!row.querySelector('.message-meta'),all:nodes.map(node=>({top:node.getBoundingClientRect().top,bottom:node.getBoundingClientRect().bottom}))};})()`,
             );
             heights[mode] = size.height;
             assert.equal(size.avatar, mode === 'hidden' ? 0 : mode === 'compact' ? 20 : 28);
-            assert.ok(size.author && size.time);
+            assert.ok(size.author);
             for (let i = 1; i < size.all.length; i++)
                 assert.ok(
                     size.all[i].top >= size.all[i - 1].bottom - 1,
