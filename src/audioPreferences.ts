@@ -29,9 +29,12 @@ export function voiceGateSettings(prefs: Preferences) {
         enabled: !!prefs.voiceActivation && !prefs.pushToTalk,
         mode: speechActivation(prefs) ? 'speech' : 'level',
         threshold: voiceThreshold(prefs.voiceThreshold),
-        speechThreshold: 0.95 - 0.9 * audioLevel(prefs.speechSensitivity, 0.5),
+        speechThreshold: speechThreshold(prefs.speechSensitivity),
         releaseMs: voiceReleaseDelay(prefs.voiceReleaseDelay),
     };
+}
+export function speechThreshold(sensitivity: number | undefined) {
+    return 0.95 - 0.9 * audioLevel(sensitivity, 0.5);
 }
 // The live marker and the activation slider share the same -60 to 0 dBFS scale.
 export function voiceThresholdPercent(decibels: number | null | undefined) {

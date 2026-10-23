@@ -251,7 +251,6 @@ app.whenReady()
             await js(alice, "document.querySelector('.settings-header h2').textContent"),
             'Audio & Video',
         );
-        await click(alice, 'Start microphone test');
         await wait(
             alice,
             "document.querySelector('.activation-threshold').classList.contains('is-measuring') && document.querySelector('.threshold-live-value').textContent.includes('dBFS')",
@@ -327,11 +326,10 @@ app.whenReady()
             (await alice.webContents.capturePage()).toPNG(),
         );
         alice.setContentSize(1280, 960);
-        await click(alice, 'Stop microphone test');
         await wait(
             alice,
-            "!document.querySelector('.threshold-live-track b') && document.querySelector('.threshold-live-value').textContent.includes('Start microphone test')",
-            'stopping the test clears the live marker',
+            "!!document.querySelector('.threshold-live-track b') && document.querySelector('.activation-threshold').classList.contains('is-measuring')",
+            'activation preview remains active while settings are open',
         );
         await closeSettings(alice);
         // Join a real two-client WebRTC call using the production composer and media pipeline.
@@ -359,7 +357,6 @@ app.whenReady()
         await openSettings(alice);
         const gateCount = await js(alice, 'window.__audio.gates.length');
         const captureCount = await js(alice, 'window.__audio.raw.length');
-        await click(alice, 'Start microphone test');
         await pause(200);
         assert.equal(await js(alice, 'window.__audio.raw.length'), captureCount);
         console.log('PASS in-call meter reuses microphone without opening conflicting capture');

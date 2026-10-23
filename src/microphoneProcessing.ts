@@ -125,6 +125,7 @@ export async function openProcessedMicrophone(preferences: Preferences) {
         return {
             stream: destination.stream,
             monitorStream: monitor.stream,
+            speechProbability: () => denoiser?.speechProbability() ?? null,
             usedDefault: result.usedDefault,
             stop,
             update,

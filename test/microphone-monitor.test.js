@@ -347,3 +347,24 @@ test('in-call meter measures the processed stream without applying volume twice'
     monitor.stop();
     assert.equal(f.track.stops, 0);
 });
+test('in-call preview uses the call speech probability without opening another microphone', async () => {
+    const f = fixture();
+    let probability = 0.72;
+    const monitor = createMicrophoneMonitor({
+        ...f.options,
+        activeStream: f.stream,
+        speechProbability: () => probability,
+    });
+    await monitor.ready;
+    f.advance();
+    assert.equal(f.opened, 0);
+    assert.equal(f.readings.at(-1).speechProbability, 0.72);
+    probability = 0.13;
+    f.advance(200);
+    assert.equal(f.readings.at(-1).speechProbability, 0.13);
+    f.context.state = 'suspended';
+    f.advance(300);
+    assert.equal(f.readings.at(-1).speechProbability, null);
+    monitor.stop();
+    assert.equal(f.track.stops, 0);
+});

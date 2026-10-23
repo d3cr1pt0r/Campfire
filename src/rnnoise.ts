@@ -34,9 +34,21 @@ export async function createRnnoise(context: AudioContext) {
         channelCount: 1,
         channelCountMode: 'explicit',
     });
+    let probability: number | null = null;
+    let updated = 0;
+    node.port.onmessage = ({ data }) => {
+        if (typeof data?.speechProbability !== 'number' || !Number.isFinite(data.speechProbability))
+            return;
+        probability = Math.max(0, Math.min(1, data.speechProbability));
+        updated = performance.now();
+    };
     const destroy = () => {
+        probability = null;
         node.port.postMessage('destroy');
         node.port.close();
     };
-    return Object.assign(node, { destroy });
+    return Object.assign(node, {
+        destroy,
+        speechProbability: () => (performance.now() - updated <= 500 ? probability : null),
+    });
 }

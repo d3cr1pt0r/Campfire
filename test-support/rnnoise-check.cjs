@@ -26,6 +26,11 @@ module.exports = async ({
     await click(alice, 'Echo cancellation');
     await select('rnnoise');
     await click(alice, 'Voice activation');
+    await wait(
+        alice,
+        `!!document.querySelector('.threshold-live-track b') && /dBFS|Silent/.test(document.querySelector('.threshold-live-value').textContent) && ![...document.querySelectorAll('button')].some(b=>b.textContent==='Start microphone test')`,
+        'volume activation preview starts without microphone test',
+    );
     await js(
         alice,
         `(() => {
@@ -34,17 +39,21 @@ module.exports = async ({
         select.dispatchEvent(new Event('change', {bubbles:true}));
     })()`,
     );
-    await slider(alice, 'Speech sensitivity', 0.8);
+    await slider(alice, 'Activation threshold', 23);
     await js(
         alice,
         `[...document.querySelectorAll('summary')].find(s=>s.textContent==='Advanced voice activation').click()`,
     );
     await slider(alice, 'Speech release delay', 450);
     assert.equal((await prefs(alice)).voiceActivationMode, 'speech');
-    assert.equal((await prefs(alice)).speechSensitivity, 0.8);
+    assert.ok(Math.abs((await prefs(alice)).speechSensitivity - 0.8) < 0.00001);
     assert.equal((await prefs(alice)).voiceReleaseDelay, 450);
     assert.equal((await prefs(alice)).noiseSuppressionEngine, 'rnnoise');
-    await click(alice, 'Start microphone test');
+    await wait(
+        alice,
+        `!!document.querySelector('.threshold-live-track b') && document.querySelector('.threshold-live-value').textContent.includes('Live speech confidence:')`,
+        'speech activation preview uses live RNNoise confidence without microphone test',
+    );
     await wait(
         alice,
         `window.__audio.gates.some(n=>n.processorName.endsWith('/rnnoise')) && !!document.querySelector('.microphone-device')`,
@@ -54,20 +63,19 @@ module.exports = async ({
     assert.equal(await js(alice, 'window.__audio.captures.at(-1).audio.echoCancellation'), true);
     await js(
         alice,
-        `document.querySelector('input[aria-label="Speech sensitivity"]').scrollIntoView({block:'center'})`,
+        `document.querySelector('input[aria-label="Activation threshold"]').scrollIntoView({block:'center'})`,
     );
     await pause(250);
     await fs.writeFile(
         `${process.env.AUDIO_OUTPUT}/rnnoise-settings.png`,
         (await alice.webContents.capturePage()).toPNG(),
     );
-    await click(alice, 'Stop microphone test');
+    await closeSettings(alice);
     await wait(
         alice,
         `window.__audio.raw.every(s=>s.getTracks().every(t=>t.readyState==='ended'))`,
         'meter releases capture',
     );
-    await closeSettings(alice);
     // Persistence and production call path, including a stable peer sender while switching.
     await alice.reload();
     await wait(
@@ -77,8 +85,8 @@ module.exports = async ({
     );
     await openSettings(alice);
     assert.equal(
-        await js(alice, `document.querySelector('input[aria-label="Speech sensitivity"]').value`),
-        '0.8',
+        await js(alice, `document.querySelector('input[aria-label="Activation threshold"]').value`),
+        '23',
     );
     assert.equal(
         await js(
@@ -108,8 +116,13 @@ module.exports = async ({
         `window.__audio.gates.find(n=>n.processorName==='campfire-voice-gate')?.messages.at(-1)?.mode==='speech'`,
         'speech activation reaches audio-thread gate',
     );
+    await wait(
+        alice,
+        `!!document.querySelector('.threshold-live-track b') && document.querySelector('.threshold-live-value').textContent.includes('Live speech confidence:')`,
+        'in-call speech preview reuses RNNoise processing',
+    );
     const capturesBeforeSensitivity = await js(alice, 'window.__audio.captures.length');
-    await slider(alice, 'Speech sensitivity', 0.6);
+    await slider(alice, 'Activation threshold', 41);
     await wait(
         alice,
         `Math.abs(window.__audio.gates.find(n=>n.processorName==='campfire-voice-gate').messages.at(-1).speechThreshold-0.41)<0.00001`,
@@ -119,7 +132,7 @@ module.exports = async ({
     await click(alice, 'Push-to-talk');
     await wait(
         alice,
-        `window.__audio.gates.find(n=>n.processorName==='campfire-voice-gate').messages.at(-1).enabled===false && document.querySelector('input[aria-label="Speech sensitivity"]').disabled`,
+        `window.__audio.gates.find(n=>n.processorName==='campfire-voice-gate').messages.at(-1).enabled===false && document.querySelector('input[aria-label="Activation threshold"]').disabled`,
         'push-to-talk bypasses speech activation',
     );
     await click(alice, 'Push-to-talk');

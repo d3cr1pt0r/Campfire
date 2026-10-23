@@ -46,6 +46,7 @@ class RnnoiseProcessor extends AudioWorkletProcessor {
         this.inputPosition = 0;
         this.readPosition = 0;
         this.writePosition = 480;
+        this.previewSamples = 0;
         this.destroyed = false;
         this.port.onmessage = ({ data }) => {
             if (data === 'destroy') this.destroy();
@@ -80,6 +81,16 @@ class RnnoiseProcessor extends AudioWorkletProcessor {
             output[i] = this.audio[this.readPosition];
             if (probability) probability[i] = this.probabilities[this.readPosition];
             this.readPosition = (this.readPosition + 1) % this.audio.length;
+        }
+        this.previewSamples += output.length;
+        if (this.previewSamples >= 3840) {
+            this.previewSamples = 0;
+            this.port.postMessage({
+                speechProbability:
+                    this.probabilities[
+                        (this.readPosition + this.audio.length - 1) % this.audio.length
+                    ],
+            });
         }
         return true;
     }

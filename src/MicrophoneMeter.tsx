@@ -6,7 +6,7 @@ import { createMicrophoneMonitor, type MicrophoneReading } from './microphoneMon
 
 function analysisError(reason: unknown) {
     const error = reason as { name?: string; message?: string };
-    return `Audio analysis could not start${error?.name ? ` [${error.name}]` : ''}. Resume the meter or restart the test.${error?.message ? ` ${error.message}` : ''}`;
+    return `Audio analysis could not start${error?.name ? ` [${error.name}]` : ''}. Resume the meter or retry the preview.${error?.message ? ` ${error.message}` : ''}`;
 }
 
 export function MicrophoneMeter({
@@ -14,15 +14,18 @@ export function MicrophoneMeter({
     activeStream,
     onInputFallback,
     onReading,
+    speechProbability,
 }: {
+    speechProbability?: () => number | null;
     preferences: Preferences;
     activeStream: MediaStream | null;
     onInputFallback: () => void;
     onReading?: (reading: MicrophoneReading | null) => void;
 }) {
-    const [testing, setTesting] = useState(false),
-        [reading, setReading] = useState<MicrophoneReading | null>(null),
-        [error, setError] = useState('');
+    const [reading, setReading] = useState<MicrophoneReading | null>(null),
+        [error, setError] = useState(''),
+        [failed, setFailed] = useState(false);
+    const monitoring = !failed;
     const monitor = useRef<ReturnType<typeof createMicrophoneMonitor> | null>(null);
     const context = useRef<AudioContext | null>(null);
     const readingCallback = useRef(onReading);
@@ -31,42 +34,43 @@ export function MicrophoneMeter({
         setReading(value);
         readingCallback.current?.(value);
     };
-    const stopTest = () => {
-        monitor.current?.stop();
-        monitor.current = null;
-        const previous = context.current;
-        context.current = null;
-        if (previous) void previous.close().catch(() => {});
-        setTesting(false);
-        publishReading(null);
-    };
-    const startTest = () => {
+    const retryPreview = () => {
         setError('');
+        setFailed(false);
         try {
-            // Run inside the button's user gesture, before capture/effects await.
-            const current = new AudioContext({ sampleRate: 48000 });
-            context.current = current;
-            void current.resume().catch((reason) => {
-                if (context.current === current) setError(analysisError(reason));
-            });
-            setTesting(true);
+            // Resume during a direct gesture if autoplay suspended the automatic preview.
+            context.current ??= new AudioContext({ sampleRate: 48000 });
+            void context.current.resume().catch((reason) => setError(analysisError(reason)));
         } catch (reason) {
             setError(analysisError(reason));
+            setFailed(true);
         }
     };
-    useEffect(
-        () => () => {
-            monitor.current?.stop();
-            const current = context.current;
-            context.current = null;
-            if (current) void current.close().catch(() => {});
-        },
-        [],
-    );
+    useEffect(() => {
+        setFailed(false);
+    }, [preferences.input, preferences.inputLabel]);
+    useEffect(() => {
+        if (!monitoring) return;
+        try {
+            const current = context.current ?? new AudioContext({ sampleRate: 48000 });
+            context.current = current;
+            void current.resume().catch(() => {});
+            return () => {
+                monitor.current?.stop();
+                monitor.current = null;
+                if (context.current === current) context.current = null;
+                void current.close().catch(() => {});
+                readingCallback.current?.(null);
+            };
+        } catch (reason) {
+            setError(analysisError(reason));
+            setFailed(true);
+        }
+    }, [monitoring]);
     const fallback = useRef(onInputFallback);
     fallback.current = onInputFallback;
     useEffect(() => {
-        if (!testing || !context.current) return;
+        if (!monitoring || !context.current) return;
         let active = true;
         publishReading(null);
         setError('');
@@ -74,6 +78,7 @@ export function MicrophoneMeter({
             const current = createMicrophoneMonitor({
                 preferences,
                 activeStream,
+                speechProbability,
                 context: context.current,
                 onReading: (value) => {
                     if (active) publishReading(value);
@@ -81,7 +86,8 @@ export function MicrophoneMeter({
                 onError: (reason) => {
                     if (active) {
                         setError(formatMicrophoneError(reason));
-                        stopTest();
+                        setFailed(true);
+                        publishReading(null);
                     }
                 },
                 onFallback: () => {
@@ -96,11 +102,13 @@ export function MicrophoneMeter({
             };
         } catch (reason) {
             setError(formatMicrophoneError(reason));
-            stopTest();
+            setFailed(true);
+            publishReading(null);
         }
-        // Restart an active test when its selected input or processing changes.
+        // Restart the preview when its selected input or processing changes.
     }, [
-        testing,
+        monitoring,
+        speechProbability,
         preferences.input,
         preferences.inputLabel,
         preferences.noise,
@@ -110,9 +118,9 @@ export function MicrophoneMeter({
         preferences.microphoneVolume,
         activeStream,
     ]);
-    const level = testing ? reading?.percent || 0 : 0;
-    const status = !testing
-        ? 'Test stopped'
+    const level = monitoring ? reading?.percent || 0 : 0;
+    const status = !monitoring
+        ? 'Preview unavailable'
         : !reading
           ? 'Opening microphone…'
           : reading.paused
@@ -130,8 +138,8 @@ export function MicrophoneMeter({
         <section className="microphone-test" aria-labelledby="microphone-test-title">
             <div className="microphone-test-heading">
                 <strong id="microphone-test-title">Microphone level</strong>
-                <span className={testing && reading?.detected ? 'detecting' : ''}>
-                    {testing ? <Mic size={14} /> : <MicOff size={14} />}
+                <span className={monitoring && reading?.detected ? 'detecting' : ''}>
+                    {monitoring ? <Mic size={14} /> : <MicOff size={14} />}
                     {status}
                 </span>
             </div>
@@ -154,7 +162,7 @@ export function MicrophoneMeter({
             <div className="microphone-meter-scale">
                 <span>Quiet</span>
                 <span>
-                    {testing && reading?.decibels !== null && reading?.decibels !== undefined
+                    {monitoring && reading?.decibels !== null && reading?.decibels !== undefined
                         ? `${Math.round(reading.decibels)} dBFS`
                         : '—'}
                 </span>
@@ -163,21 +171,19 @@ export function MicrophoneMeter({
             <p className="muted">
                 {activeStream
                     ? 'Shows your call microphone before voice activation, independently of mute and push-to-talk. Rejoin to apply a different input device.'
-                    : 'Test the selected input after microphone volume, before voice activation. Audio stays local and is not played back.'}
+                    : 'Shows the selected input after microphone volume, before voice activation. Audio stays local and is not played back.'}
             </p>
-            {testing && reading && <small className="microphone-device">{reading.device}</small>}
+            <p className="muted">
+                Preview runs automatically while Audio & Video settings are open.
+            </p>
+            {monitoring && reading && <small className="microphone-device">{reading.device}</small>}
             <div className="microphone-test-actions">
-                <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => {
-                        if (testing) stopTest();
-                        else startTest();
-                    }}
-                >
-                    {testing ? 'Stop microphone test' : 'Start microphone test'}
-                </button>
-                {testing && reading?.paused && (
+                {failed && (
+                    <button type="button" className="secondary" onClick={retryPreview}>
+                        Retry microphone preview
+                    </button>
+                )}
+                {monitoring && reading?.paused && (
                     <button
                         type="button"
                         className="secondary"

@@ -194,7 +194,13 @@ test('RNNoise WASM worklet produces denoised audio and aligned speech probabilit
                 Float32Array,
                 Uint8Array,
                 AudioWorkletProcessor: class {
-                    port = { close() {} };
+                    port = {
+                        messages: [],
+                        close() {},
+                        postMessage(data) {
+                            this.messages.push(data);
+                        },
+                    };
                 },
                 registerProcessor: (_name, value) => {
                     Processor = value;
@@ -233,6 +239,12 @@ test('RNNoise WASM worklet produces denoised audio and aligned speech probabilit
             }
         }
         assert.ok(nonzeroProbability);
+        assert.ok(processor.port.messages.length > 0);
+        assert.ok(
+            processor.port.messages.every(
+                (message) => message.speechProbability >= 0 && message.speechProbability <= 1,
+            ),
+        );
         assert.ok(outputEnergy < inputEnergy * 0.95);
         processor.port.onmessage({ data: 'destroy' });
         assert.equal(processor.process([], []), false);

@@ -79,6 +79,7 @@ export function AudioVideoSettings({
     notify,
     inCall,
     activeStream,
+    speechProbability,
 }: {
     prefs: Preferences;
     setPrefs: Dispatch<SetStateAction<Preferences>>;
@@ -87,6 +88,7 @@ export function AudioVideoSettings({
     notify: (message: string) => void;
     inCall: boolean;
     activeStream: MediaStream | null;
+    speechProbability?: () => number | null;
 }) {
     const [microphoneReading, setMicrophoneReading] = useState<MicrophoneReading | null>(null);
     const [refreshing, setRefreshing] = useState(false);
@@ -252,6 +254,7 @@ export function AudioVideoSettings({
                     onReading={setMicrophoneReading}
                     preferences={prefs}
                     activeStream={activeStream}
+                    speechProbability={speechProbability}
                     onInputFallback={() =>
                         notify(
                             'Saved microphone unavailable; testing System default. Your selection is kept.',
@@ -348,36 +351,30 @@ export function AudioVideoSettings({
                                 </option>
                             </select>
                         </label>
-                        {speechActivation(prefs) ? (
-                            <>
-                                <AudioSlider
-                                    label="Speech sensitivity"
-                                    value={audioLevel(prefs.speechSensitivity, 0.5)}
-                                    disabled={prefs.pushToTalk}
-                                    change={(value) => change('speechSensitivity', value)}
-                                />
-                                <p className="audio-help">
-                                    {prefs.pushToTalk
-                                        ? 'Voice activation is bypassed while push-to-talk is enabled.'
-                                        : 'Higher sensitivity accepts less certain speech. Lower sensitivity rejects more non-speech sounds but can miss quiet words.'}
-                                </p>
-                            </>
-                        ) : (
-                            <>
-                                {prefs.voiceActivationMode === 'speech' && (
-                                    <p className="audio-help">
-                                        Speech detection needs RNNoise noise suppression. Microphone
-                                        volume activation is used until RNNoise is enabled.
-                                    </p>
-                                )}
-                                <ActivationThreshold
-                                    value={prefs.voiceThreshold}
-                                    reading={microphoneReading}
-                                    disabled={prefs.pushToTalk}
-                                    onChange={(value) => change('voiceThreshold', value)}
-                                />
-                            </>
+                        {prefs.voiceActivationMode === 'speech' && !speechActivation(prefs) && (
+                            <p className="audio-help">
+                                Speech detection needs RNNoise noise suppression. Microphone volume
+                                activation is used until RNNoise is enabled.
+                            </p>
                         )}
+                        <ActivationThreshold
+                            mode={speechActivation(prefs) ? 'speech' : 'level'}
+                            value={
+                                speechActivation(prefs)
+                                    ? prefs.speechSensitivity
+                                    : prefs.voiceThreshold
+                            }
+                            reading={microphoneReading}
+                            disabled={prefs.pushToTalk}
+                            onChange={(value) =>
+                                change(
+                                    speechActivation(prefs)
+                                        ? 'speechSensitivity'
+                                        : 'voiceThreshold',
+                                    value,
+                                )
+                            }
+                        />
                         <details className="account-details">
                             <summary>Advanced voice activation</summary>
                             <AudioSlider

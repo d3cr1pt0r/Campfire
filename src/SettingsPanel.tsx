@@ -618,6 +618,9 @@ export function SettingsPanel({
                         notify={notify}
                         inCall={!!call.channel}
                         activeStream={call.channel ? call.microphonePreview : null}
+                        speechProbability={
+                            call.channel ? call.microphoneSpeechProbability : undefined
+                        }
                     />
                 )}
                 {settingsTab === 'emojis' && (

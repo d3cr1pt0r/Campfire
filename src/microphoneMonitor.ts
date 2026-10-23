@@ -22,6 +22,7 @@ export type MicrophoneReading = MicrophoneLevel & {
     paused: boolean;
     muted: boolean;
     device: string;
+    speechProbability?: number | null;
 };
 
 export function microphoneLevel(samples: Float32Array): MicrophoneLevel {
@@ -45,6 +46,7 @@ export function microphoneLevel(samples: Float32Array): MicrophoneLevel {
 type MonitorOptions = {
     preferences: InputPreferences;
     activeStream?: MediaStream | null;
+    speechProbability?: () => number | null;
     onReading: (reading: MicrophoneReading) => void;
     onError: (error: unknown) => void;
     onFallback: () => void;
@@ -58,6 +60,7 @@ type MonitorOptions = {
 export function createMicrophoneMonitor({
     preferences,
     activeStream,
+    speechProbability,
     onReading,
     onError,
     onFallback,
@@ -73,7 +76,9 @@ export function createMicrophoneMonitor({
     let input: MediaStream | null = activeStream || null;
     let source: MediaStreamAudioSourceNode | null = null,
         splitter: ChannelSplitterNode | null = null;
-    let denoiser: (AudioWorkletNode & { destroy: () => void }) | undefined;
+    let denoiser:
+        | (AudioWorkletNode & { destroy: () => void; speechProbability: () => number | null })
+        | undefined;
     const analysers: AnalyserNode[] = [];
     const owned = !activeStream;
     const stop = () => {
@@ -182,7 +187,18 @@ export function createMicrophoneMonitor({
                             clipping ||= measured.clipping;
                         }
                     level.clipping = clipping;
-                    onReading({ ...level, paused, muted, device: track.label || 'Microphone' });
+                    onReading({
+                        ...level,
+                        paused,
+                        muted,
+                        device: track.label || 'Microphone',
+                        speechProbability:
+                            paused || muted
+                                ? null
+                                : ((owned
+                                      ? denoiser?.speechProbability()
+                                      : speechProbability?.()) ?? null),
+                    });
                 }
                 frame = schedule(update);
             };

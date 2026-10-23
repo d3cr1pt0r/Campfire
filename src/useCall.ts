@@ -1002,6 +1002,7 @@ export function useCall(
         watch,
         microphone: audio.current,
         microphonePreview: processedInput.current?.monitorStream ?? null,
+        microphoneSpeechProbability: processedInput.current?.speechProbability,
         showDetails,
         setShowDetails,
         details,
