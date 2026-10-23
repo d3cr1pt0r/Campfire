@@ -168,10 +168,11 @@ app.whenReady()
         await join(alice);
         await join(bob);
         await wait(alice, "!!document.querySelector('.call-panel')", 'Alice is in the call');
+        await wait(bob, "!!document.querySelector('.call-panel')", 'Bob is in the call');
         await wait(
-            bob,
-            "document.querySelector('.call-summary-copy small')?.textContent.includes('2 / 8')",
-            'Bob is in the call with Alice',
+            alice,
+            "[...document.querySelectorAll('.media-tile')].some(tile=>tile.getAttribute('aria-label')==='Bob')",
+            'Alice sees Bob in the call',
         );
         await click(alice, 'Share screen or window');
         await wait(
