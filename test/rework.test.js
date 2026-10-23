@@ -32,22 +32,25 @@ test('overlapping and repeated shutdown calls close SQLite only once', async (t)
     assert.equal(service.db.isOpen, false);
 });
 
-test('history enrichment uses six queries regardless of message count', () => {
-    let queries = 0;
-    const rows = Array.from({ length: 500 }, (_, i) => ({ id: String(i) }));
-    const result = messageViews(() => {
-        queries++;
-        return [];
-    }, rows);
-    assert.equal(queries, 6);
-    assert.equal(result.length, 500);
-    assert.deepEqual(result[0], {
-        id: '0',
-        replyCount: 0,
-        attachments: [],
-        reactions: [],
-        retention: { since: undefined, kept: false, pollEnds: null },
-    });
+test('history enrichment uses seven queries regardless of message count', () => {
+    for (const count of [1, 500]) {
+        let queries = 0;
+        const rows = Array.from({ length: count }, (_, i) => ({ id: String(i) }));
+        const result = messageViews(() => {
+            queries++;
+            return [];
+        }, rows);
+        assert.equal(queries, 7);
+        assert.equal(result.length, count);
+        assert.deepEqual(result[0], {
+            id: '0',
+            sequence: undefined,
+            replyCount: 0,
+            attachments: [],
+            reactions: [],
+            retention: { since: undefined, kept: false, pollEnds: null },
+        });
+    }
 });
 
 test('authentication limiter expires entries and fails closed at capacity', () => {
