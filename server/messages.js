@@ -9,6 +9,7 @@ import { containsText, transaction } from './database.js';
 import { createThumbnails } from './thumbnails.js';
 import { forViewer } from './poll-view.js';
 const removedFile = 'This file was removed after the retention period';
+const standardEmojis = new Set(emojis);
 // node:sqlite returns blobs as Uint8Array; a Buffer view avoids copying large files.
 const bytesOf = (data) => Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 export function registerMessages({
@@ -395,7 +396,7 @@ export function registerMessages({
             requireAction(req.user, m.room, 'reactions.add');
             check(
                 typeof emoji === 'string' &&
-                    (emojis.includes(emoji) ||
+                    (standardEmojis.has(emoji) ||
                         (/^:[a-z0-9_]{2,32}:$/.test(emoji) &&
                             get('SELECT id FROM emojis WHERE name=?', emoji.slice(1, -1)))),
                 'Unsupported emoji',

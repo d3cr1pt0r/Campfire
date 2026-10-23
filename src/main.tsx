@@ -92,12 +92,12 @@ import { PresenceDot } from './PresenceDot';
 import { userStatus } from './presence';
 import { usePresence } from './usePresence';
 
-import { Emoji } from './ChatContent';
+import { EmojiPicker } from './EmojiPicker';
+import { emojiInMessage, openEmojiUsage, recordEmojiUse } from './emojiUsage';
 import { resizeImage } from './images';
 import { rememberedDevice } from './devices';
 import { useSpeaking } from './useSpeaking';
 import { formatUploadLimit, validateFileSelection } from '../shared/uploads.js';
-import { emojis as standardEmojis } from '../shared/emojis.js';
 import campfireIcon from './assets/campfire-icon.png';
 import './style.css';
 import './campfire-theme.css';
@@ -501,6 +501,10 @@ function App() {
         () => publishGifFavorites({ favorites: gifFavorites, toggle: toggleGifFavorite }),
         [gifFavorites, toggleGifFavorite],
     );
+    // Recent emoji are kept on this device for each server account.
+    useEffect(() => {
+        if (state?.me.id) openEmojiUsage(storage, `emoji-usage:${url}:${state.me.id}`);
+    }, [url, state?.me.id]);
     const roomVisible =
         !!state &&
         (room.startsWith('dm:') ||
@@ -1064,6 +1068,7 @@ function App() {
         await act(async () => {
             validateFileSelection(files, stateRef.current?.maxUploadBytes);
             await api('/messages', 'POST', messagePayload({ room: targetRoom, body: text }, files));
+            recordEmojiUse(emojiInMessage(text, stateRef.current?.emojis || []));
             if (roomRef.current !== targetRoom) return;
             setDraft((previous) => (previous === text ? '' : previous));
             setAttachments([]);
@@ -2420,33 +2425,24 @@ function App() {
                                             ? 'Say it with an emoji.'
                                             : 'Add a reaction'}
                                     </h2>
-                                    <div className="emoji-picker">
-                                        {[
-                                            ...standardEmojis,
-                                            ...(state.emojis || []).map((e) => `:${e.name}:`),
-                                        ].map((emoji) => (
-                                            <button
-                                                key={emoji}
-                                                onClick={() => {
-                                                    if (modal === 'emoji') {
-                                                        setDraft((d) => appendText(d, emoji));
-                                                        setModal(null);
-                                                    } else
-                                                        void act(async () => {
-                                                            await api(
-                                                                `/messages/${modal.split(':')[1]}/reaction`,
-                                                                'POST',
-                                                                { emoji },
-                                                            );
-                                                            setModal(null);
-                                                        });
-                                                }}
-                                                title={emoji}
-                                            >
-                                                <Emoji value={emoji} custom={state.emojis || []} />
-                                            </button>
-                                        ))}
-                                    </div>
+                                    <EmojiPicker
+                                        custom={state.emojis || []}
+                                        onPick={(emoji) => {
+                                            if (modal === 'emoji') {
+                                                setDraft((d) => appendText(d, emoji));
+                                                setModal(null);
+                                            } else
+                                                void act(async () => {
+                                                    await api(
+                                                        `/messages/${modal.split(':')[1]}/reaction`,
+                                                        'POST',
+                                                        { emoji },
+                                                    );
+                                                    recordEmojiUse([emoji]);
+                                                    setModal(null);
+                                                });
+                                        }}
+                                    />
                                     <button
                                         className="secondary"
                                         onClick={() => openSettings('emojis')}

@@ -27,7 +27,8 @@ import {
     FileX,
 } from 'lucide-react';
 import { PollCard } from './PollCard';
-import { ChatContent } from './ChatContent';
+import { ChatContent, Emoji } from './ChatContent';
+import { frequentEmoji, recordEmojiUse, useEmojiUses } from './emojiUsage';
 import { ImageAttachment } from './ImageAttachment';
 import { LinkPreviews } from './LinkPreviews';
 import { needsScrollHistory, restoredScrollOffset, type ChatScrollPosition } from './chatScroll';
@@ -455,6 +456,18 @@ export function ChatMessage({
         unit = retentionUnit ?? m.retention,
         files = hasFiles(m);
     const retention = messageRetention(schedule, unit, m.created, Boolean(m.pinned), now, files);
+    const custom = state.emojis || [];
+    const quickReactions = frequentEmoji(useEmojiUses(), custom);
+    const reacted = (emoji: string) =>
+        m.reactions.some((r) => r.emoji === emoji && r.user === state.me.id);
+    // Adding a reaction counts as using the emoji; taking one back does not.
+    const react = (emoji: string) => {
+        const adding = !reacted(emoji);
+        void act(async () => {
+            await api(`/messages/${m.id}/reaction`, 'POST', { emoji });
+            if (adding) recordEmojiUse([emoji]);
+        });
+    };
     return (
         <article className={`message message-avatars-${avatars}`}>
             {avatars !== 'hidden' && <Avatar user={u} color={color(u)} />}
@@ -574,9 +587,7 @@ export function ChatMessage({
                                     id: r.user,
                                     user: user(r.user),
                                 }))}
-                            mine={m.reactions.some(
-                                (r) => r.emoji === emoji && r.user === state.me.id,
-                            )}
+                            mine={reacted(emoji)}
                             showNames={
                                 state.reactionAuthors !== false &&
                                 state.channels.find((c) => c.id === m.room)?.reactionAuthors !==
@@ -585,10 +596,8 @@ export function ChatMessage({
                                     false
                             }
                             canReact={permission('reactions.add')}
-                            custom={state.emojis || []}
-                            onReact={() =>
-                                void act(() => api(`/messages/${m.id}/reaction`, 'POST', { emoji }))
-                            }
+                            custom={custom}
+                            onReact={() => react(emoji)}
                         />
                     ))}
                 </div>
@@ -600,6 +609,26 @@ export function ChatMessage({
                 )}
             </div>
             <div className="message-actions">
+                {permission('reactions.add') &&
+                    quickReactions.map((emoji) => (
+                        <button
+                            key={emoji}
+                            className="quick-reaction"
+                            title={`React with ${emoji}`}
+                            aria-label={`React with ${emoji}`}
+                            aria-pressed={reacted(emoji)}
+                            onClick={() => react(emoji)}
+                        >
+                            <Emoji value={emoji} custom={custom} />
+                        </button>
+                    ))}
+                <button
+                    title="React"
+                    disabled={!permission('reactions.add')}
+                    onClick={() => setModal(`reaction:${m.id}`)}
+                >
+                    <Smile size={16} />
+                </button>
                 {!thread && !m.thread && onReply && (
                     <button
                         title="Reply in thread"
@@ -613,13 +642,6 @@ export function ChatMessage({
                         <Reply size={16} />
                     </button>
                 )}
-                <button
-                    title="React"
-                    disabled={!permission('reactions.add')}
-                    onClick={() => setModal(`reaction:${m.id}`)}
-                >
-                    <Smile size={16} />
-                </button>
                 {m.poll &&
                     !m.poll.ended &&
                     (m.author === state.me.id ||

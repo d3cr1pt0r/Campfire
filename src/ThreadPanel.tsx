@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { MessageCircle, Pin, Search, X } from 'lucide-react';
 import { ChatMessage, ChatMessages } from './ChatMessages';
 import { ChatComposer } from './ChatComposer';
-import { Emoji } from './ChatContent';
+import { EmojiPicker } from './EmojiPicker';
+import { emojiInMessage, recordEmojiUse } from './emojiUsage';
 import { useConversation } from './useConversation';
 import { useConversationRead } from './useUnread';
 import { removeFiles } from './conversation';
@@ -12,7 +13,6 @@ import type { MessageAvatarMode } from './messageAppearance';
 import type { PollTarget } from './PollDialog';
 import { appendText } from './richText';
 import { validateFileSelection } from '../shared/uploads.js';
-import { emojis } from '../shared/emojis.js';
 
 type Props = {
     messageAvatars?: MessageAvatarMode;
@@ -206,6 +206,7 @@ export function ThreadPanel(props: Props) {
                 'POST',
                 messagePayload({ room: parent.room, thread: parent.id, body: text }, files),
             );
+            recordEmojiUse(emojiInMessage(text, state.emojis || []));
             if (mounted.current) {
                 setDraft((previous) => (previous === text ? '' : previous));
                 setAttachments([]);
@@ -300,26 +301,17 @@ export function ThreadPanel(props: Props) {
             )}
             {picker && (
                 <div className="thread-emoji-picker">
+                    <EmojiPicker
+                        custom={state.emojis || []}
+                        disabled={!canPost || busy}
+                        onPick={(emoji) => {
+                            setDraft((text) => appendText(text, emoji));
+                            setPicker(false);
+                        }}
+                    />
                     <button aria-label="Close emoji picker" onClick={() => setPicker(false)}>
                         <X size={16} />
                     </button>
-                    <div className="emoji-picker">
-                        {[...emojis, ...(state.emojis || []).map((emoji) => `:${emoji.name}:`)].map(
-                            (emoji) => (
-                                <button
-                                    title={emoji}
-                                    key={emoji}
-                                    disabled={!canPost || busy}
-                                    onClick={() => {
-                                        setDraft((text) => appendText(text, emoji));
-                                        setPicker(false);
-                                    }}
-                                >
-                                    <Emoji value={emoji} custom={state.emojis || []} />
-                                </button>
-                            ),
-                        )}
-                    </div>
                 </div>
             )}
             <ChatComposer
