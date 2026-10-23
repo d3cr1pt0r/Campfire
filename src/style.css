@@ -672,6 +672,7 @@ small {
     min-height: 64px;
     height: 64px;
     display: flex;
+    flex-wrap: nowrap;
     align-items: center;
     padding: 0 26px;
     justify-content: space-between;
@@ -1624,9 +1625,6 @@ small {
     .app-shell {
         grid-template-columns: 80px 265px 1fr;
     }
-    .member-list {
-        width: 245px;
-    }
     .message {
         padding: 12px 38px 12px 8px;
     }
@@ -1644,10 +1642,6 @@ small {
     }
 }
 @media (max-width: 1200px) {
-    .member-list {
-        width: 190px;
-        padding: 25px 10px;
-    }
     .app-shell {
         grid-template-columns: 66px 220px 1fr;
     }
@@ -2874,6 +2868,8 @@ label textarea {
     .app-shell {
         grid-template-columns: 64px 240px minmax(0, 1fr);
     }
+}
+@media (max-width: 800px) {
     .member-list {
         display: block;
         position: absolute;
@@ -2881,35 +2877,11 @@ label textarea {
         top: 0;
         bottom: 0;
         z-index: 20;
-        width: min(300px, 100%);
+        max-width: 100%;
         box-shadow: -16px 0 40px #0005;
         padding: 16px;
         border-left: 1px solid #ffffff20;
     }
-    .topbar {
-        flex-wrap: wrap;
-        height: auto;
-        min-height: 64px;
-        padding: 10px 16px;
-        gap: 8px;
-    }
-    .channel-title {
-        flex-basis: 100%;
-    }
-    .top-actions {
-        width: 100%;
-    }
-    .top-actions .search {
-        flex: 1;
-    }
-    .top-actions .search input {
-        width: 100%;
-    }
-    .connection-status {
-        margin-left: auto;
-    }
-}
-@media (max-width: 800px) {
     .app-shell {
         display: flex;
     }
