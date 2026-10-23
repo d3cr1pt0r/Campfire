@@ -3,12 +3,14 @@ import express from 'express';
 import { imageInfo, imageMime } from './images.js';
 import { formatUploadLimit, maxUploadFiles } from '../shared/uploads.js';
 import { canonicalRoom } from '../shared/rooms.js';
+import { inlineReplyLimit } from '../shared/threads.js';
 import { emojis } from '../shared/emojis.js';
 import { check, route } from './policies.js';
 import { containsText, transaction } from './database.js';
 import { createThumbnails } from './thumbnails.js';
 import { forViewer } from './poll-view.js';
 const removedFile = 'This file was removed after the retention period';
+const standardEmojis = new Set(emojis);
 // node:sqlite returns blobs as Uint8Array; a Buffer view avoids copying large files.
 const bytesOf = (data) => Buffer.from(data.buffer, data.byteOffset, data.byteLength);
 export function registerMessages({
@@ -31,6 +33,19 @@ export function registerMessages({
     const thumbnails = createThumbnails({ get, all, run });
     const requireAction = (user, room, permission) =>
         check(canInRoom(user, room, permission), 'Permission denied in this conversation', 403);
+    const inlineRepliesFor = (messages, viewer) => {
+        const short = messages
+            .filter((m) => !m.thread && m.replyCount && m.replyCount <= inlineReplyLimit)
+            .map((m) => m.id);
+        return short.length
+            ? messageViews(
+                  all(
+                      `SELECT * FROM messages WHERE thread IN (${short.map(() => '?').join(',')}) ORDER BY created,id`,
+                      ...short,
+                  ),
+              ).map((view) => forViewer(view, viewer))
+            : [];
+    };
     const threadParent = (user, room, thread) => {
         check(
             typeof thread === 'string' && thread.length > 0 && thread.length <= 100,
@@ -139,8 +154,10 @@ export function registerMessages({
                 after.length = Math.min(after.length, side);
                 const oldest = before.at(-1) ?? target;
                 const rows = [...before.reverse(), target, ...after];
+                const messages = messageViews(rows).map((view) => forViewer(view, req.user.id));
                 res.json({
-                    messages: messageViews(rows).map((view) => forViewer(view, req.user.id)),
+                    messages,
+                    ...(target.thread ? {} : { replies: inlineRepliesFor(messages, req.user.id) }),
                     next: hasOlder
                         ? Buffer.from(JSON.stringify([oldest.created, oldest.id])).toString(
                               'base64url',
@@ -200,7 +217,11 @@ export function registerMessages({
             const messages = messageViews(rows.filter((row) => !row.gone).reverse()).map((view) =>
                 forViewer(view, req.user.id),
             );
-            res.json({ messages, next });
+            if (req.query.thread !== undefined || req.query.search || req.query.pinned === '1')
+                return res.json({ messages, next });
+            // Short threads show under their message, so their replies come with the page.
+            const replies = inlineRepliesFor(messages, req.user.id);
+            res.json({ messages, next, replies });
         }),
     );
     // Text and polls arrive as JSON; files as multipart/form-data with room, body and thread
@@ -452,7 +473,7 @@ export function registerMessages({
             requireAction(req.user, m.room, 'reactions.add');
             check(
                 typeof emoji === 'string' &&
-                    (emojis.includes(emoji) ||
+                    (standardEmojis.has(emoji) ||
                         (/^:[a-z0-9_]{2,32}:$/.test(emoji) &&
                             get('SELECT id FROM emojis WHERE name=?', emoji.slice(1, -1)))),
                 'Unsupported emoji',
