@@ -120,6 +120,7 @@ const defaultServerUrl =
 const defaultPrefs: Preferences = {
     theme: 'system',
     messageAvatars: 'compact',
+    showRoleColors: true,
     autoIdle: false,
     idleMinutes: 5,
     notifications: false,
@@ -2109,6 +2110,7 @@ function App() {
                                 )}
                                 <ChatMessages
                                     messageAvatars={prefs.messageAvatars}
+                                    showRoleColors={prefs.showRoleColors}
                                     currentVoiceChannel={call.channel}
                                     onJoinVoice={(channel) => void call.join(channel)}
                                     key={`${url}:${state.me.id}:${room}:${search}:${pins}`}
@@ -2184,6 +2186,7 @@ function App() {
                             {thread && thread.room === room && roomVisible && (
                                 <ThreadPanel
                                     messageAvatars={prefs.messageAvatars}
+                                    showRoleColors={prefs.showRoleColors}
                                     currentVoiceChannel={call.channel}
                                     onJoinVoice={(channel) => void call.join(channel)}
                                     focusRequest={threadFocus}

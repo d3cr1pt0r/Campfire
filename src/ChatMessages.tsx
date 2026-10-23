@@ -95,6 +95,7 @@ function ChatMessageList({
     clearFilters,
     onReply,
     messageAvatars,
+    showRoleColors,
     currentVoiceChannel,
     onJoinVoice,
     thread = false,
@@ -104,6 +105,7 @@ function ChatMessageList({
     save,
 }: {
     messageAvatars?: MessageAvatarMode;
+    showRoleColors?: boolean;
     notify?: (text: string) => void;
     // Thread replies share the clock of the thread they belong to.
     retentionUnit?: RetentionUnit;
@@ -362,6 +364,7 @@ function ChatMessageList({
                                         notify={notify}
                                         retentionUnit={retentionUnit}
                                         messageAvatars={messageAvatars}
+                                        showRoleColors={showRoleColors}
                                         currentVoiceChannel={currentVoiceChannel}
                                         onJoinVoice={onJoinVoice}
                                     />
@@ -403,6 +406,7 @@ export function ChatMessage({
     setEdit,
     onReply,
     messageAvatars,
+    showRoleColors,
     currentVoiceChannel,
     onJoinVoice,
     thread = false,
@@ -411,6 +415,7 @@ export function ChatMessage({
 }: Pick<
     React.ComponentProps<typeof ChatMessageList>,
     | 'messageAvatars'
+    | 'showRoleColors'
     | 'currentVoiceChannel'
     | 'onJoinVoice'
     | 'permission'
@@ -458,7 +463,7 @@ export function ChatMessage({
                     <span className="message-meta">
                         <button
                             title={`@${u?.username || 'unknown'}`}
-                            style={{ color: color(u) }}
+                            style={{ color: showRoleColors === false ? '#fff' : color(u) }}
                             onClick={() => {
                                 if (u && u.id !== state.me.id) dm(u.id);
                             }}

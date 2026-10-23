@@ -165,6 +165,7 @@ export type ChannelNotificationMode = 'all' | 'mentions' | 'muted';
 export type Preferences = {
     theme?: 'system' | 'dark' | 'light';
     messageAvatars?: 'normal' | 'compact' | 'hidden';
+    showRoleColors?: boolean;
     autoIdle?: boolean;
     idleMinutes?: number;
     notifications: boolean;

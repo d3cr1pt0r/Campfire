@@ -15,6 +15,7 @@ import { emojis } from '../shared/emojis.js';
 
 type Props = {
     messageAvatars?: MessageAvatarMode;
+    showRoleColors?: boolean;
     currentVoiceChannel?: string | null;
     onJoinVoice?: (channel: string) => void;
     focusRequest: number;

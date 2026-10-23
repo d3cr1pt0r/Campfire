@@ -3,6 +3,7 @@ import type { Preferences, User } from './types';
 import { Avatar } from './Avatar';
 import { displayName } from './profiles';
 import { messageAvatarMode } from './messageAppearance';
+import { Toggle } from './forms';
 
 export function MessageAppearanceSettings({
     prefs,
@@ -22,6 +23,11 @@ export function MessageAppearanceSettings({
             aria-labelledby="message-appearance-title"
         >
             <h3 id="message-appearance-title">Messages</h3>
+            <Toggle
+                title="Show role colors"
+                value={prefs.showRoleColors !== false}
+                set={(value) => setPrefs((previous) => ({ ...previous, showRoleColors: value }))}
+            />
             <label>
                 Message avatars
                 <select
@@ -55,7 +61,14 @@ export function MessageAppearanceSettings({
                             <div className="message-body">
                                 <div className="message-line">
                                     <span className="message-meta">
-                                        <strong>{displayName(user)}</strong>
+                                        <strong
+                                            style={{
+                                                color:
+                                                    prefs.showRoleColors === false ? '#fff' : color,
+                                            }}
+                                        >
+                                            {displayName(user)}
+                                        </strong>
                                     </span>
                                     <span className="message-text">{text}</span>
                                 </div>
