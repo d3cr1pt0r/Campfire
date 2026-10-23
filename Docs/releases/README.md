@@ -65,3 +65,9 @@ The package manifest and lockfile declare version 0.2.1. The notes explicitly de
 [Prepared description](v0.2.2.md). Covers the 14 commits after local tag v0.2.1 through `ac29065`: automatic desktop updates, Windows installer packaging, draft-release automation, RNNoise suppression, speech-based activation and automatic live previews, video quality controls and diagnostics, settings readability, call layout and participant arrangements, Overview-first channel/category editing, and account-deletion compatibility with older supported Node versions.
 
 The package manifest and lockfile declare version 0.2.2. No local v0.2.2 tag exists. The changelog link targets the intended v0.2.2 tag; reconcile the notes with that tag before publication. The v0.2.1 database schema is unchanged. This draft was prepared from local history and source without a live release lookup. No release was published or tag created.
+
+## v0.2.3 draft
+
+[Prepared description](v0.2.3.md). Covers the two commits after local tag v0.2.2 (`617221c`) through local tag v0.2.3 (`3f45d63`): preferring CPU-encoded VP8 for camera video and screen sharing to address blocky output after movement with NVIDIA hardware H.264, and updating the video-quality check to wait for the viewer's participant tile.
+
+The package manifest and lockfile declare version 0.2.3 in the working tree. The existing local v0.2.3 tag points to the codec and test changes before this version bump and these notes; reconcile the final release tag with the complete release commit before building packages. The v0.2.2 database schema is unchanged. This draft was prepared from local history and source without a live release lookup. No release was published or tag created by this preparation.
