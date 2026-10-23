@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { MediaTile } from './MediaTile';
 import { MemberIdentity } from './MemberIdentity';
+import { Avatar } from './Avatar';
 import { fitCallParticipants } from './callLayout';
 import { describeVideo, formatBitrate, limitMessage } from './videoQuality';
 
@@ -81,9 +82,11 @@ export function CallPanel({
             : visibleRemote.find((p) => p.sharing)?.id ||
               visibleRemote.find((p) => p.camera)?.id ||
               visibleIds[0];
+    const thumbnailHeight =
+        !gridView && visibleParticipants > 1 ? Math.min(104, stageSize.height * 0.28) : 0;
     const gallery = fitCallParticipants(
         stageSize.width,
-        stageSize.height,
+        Math.max(0, stageSize.height - (thumbnailHeight ? thumbnailHeight + 12 : 0)),
         gridView ? visibleParticipants : Math.min(1, visibleParticipants),
     );
     const participantOpacity = Math.max(0, Math.min(1, (stageSize.height - 24) / 96));
@@ -108,7 +111,9 @@ export function CallPanel({
             const headerHeight = serverHeading?.getBoundingClientRect().height || 76;
             const splitterHeight = splitter.current?.getBoundingClientRect().height || 8;
             // The compact dock and its divider together match the sidebar account controls.
-            setMinimum(Math.max(0, (userBar?.getBoundingClientRect().height || 56) - splitterHeight));
+            setMinimum(
+                Math.max(0, (userBar?.getBoundingClientRect().height || 56) - splitterHeight),
+            );
             setWorkspaceHeight(workspace.clientHeight);
             // Reserve the conversation header and the divider at maximum call height.
             setConversationMinimum(headerHeight + splitterHeight);
@@ -244,6 +249,9 @@ export function CallPanel({
                             <div className="call-summary-copy">
                                 <strong title={callName}>{callName}</strong>
                             </div>
+                            {(call.camera || call.sharing) && (
+                                <span className="live-badge">LIVE</span>
+                            )}
                         </div>
                         <div className="call-heading-actions">
                             {warningSummary && (
@@ -257,9 +265,6 @@ export function CallPanel({
                                     <TriangleAlert size={16} />
                                     <span>Reduced quality</span>
                                 </button>
-                            )}
-                            {(call.camera || call.sharing) && (
-                                <span className="live-badge">LIVE</span>
                             )}
                             <button
                                 className="panel-expand"
@@ -275,6 +280,11 @@ export function CallPanel({
                     <div className="call-panel-body" id="call-panel-body">
                         <div
                             className={`call-stage ${gridView ? '' : 'spotlight'}`}
+                            style={
+                                {
+                                    '--call-thumbnail-height': `${thumbnailHeight}px`,
+                                } as CSSProperties
+                            }
                             ref={stage}
                             inert={compactLayout || participantOpacity === 0}
                             aria-hidden={compactLayout || participantOpacity === 0}
@@ -284,7 +294,7 @@ export function CallPanel({
                                 style={
                                     {
                                         width: gallery.width,
-                                        height: gridView ? gallery.height : undefined,
+                                        height: gallery.height,
                                         display: visibleParticipants === 0 ? 'none' : undefined,
                                         opacity: participantOpacity,
                                         visibility: participantOpacity === 0 ? 'hidden' : 'visible',
@@ -385,13 +395,13 @@ export function CallPanel({
                                                     aria-label={`Show ${name} in main view`}
                                                     onClick={() => setSelectedParticipant(id)}
                                                 >
-                                                    <MemberIdentity
+                                                    <Avatar
                                                         user={member}
-                                                        state={state}
                                                         speaking={speaking.has(member?.id || '')}
-                                                        secondary={false}
-                                                        showOwner={false}
                                                     />
+                                                    <span className="call-thumbnail-name">
+                                                        {name}
+                                                    </span>
                                                 </button>
                                             );
                                         })}

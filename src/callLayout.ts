@@ -1,9 +1,10 @@
-// Fill the stage, choosing the grid with the most room for uncropped 16:9 video.
+// Fit equal 16:9 tiles inside the stage, keeping incomplete rows centered.
 export function fitCallParticipants(width: number, height: number, count: number) {
     if (width <= 0 || height <= 0 || count <= 0)
         return { columns: 1, rows: 0, width: 0, height: 0 };
     const gap = 12;
     let columns = 1;
+    let fittedTileWidth = 0;
     let bestArea = -1;
     for (let candidate = 1; candidate <= count; candidate++) {
         const rows = Math.ceil(count / candidate);
@@ -14,7 +15,14 @@ export function fitCallParticipants(width: number, height: number, count: number
         if (area > bestArea) {
             bestArea = area;
             columns = candidate;
+            fittedTileWidth = videoWidth;
         }
     }
-    return { columns, rows: Math.ceil(count / columns), width, height };
+    const rows = Math.ceil(count / columns);
+    return {
+        columns,
+        rows,
+        width: fittedTileWidth * columns + gap * (columns - 1),
+        height: ((fittedTileWidth * 9) / 16) * rows + gap * (rows - 1),
+    };
 }
