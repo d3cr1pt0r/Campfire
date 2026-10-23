@@ -59,3 +59,9 @@ The package manifest and lockfile declare version 0.2.0. No local v0.2.0 tag exi
 [Prepared description](v0.2.1.md). Covers the 58 commits after local tag v0.2.0 (`595ec49`) through `0ed1686`: channel categories and inherited permissions, notification and settings redesigns, compact member lists, polls, live formatting, GIFs and link previews, voice invitations, personal DMs, password recovery, profile frames, audio controls, retention and storage settings, and setup capture/reset.
 
 The package manifest and lockfile declare version 0.2.1. The notes explicitly describe the incompatible v0.2.0 database schema and the limits of setup capture/reset. The changelog link records the current source cutoff; reconcile it with the final v0.2.1 tag before publication. This draft was prepared from local history and source without a live release lookup. No release was published or tag created.
+
+## v0.2.2 draft
+
+[Prepared description](v0.2.2.md). Covers the 12 commits after local tag v0.2.1 through `d37ccf5`: RNNoise suppression, speech-based activation and automatic live previews, video quality controls and diagnostics, settings readability, call layout and participant arrangements, Overview-first channel/category editing, and account-deletion compatibility with older supported Node versions.
+
+The package manifest and lockfile declare version 0.2.2. No local v0.2.2 tag exists. The changelog link uses the recorded source cutoff; reconcile it with the final v0.2.2 tag before publication. The v0.2.1 database schema is unchanged. This draft was prepared from local history and source without a live release lookup. No release was published or tag created.
