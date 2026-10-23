@@ -130,24 +130,35 @@ export function SettingsPanel({
             await navigator.clipboard.writeText(serverLink(url, { pin: pin ?? undefined }));
             notify('Server link copied.');
         });
-    const sections = [
-        ['account', 'My account'],
-        ['appearance', 'Appearance'],
-        ['audio', 'Audio & Video'],
-        ['notifications', 'Notifications'],
-        ['server', 'Server settings'],
-        ['roles', 'Roles & permissions'],
-        ...([
-            'channels.edit',
-            'channels.access',
-            'channels.create',
-            'channels.delete',
-            'channels.reorder',
-        ].some(permission)
-            ? [['channels', 'Channels']]
-            : []),
-        ['emojis', 'Custom emojis'],
+    const sectionGroups = [
+        { label: 'Account', sections: [['account', 'My account']] },
+        {
+            label: 'App settings',
+            sections: [
+                ['appearance', 'Appearance'],
+                ['audio', 'Audio & Video'],
+                ['notifications', 'Notifications'],
+            ],
+        },
+        {
+            label: 'Server',
+            sections: [
+                ['server', 'Server settings'],
+                ['roles', 'Roles & permissions'],
+                ...([
+                    'channels.edit',
+                    'channels.access',
+                    'channels.create',
+                    'channels.delete',
+                    'channels.reorder',
+                ].some(permission)
+                    ? [['channels', 'Channels']]
+                    : []),
+                ['emojis', 'Custom emojis'],
+            ],
+        },
     ];
+    const sections = sectionGroups.flatMap((group) => group.sections);
     return (
         <>
             <header className="settings-header">
@@ -178,16 +189,20 @@ export function SettingsPanel({
                 </button>
             </header>
             <nav className="settings-nav" aria-label="Settings sections">
-                <span className="mini-label">SETTINGS</span>
-                {sections.map(([id, label]) => (
-                    <button
-                        className={settingsTab === id ? 'selected' : ''}
-                        aria-current={settingsTab === id ? 'page' : undefined}
-                        key={id}
-                        onClick={() => setSettingsTab(id)}
-                    >
-                        {label}
-                    </button>
+                {sectionGroups.map((group) => (
+                    <div className="settings-nav-group" key={group.label}>
+                        <span className="mini-label">{group.label}</span>
+                        {group.sections.map(([id, label]) => (
+                            <button
+                                className={settingsTab === id ? 'selected' : ''}
+                                aria-current={settingsTab === id ? 'page' : undefined}
+                                key={id}
+                                onClick={() => setSettingsTab(id)}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
                 ))}
                 <button className="danger-text" onClick={() => void logout()}>
                     <LogOut size={16} />

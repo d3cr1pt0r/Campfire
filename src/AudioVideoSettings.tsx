@@ -248,13 +248,29 @@ export function AudioVideoSettings({
                 <p className="audio-help">
                     100% keeps the original level. Boost also raises remaining background noise.
                 </p>
+                <MicrophoneMeter
+                    onReading={setMicrophoneReading}
+                    preferences={prefs}
+                    activeStream={activeStream}
+                    onInputFallback={() =>
+                        notify(
+                            'Saved microphone unavailable; testing System default. Your selection is kept.',
+                        )
+                    }
+                />
+            </section>
+            <section
+                className="settings-section audio-settings-section"
+                aria-labelledby="audio-processing-title"
+            >
+                <h3 id="audio-processing-title">Voice processing</h3>
                 <div className="audio-processing">
                     <Toggle
                         title="Noise suppression"
                         value={prefs.noise}
                         set={(value) => change('noise', value)}
                     />
-                    <label>
+                    <label className="audio-engine-choice">
                         Noise suppression engine
                         <select
                             value={
@@ -288,6 +304,12 @@ export function AudioVideoSettings({
                     manual volume. RNNoise runs locally; echo cancellation and automatic gain
                     continue to use Chromium with either noise suppression engine.
                 </p>
+            </section>
+            <section
+                className="settings-section audio-settings-section"
+                aria-labelledby="audio-input-mode-title"
+            >
+                <h3 id="audio-input-mode-title">Input mode</h3>
                 <Toggle
                     title="Push-to-talk"
                     value={prefs.pushToTalk}
@@ -375,16 +397,6 @@ export function AudioVideoSettings({
                         </details>
                     </>
                 )}
-                <MicrophoneMeter
-                    onReading={setMicrophoneReading}
-                    preferences={prefs}
-                    activeStream={activeStream}
-                    onInputFallback={() =>
-                        notify(
-                            'Saved microphone unavailable; testing System default. Your selection is kept.',
-                        )
-                    }
-                />
             </section>
             <section
                 className="settings-section audio-settings-section"

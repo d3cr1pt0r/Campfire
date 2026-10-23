@@ -3844,7 +3844,7 @@ label,
 .server-general-form {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 8px 14px;
+    gap: 16px 20px;
     align-items: start;
 }
 .server-settings label .field-help {
@@ -3874,9 +3874,14 @@ label,
     margin-bottom: 0;
 }
 .server-icon-settings {
-    margin-top: 14px;
-    padding-top: 14px;
+    margin-top: 20px;
+    padding-top: 20px;
     border-top: 1px solid var(--line);
+}
+.server-icon-settings .account-picture-upload {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 12px;
 }
 @media (max-width: 600px) {
     .server-general-form {
@@ -3884,13 +3889,30 @@ label,
     }
 }
 
-/* Shared Settings layout follows My account: compact cards, short rows, and local actions. */
+/* Settings share a reading hierarchy and spacing, while retaining the active theme. */
+.settings-header {
+    padding: 20px 28px;
+}
 .settings-header h2 {
-    font-size: 22px;
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1.3;
+}
+.settings-content {
+    padding: 24px 28px 32px;
 }
 .settings-nav {
-    gap: 4px;
+    gap: 20px;
     padding: 20px 12px;
+}
+.settings-nav-group {
+    display: grid;
+    gap: 4px;
+}
+.settings-nav-group .mini-label {
+    margin: 4px 10px 6px;
+    text-transform: uppercase;
+    line-height: 1.4;
 }
 .settings-nav button {
     min-height: 36px;
@@ -3899,13 +3921,73 @@ label,
 
 .settings-content :is(.account-section, .settings-section) {
     background: transparent;
+    padding: 20px 24px;
+}
+.settings-content :is(.account-settings, .settings-page) {
+    gap: 24px;
 }
 .settings-content :is(.account-section, .settings-section) > :last-child {
     margin-bottom: 0;
 }
 .settings-content :is(.account-section, .settings-section) h3 {
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.35;
+    margin: 0 0 16px;
+}
+.settings-content :is(.account-section, .settings-section) h4 {
+    font-size: 15px;
+    line-height: 1.4;
+    margin: 24px 0 12px;
+}
+.settings-content :is(.account-section, .settings-section) :is(p, .field-help, .audio-help) {
+    max-width: 68ch;
+    font-size: 13px;
+    line-height: 1.65;
+    margin: 8px 0 16px;
+}
+.settings-content :is(.account-section, .settings-section) label {
     font-size: 14px;
-    margin: 0 0 8px;
+    line-height: 1.5;
+}
+.settings-content :is(.account-section, .settings-section) .field-help {
+    display: block;
+    font-weight: 400;
+}
+.settings-content :is(.account-section, .settings-section) :is(h3, h4) + p {
+    margin-top: -8px;
+    margin-bottom: 20px;
+}
+.settings-content .account-profile-overview .profile-card h3 {
+    margin: 0 0 4px;
+}
+.settings-content .account-profile-overview .profile-card p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+}
+.settings-content :is(.account-section, .settings-section) .toggle-label {
+    min-height: 48px;
+    padding-block: 12px;
+}
+.settings-content :is(.account-section, .settings-section) .toggle-label + :is(p, .field-help) {
+    margin-top: 6px;
+    margin-bottom: 20px;
+}
+.settings-content
+    :is(.account-section, .settings-section)
+    input:not([type='file'], [type='range'], [type='checkbox'], [type='radio'], [type='color']),
+.settings-content :is(.account-section, .settings-section) select {
+    min-height: 40px;
+    margin-top: 8px;
+}
+.settings-content :is(.account-section, .settings-section) .account-details > summary {
+    font-size: 14px;
+    line-height: 1.5;
+    padding-block: 8px;
+}
+.settings-content :is(.account-section, .settings-section) .account-details[open] > summary {
+    margin-bottom: 12px;
 }
 .settings-content :is(.account-section, .settings-section) .secondary {
     font-size: 12px;
@@ -3921,7 +4003,7 @@ label,
 .settings-form-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: 20px;
     align-items: start;
 }
 .settings-form-grid > button {
@@ -3944,13 +4026,35 @@ label,
     margin: 0;
 }
 .audio-settings-intro {
-    margin-bottom: 10px;
+    margin-bottom: 16px;
 }
 .settings-content .audio-settings-intro h3 {
     margin: 0;
 }
 .audio-settings-section .audio-slider {
-    padding: 10px 0 4px;
+    padding: 20px 0 8px;
+}
+.audio-settings-section .audio-processing {
+    border-top: 0;
+    margin-top: 0;
+    padding-top: 0;
+}
+.settings-content .audio-settings-section .audio-engine-choice {
+    display: block;
+    margin: 16px 0 20px;
+}
+.settings-content .audio-settings-section .microphone-test {
+    padding: 16px;
+    margin-top: 24px;
+}
+.settings-content .audio-settings-section > .account-details {
+    border-top: 1px solid var(--line);
+    margin-top: 20px;
+    padding-top: 12px;
+}
+.settings-content .audio-settings-section > label:not(.toggle-label, .audio-slider, .audio-device) {
+    display: block;
+    margin-block: 16px;
 }
 .video-quality-columns {
     display: grid;
@@ -3982,18 +4086,21 @@ label,
     margin-bottom: 12px;
 }
 .roles-settings .owner-notice {
-    padding: 8px 10px;
-    font-size: 12px;
+    padding: 12px 14px;
+    font-size: 13px;
 }
 .roles-settings .role-card {
-    padding: 10px;
-    margin: 8px 0;
+    padding: 14px;
+    margin: 12px 0;
     border-radius: 6px;
     background: transparent;
 }
+.settings-content .roles-settings .role-card > p {
+    margin: 8px 0 0;
+}
 .roles-settings .member-roles-card {
-    padding: 10px;
-    margin: 8px 0;
+    padding: 14px;
+    margin: 12px 0;
     border-radius: 6px;
 }
 .emoji-settings .custom-emoji-list {
@@ -4019,42 +4126,66 @@ label,
     padding: 12px 16px;
 }
 .channel-workspace .inspector-heading {
-    padding: 14px 16px 8px;
+    padding: 20px 20px 12px;
 }
 .channel-workspace .inspector-tabs {
-    padding-inline: 16px;
+    padding-inline: 20px;
 }
 .channel-workspace .inspector-body {
-    padding: 14px 16px 20px;
+    padding: 20px 20px 28px;
 }
 .channel-workspace .inspector-heading h3 {
     font-size: 18px;
 }
 .channel-workspace .permission-source-card {
     border-radius: 8px;
-    padding: 10px 12px;
+    padding: 14px 16px;
 }
 .channel-workspace .permissions-workbench {
-    margin-top: 14px;
+    margin-top: 24px;
 }
 .channel-workspace .permissions-workbench h4 {
     font-size: 14px;
 }
+.channel-workspace
+    :is(.organizer-toolbar p, .permission-source-card p, .permissions-explainer, .privacy-help) {
+    font-size: 13px;
+    line-height: 1.6;
+    max-width: 68ch;
+}
+.channel-workspace .permission-role-heading {
+    font-size: 14px;
+}
+.channel-workspace .permission-role-heading > span,
+.channel-workspace .permission-section legend,
+.channel-workspace .permission-role-list > button {
+    font-size: 12px;
+}
 .channel-workspace .permission-choice-row {
-    padding: 8px 0;
+    padding: 12px 0;
+    font-size: 13px;
 }
 .channel-workspace .inspector-body .toggle-label {
-    min-height: 40px;
-    padding-block: 6px;
+    min-height: 48px;
+    padding-block: 12px;
 }
 .channel-workspace .inspector-body .channel-settings-card,
 .channel-workspace .inspector-body .category-editor {
     border: 1px solid var(--line);
     border-radius: 8px;
-    padding: 14px;
+    padding: 20px;
     background: transparent;
 }
 @media (max-width: 700px) {
+    .settings-header {
+        padding: 16px 20px;
+    }
+    .settings-content {
+        padding: 20px 16px 28px;
+    }
+    .settings-content :is(.account-section, .settings-section) {
+        padding: 18px 16px;
+    }
     .settings-form-grid {
         grid-template-columns: minmax(0, 1fr);
     }
@@ -4064,6 +4195,11 @@ label,
     }
     .channel-workspace .inspector-tabs {
         padding-inline: 12px;
+    }
+}
+@media (min-width: 801px) {
+    .settings-modal {
+        height: min(800px, 90dvh);
     }
 }
 
@@ -4083,8 +4219,16 @@ label,
 .role-editor .role-color-control,
 .role-editor .role-permission-group {
     border-radius: 8px;
-    padding: 12px;
+    padding: 16px;
     background: transparent;
+}
+.role-editor > label {
+    margin-block: 20px;
+}
+.role-editor .field-help {
+    max-width: 68ch;
+    font-size: 13px;
+    line-height: 1.65;
 }
 /* Notification delivery, server defaults, and explicit conversation overrides. */
 .notification-sound-row {
