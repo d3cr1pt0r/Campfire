@@ -55,7 +55,11 @@ export function MessageAppearanceSettings({
                                         <strong>{displayName(user)}</strong>
                                     </span>
                                     <span className="message-text">{text}</span>
-                                    {!index && <time className="message-time">11:42</time>}
+                                    <time className="message-time">
+                                        <span className={index ? 'message-time-repeat' : undefined}>
+                                            11:42
+                                        </span>
+                                    </time>
                                 </div>
                             </div>
                         </article>

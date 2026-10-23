@@ -477,19 +477,18 @@ export function ChatMessage({
                             {Boolean(m.edited) && <small className="edited"> (edited)</small>}
                         </div>
                     )}
-                    {/* The retention hourglass stays even where the time is left out. */}
-                    {(showTime || retention?.ending) && (
-                        <time
-                            className="message-time"
-                            dateTime={new Date(m.created).toISOString()}
-                            title={retention?.title}
-                        >
-                            {retention?.ending && (
-                                <Hourglass className="retention-ending" size={10} aria-hidden />
-                            )}
-                            {showTime && messageTime(m.created)}
-                        </time>
-                    )}
+                    <time
+                        className="message-time"
+                        dateTime={new Date(m.created).toISOString()}
+                        title={retention?.title}
+                    >
+                        {retention?.ending && (
+                            <Hourglass className="retention-ending" size={10} aria-hidden />
+                        )}
+                        <span className={showTime ? undefined : 'message-time-repeat'}>
+                            {messageTime(m.created)}
+                        </span>
+                    </time>
                 </div>
                 {!!m.previews?.length && (
                     <LinkPreviews

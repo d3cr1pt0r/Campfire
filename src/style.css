@@ -854,13 +854,17 @@ small {
 .message:hover {
     background: #0000000c;
 }
-/* Trails the message text; left out when the minute matches the row above. */
+/* Trails the message text. A minute matching the row above shows only on hover,
+   keeping its space so the row doesn't reflow. */
 .message-time {
     margin-left: 8px;
     font-size: 10px;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
     color: color-mix(in srgb, var(--muted) 85%, var(--field, var(--surface)));
+}
+.message:not(:hover, :focus-within) .message-time-repeat {
+    visibility: hidden;
 }
 .message .avatar {
     width: 28px;
