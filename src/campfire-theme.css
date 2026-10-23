@@ -4642,16 +4642,6 @@ label,
 .message-actions .quick-reaction[aria-pressed='true'] {
     background: var(--soft-accent);
 }
-.composer > .composer-emoji {
-    font-size: 20px;
-    line-height: 1;
-}
 .composer-wrap {
     container-type: inline-size;
-}
-/* Narrow composers keep their room for typing. */
-@container (max-width: 480px) {
-    .composer > .composer-emoji {
-        display: none;
-    }
 }

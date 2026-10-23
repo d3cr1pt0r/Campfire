@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import type { EditorState } from 'prosemirror-state';
 import { Emoji } from './ChatContent';
 import { emojiQuery, emojiMatches } from './emojiCompletion';
-import { frequentEmoji, useEmojiUses } from './emojiUsage';
 import { mentionQuery, completeMention } from './mentions';
 import { CaseSensitive, Paperclip, X, Plus, Smile, Send, Vote } from 'lucide-react';
 import { pollCommand } from './polls';
@@ -140,8 +139,6 @@ export function ChatComposer({
         gifButton.current?.focus();
     };
     const canPoll = !!onPoll && canPost;
-    // The member's most used emoji go in at the caret; sending them is what counts as use.
-    const quickEmoji = frequentEmoji(useEmojiUses(), emojis);
     const menuItems = () => [
         ...(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ||
             []),
@@ -495,23 +492,6 @@ export function ChatComposer({
                         <span className="gif-label">GIF</span>
                     </button>
                 )}
-                {quickEmoji.map((emoji) => (
-                    <button
-                        type="button"
-                        key={emoji}
-                        className="composer-emoji"
-                        title={`Add ${emoji}`}
-                        aria-label={`Add ${emoji}`}
-                        disabled={!canPost || busy}
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => {
-                            editor.current?.insertText(emoji);
-                            editor.current?.focus();
-                        }}
-                    >
-                        <Emoji value={emoji} custom={emojis} />
-                    </button>
-                ))}
                 <button
                     type="button"
                     title="Add emoji"
