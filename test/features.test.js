@@ -87,21 +87,6 @@ test('expanded standard emoji catalog contains no duplicates and includes comple
     assert.ok(emojis.includes('❤️‍🔥'));
     assert.ok(emojis.includes('🚀'));
 });
-test('emoji suggestions follow only the latest uses', async () => {
-    const { frequentEmoji, recentEmoji, emojiInMessage } = await import('../src/emojiUsage.ts');
-    const custom = [{ name: 'pepega' }];
-    assert.deepEqual(frequentEmoji([], custom), ['👍', '😂', '❤️']);
-    const uses = [...Array(40).fill('🔥'), '😂', '🎉', '😂', ':pepega:', ':deleted:'];
-    assert.deepEqual(frequentEmoji(uses, custom), ['🔥', '😂', ':pepega:']);
-    assert.deepEqual(recentEmoji(uses, custom), [':pepega:', '😂', '🎉', '🔥']);
-    // Older uses leave the window of the last 50.
-    const later = [...uses, ...Array(45).fill('🙏')].slice(-50);
-    assert.deepEqual(frequentEmoji(later, custom), ['🙏', '😂', ':pepega:']);
-    assert.deepEqual(emojiInMessage('🔥 nice 🔥 :pepega: :nope: `🎉`\n```\n💀\n```', custom), [
-        '🔥',
-        ':pepega:',
-    ]);
-});
 
 test('file picker and drop selection share count, per-file and combined limits', async () => {
     const { validateFileSelection, defaultUploadBytes, isUploadLimit, uploadLimitCeiling } =

@@ -1,22 +1,6 @@
 import type { Message } from './types';
-import { inlineReplyLimit } from '../shared/threads.js';
 
-// A channel page also carries the replies of its short threads.
-export type MessagePage = {
-    messages: Message[];
-    next: string | null;
-    replies?: Message[];
-    newer?: boolean;
-};
-// A short thread's replies, shown under its message. Null when the thread opens in
-// the panel instead: it is too long, the view has no inline replies, or some of its
-// replies have not arrived yet.
-export function inlineReplies(message: Message, replies: Map<string, Message[]> | null) {
-    if (!replies || message.thread) return null;
-    const loaded = replies.get(message.id) ?? [];
-    const count = Math.max(message.replyCount ?? 0, loaded.length);
-    return count <= inlineReplyLimit && loaded.length >= count ? loaded : null;
-}
+export type MessagePage = { messages: Message[]; next: string | null; newer?: boolean };
 // A message after retention removed its files and link cards, which leave placeholders.
 export const removeFiles = (message: Message): Message => ({
     ...message,
@@ -86,9 +70,7 @@ export function createConversation(
         if (
             snapshot.newer &&
             event.type === 'upsert' &&
-            !snapshot.messages.some(
-                (m) => m.id === event.message.id || m.id === event.message.thread,
-            )
+            !snapshot.messages.some((m) => m.id === event.message.id)
         )
             return;
         publish({ ...snapshot, messages: apply(snapshot.messages, event) });
@@ -106,8 +88,7 @@ export function createConversation(
                 latest,
             );
             if (closed || pending !== current) return;
-            const received = [...page.messages, ...(page.replies ?? [])];
-            const initial = older ? [...snapshot.messages, ...received] : received;
+            const initial = older ? [...snapshot.messages, ...page.messages] : page.messages;
             let messages = [
                 ...new Map(
                     initial.filter((m) => m.room === room && matches(m)).map((m) => [m.id, m]),
@@ -119,9 +100,7 @@ export function createConversation(
                 if (
                     (page.newer || (older && snapshot.newer)) &&
                     event.type === 'upsert' &&
-                    !messages.some(
-                        (m) => m.id === event.message.id || m.id === event.message.thread,
-                    )
+                    !messages.some((m) => m.id === event.message.id)
                 )
                     continue;
                 messages = apply(messages, event);

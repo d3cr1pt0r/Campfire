@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createConversation, inlineReplies } from '../src/conversation.ts';
+import { createConversation } from '../src/conversation.ts';
 import { createStateRefresh } from '../src/stateRefresh.ts';
 import { createApiClient, messagePayload } from '../src/api.ts';
 
@@ -26,12 +26,6 @@ test('bounded history windows do not append across missing newer history and can
     assert.deepEqual(
         history.getSnapshot().messages.map((entry) => entry.id),
         ['target'],
-    );
-    history.receive({ type: 'upsert', message: { ...message('inline-live'), thread: 'target' } });
-    assert.equal(
-        history.getSnapshot().messages.some((entry) => entry.id === 'inline-live'),
-        true,
-        'anchored channel pages still accept replies to their visible parent messages',
     );
     const loading = history.loadOlder();
     history.receive({ type: 'upsert', message: message('during-load') });
@@ -368,24 +362,4 @@ test('room and thread histories stay isolated while parent counts update during 
     );
     thread.receive({ type: 'delete', id: reply.id });
     assert.deepEqual(thread.getSnapshot().messages, []);
-});
-
-test('short threads show inline only with all their replies loaded', async () => {
-    const root = { ...message('parent'), replyCount: 2 };
-    const replies = ['first', 'second'].map((id) => ({ ...message(id), thread: root.id }));
-    const store = createConversation('general', async () => ({
-        messages: [root],
-        next: null,
-        replies,
-    }));
-    await store.reload();
-    const loaded = new Map([[root.id, store.getSnapshot().messages.filter((m) => m.thread)]]);
-    assert.deepEqual(
-        inlineReplies(root, loaded).map((m) => m.id),
-        ['first', 'second'],
-    );
-    // Past three replies, or with some still missing, the thread opens in the panel.
-    assert.equal(inlineReplies({ ...root, replyCount: 4 }, loaded), null);
-    assert.equal(inlineReplies({ ...root, replyCount: 3 }, loaded), null);
-    assert.equal(inlineReplies(root, null), null);
 });

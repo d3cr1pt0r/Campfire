@@ -27,12 +27,10 @@ import {
     FileX,
 } from 'lucide-react';
 import { PollCard } from './PollCard';
-import { ChatContent, Emoji } from './ChatContent';
-import { frequentEmoji, recordEmojiUse, useEmojiUses } from './emojiUsage';
+import { ChatContent } from './ChatContent';
 import { ImageAttachment } from './ImageAttachment';
 import { LinkPreviews } from './LinkPreviews';
 import { needsScrollHistory, restoredScrollOffset, type ChatScrollPosition } from './chatScroll';
-import { inlineReplies } from './conversation';
 import { conversationSchedule, hasFiles, messageRetention, pinKeeps, unpinText } from './retention';
 import type { RetentionUnit } from '../shared/retention.js';
 
@@ -105,10 +103,6 @@ function ChatMessageList({
     setEdit,
     clearFilters,
     onReply,
-    onOpenThread,
-    replies = null,
-    inlineThread = null,
-    renderInlineComposer,
     messageAvatars,
     showRoleColors,
     currentVoiceChannel,
@@ -127,13 +121,6 @@ function ChatMessageList({
     onJumpFailed?: (request: number, error: Error) => void;
     messageAvatars?: MessageAvatarMode;
     showRoleColors?: boolean;
-    // Opens a thread in the panel; replying may instead open a box under a short thread.
-    onOpenThread?: (message: Message) => void;
-    // Thread replies by parent, where short threads show under their message.
-    replies?: Map<string, Message[]> | null;
-    // The message whose thread has a reply box open under it, and that box.
-    inlineThread?: string | null;
-    renderInlineComposer?: (parent: Message, collapsed: boolean) => React.ReactNode;
     notify?: (text: string) => void;
     // Thread replies share the clock of the thread they belong to.
     retentionUnit?: RetentionUnit;
@@ -186,13 +173,15 @@ function ChatMessageList({
         anchorTo: 'end',
         followOnAppend: !jump && !conversation.newer,
         scrollEndThreshold: 80,
-        // Focused rows and an open reply box stay mounted, keeping their state.
         rangeExtractor: (range) => {
             const indexes = defaultRangeExtractor(range);
-            const kept = [focusedId, inlineThread, jump?.id]
-                .map((id) => (id ? visibleMessages.findIndex((m) => m.id === id) + 1 : 0))
-                .filter((index) => index > 0);
-            return [...new Set([...indexes, ...kept])].sort((a, b) => a - b);
+            const focused = focusedId
+                ? visibleMessages.findIndex((m) => m.id === focusedId) + 1
+                : -1;
+            const target = jump ? visibleMessages.findIndex((m) => m.id === jump.id) + 1 : -1;
+            return [
+                ...new Set([...indexes, ...[focused, target].filter((index) => index > 0)]),
+            ].sort((a, b) => a - b);
         },
     });
     // Measurements above the reading position must compensate even while
@@ -417,29 +406,6 @@ function ChatMessageList({
                                 !previous ||
                                 showDate ||
                                 messageTime(previous.created) !== messageTime(m.created);
-                            const shown = inlineReplies(m, replies);
-                            const composing = inlineThread === m.id && !!renderInlineComposer;
-                            const shared = {
-                                permission,
-                                state,
-                                user,
-                                color,
-                                dm,
-                                download,
-                                act,
-                                api,
-                                setModal,
-                                setEdit,
-                                onReply,
-                                onOpenThread,
-                                thread,
-                                notify,
-                                retentionUnit,
-                                messageAvatars,
-                                showRoleColors,
-                                currentVoiceChannel,
-                                onJoinVoice,
-                            };
                             return (
                                 <div
                                     key={item.key}
@@ -466,31 +432,27 @@ function ChatMessageList({
                                         </div>
                                     )}
                                     <ChatMessage
-                                        {...shared}
                                         message={m}
                                         showTime={showTime}
-                                        repliesShown={!!shown}
+                                        permission={permission}
+                                        state={state}
+                                        user={user}
+                                        color={color}
+                                        dm={dm}
+                                        download={download}
+                                        act={act}
+                                        api={api}
+                                        setModal={setModal}
+                                        setEdit={setEdit}
+                                        onReply={onReply}
+                                        thread={thread}
+                                        notify={notify}
+                                        retentionUnit={retentionUnit}
+                                        messageAvatars={messageAvatars}
+                                        showRoleColors={showRoleColors}
+                                        currentVoiceChannel={currentVoiceChannel}
+                                        onJoinVoice={onJoinVoice}
                                     />
-                                    {(!!shown?.length || composing) && (
-                                        <div
-                                            className={`inline-thread inline-thread-${messageAvatarMode(messageAvatars)}`}
-                                        >
-                                            {shown?.map((reply, index) => (
-                                                <ChatMessage
-                                                    {...shared}
-                                                    key={reply.id}
-                                                    message={reply}
-                                                    inlineParent={m}
-                                                    showTime={
-                                                        messageTime(
-                                                            (shown[index - 1] ?? m).created,
-                                                        ) !== messageTime(reply.created)
-                                                    }
-                                                />
-                                            ))}
-                                            {composing && renderInlineComposer(m, !shown)}
-                                        </div>
-                                    )}
                                 </div>
                             );
                         })()
@@ -535,7 +497,6 @@ export function ChatMessage({
     setModal,
     setEdit,
     onReply,
-    onOpenThread,
     messageAvatars,
     showRoleColors,
     currentVoiceChannel,
@@ -544,8 +505,6 @@ export function ChatMessage({
     notify,
     retentionUnit,
     showTime = true,
-    inlineParent,
-    repliesShown = false,
 }: Pick<
     React.ComponentProps<typeof ChatMessageList>,
     | 'messageAvatars'
@@ -563,42 +522,19 @@ export function ChatMessage({
     | 'setModal'
     | 'setEdit'
     | 'onReply'
-    | 'onOpenThread'
     | 'thread'
     | 'notify'
     | 'retentionUnit'
-> & {
-    message: Message;
-    showTime?: boolean;
-    // Set on a reply shown under its thread's first message.
-    inlineParent?: Message;
-    // The thread's replies already show under this message.
-    repliesShown?: boolean;
-}) {
+> & { message: Message; showTime?: boolean }) {
     const u = m.author ? user(m.author) : undefined;
     const avatars = messageAvatarMode(messageAvatars);
-    // Replies under a message use the compact size, keeping them below it in weight.
-    const size = inlineParent && avatars === 'normal' ? 'compact' : avatars;
-    const replyTarget = inlineParent ?? m;
     const now = Date.now();
     const schedule = conversationSchedule(state, m.room),
         unit = retentionUnit ?? m.retention,
         files = hasFiles(m);
     const retention = messageRetention(schedule, unit, m.created, Boolean(m.pinned), now, files);
-    const custom = state.emojis || [];
-    const quickReactions = frequentEmoji(useEmojiUses(), custom);
-    const reacted = (emoji: string) =>
-        m.reactions.some((r) => r.emoji === emoji && r.user === state.me.id);
-    // Adding a reaction counts as using the emoji; taking one back does not.
-    const react = (emoji: string) => {
-        const adding = !reacted(emoji);
-        void act(async () => {
-            await api(`/messages/${m.id}/reaction`, 'POST', { emoji });
-            if (adding) recordEmojiUse([emoji]);
-        });
-    };
     return (
-        <article className={`message message-avatars-${size}${inlineParent ? ' reply' : ''}`}>
+        <article className={`message message-avatars-${avatars}`}>
             {avatars !== 'hidden' && <Avatar user={u} color={color(u)} />}
             <div className="message-body">
                 <div className="message-line">
@@ -716,7 +652,9 @@ export function ChatMessage({
                                     id: r.user,
                                     user: user(r.user),
                                 }))}
-                            mine={reacted(emoji)}
+                            mine={m.reactions.some(
+                                (r) => r.emoji === emoji && r.user === state.me.id,
+                            )}
                             showNames={
                                 state.reactionAuthors !== false &&
                                 state.channels.find((c) => c.id === m.room)?.reactionAuthors !==
@@ -725,35 +663,34 @@ export function ChatMessage({
                                     false
                             }
                             canReact={permission('reactions.add')}
-                            custom={custom}
-                            onReact={() => react(emoji)}
+                            custom={state.emojis || []}
+                            onReact={() =>
+                                void act(() => api(`/messages/${m.id}/reaction`, 'POST', { emoji }))
+                            }
                         />
                     ))}
                 </div>
-                {!thread && !repliesShown && !!m.replyCount && (
-                    <button
-                        className="thread-replies"
-                        onClick={() => (onOpenThread ?? onReply)?.(m)}
-                    >
+                {!thread && !!m.replyCount && (
+                    <button className="thread-replies" onClick={() => onReply?.(m)}>
                         <MessageCircle size={15} />
                         {m.replyCount} {m.replyCount === 1 ? 'reply' : 'replies'}
                     </button>
                 )}
             </div>
             <div className="message-actions">
-                {permission('reactions.add') &&
-                    quickReactions.map((emoji) => (
-                        <button
-                            key={emoji}
-                            className="quick-reaction"
-                            title={`React with ${emoji}`}
-                            aria-label={`React with ${emoji}`}
-                            aria-pressed={reacted(emoji)}
-                            onClick={() => react(emoji)}
-                        >
-                            <Emoji value={emoji} custom={custom} />
-                        </button>
-                    ))}
+                {!thread && !m.thread && onReply && (
+                    <button
+                        title="Reply in thread"
+                        aria-label="Reply in thread"
+                        disabled={
+                            !permission('threads.reply') ||
+                            (!m.replyCount && !permission('threads.create'))
+                        }
+                        onClick={() => onReply(m)}
+                    >
+                        <Reply size={16} />
+                    </button>
+                )}
                 <button
                     title="React"
                     disabled={!permission('reactions.add')}
@@ -761,19 +698,6 @@ export function ChatMessage({
                 >
                     <Smile size={16} />
                 </button>
-                {!thread && !replyTarget.thread && onReply && (
-                    <button
-                        title="Reply in thread"
-                        aria-label="Reply in thread"
-                        disabled={
-                            !permission('threads.reply') ||
-                            (!replyTarget.replyCount && !permission('threads.create'))
-                        }
-                        onClick={() => onReply(replyTarget)}
-                    >
-                        <Reply size={16} />
-                    </button>
-                )}
                 {m.poll &&
                     !m.poll.ended &&
                     (m.author === state.me.id ||

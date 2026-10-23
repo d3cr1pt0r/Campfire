@@ -30,9 +30,6 @@ import { connectionHint, pinsFor, trustStep } from './serverTrust';
 import { version as appVersion } from '../package.json';
 import { ChatComposer } from './ChatComposer';
 import { ThreadPanel } from './ThreadPanel';
-import { InlineReply } from './ThreadReply';
-import { inlineReplies } from './conversation';
-import { inlineReplyLimit } from '../shared/threads.js';
 import { PollDialog, type PollTarget } from './PollDialog';
 import { ChatMessages } from './ChatMessages';
 import type { ChatScrollPosition } from './chatScroll';
@@ -97,12 +94,12 @@ import { PresenceDot } from './PresenceDot';
 import { userStatus } from './presence';
 import { usePresence } from './usePresence';
 
-import { EmojiPicker } from './EmojiPicker';
-import { emojiInMessage, openEmojiUsage, recordEmojiUse } from './emojiUsage';
+import { Emoji } from './ChatContent';
 import { resizeImage } from './images';
 import { rememberedDevice } from './devices';
 import { useSpeaking } from './useSpeaking';
 import { formatUploadLimit, validateFileSelection } from '../shared/uploads.js';
+import { emojis as standardEmojis } from '../shared/emojis.js';
 import campfireIcon from './assets/campfire-icon.png';
 import './style.css';
 import './campfire-theme.css';
@@ -392,15 +389,6 @@ function App() {
     const [threadFocus, setThreadFocus] = useState(0);
     useEffect(() => setThread((previous) => (previous?.room === room ? previous : null)), [room]);
     useEffect(() => setThread(null), [url, token]);
-    // The short thread with a reply box open under its message.
-    const [inlineThread, setInlineThread] = useState<string | null>(null);
-    const [inlineFocus, setInlineFocus] = useState(0);
-    useEffect(() => setInlineThread(null), [room, url, token]);
-    const openThread = (message: Message) => {
-        notificationNavigation.cancel();
-        setThread(message);
-        setThreadFocus((request) => request + 1);
-    };
     const [search, setSearch] = useState(''),
         [pins, setPins] = useState(false),
         [members, setMembers] = useState(() => window.innerWidth > 1100),
@@ -530,10 +518,6 @@ function App() {
         () => publishGifFavorites({ favorites: gifFavorites, toggle: toggleGifFavorite }),
         [gifFavorites, toggleGifFavorite],
     );
-    // Recent emoji are kept on this device for each server account.
-    useEffect(() => {
-        if (state?.me.id) openEmojiUsage(storage, `emoji-usage:${url}:${state.me.id}`);
-    }, [url, state?.me.id]);
     const roomVisible =
         !!state &&
         (room.startsWith('dm:') ||
@@ -551,22 +535,6 @@ function App() {
             ? (notificationJump.parent?.id ?? notificationJump.message.id)
             : null,
     );
-    const inlineSnapshot = {
-        room,
-        messages: conversation.messages,
-        replies: conversation.replies,
-        counts: new Map(
-            conversation.messages.map((message) => [
-                message.id,
-                Math.max(
-                    message.replyCount ?? 0,
-                    conversation.replies?.get(message.id)?.length ?? 0,
-                ),
-            ]),
-        ),
-    };
-    const inlineView = useRef(inlineSnapshot);
-    inlineView.current = inlineSnapshot;
     useEffect(() => {
         if (
             state &&
@@ -791,22 +759,10 @@ function App() {
             if (seenMessages.size > 1000) seenMessages.delete(seenMessages.values().next().value!);
             const me = stateRef.current?.me;
             const preferences = prefsRef.current;
-            const inlineParent =
-                m.thread && inlineView.current.room === m.room
-                    ? inlineView.current.messages.find((parent) => parent.id === m.thread)
-                    : undefined;
-            const shownReplies = inlineParent
-                ? inlineReplies(inlineParent, inlineView.current.replies)
-                : null;
-            const inlineCount = inlineParent
-                ? (inlineView.current.counts.get(inlineParent.id) ?? 0) + 1
-                : 0;
-            if (inlineParent) inlineView.current.counts.set(inlineParent.id, inlineCount);
-            const inlineVisible = shownReplies !== null && inlineCount <= inlineReplyLimit;
             const reading = isReadingConversation(
                 m,
                 roomRef.current,
-                threadRef.current?.id === m.thread || inlineVisible ? (m.thread ?? null) : null,
+                threadRef.current?.id ?? null,
                 document.visibilityState === 'visible',
                 document.hasFocus(),
             );
@@ -1129,7 +1085,6 @@ function App() {
         await act(async () => {
             validateFileSelection(files, stateRef.current?.maxUploadBytes);
             await api('/messages', 'POST', messagePayload({ room: targetRoom, body: text }, files));
-            recordEmojiUse(emojiInMessage(text, stateRef.current?.emojis || []));
             if (roomRef.current !== targetRoom) return;
             setDraft((previous) => (previous === text ? '' : previous));
             setAttachments([]);
@@ -2205,36 +2160,9 @@ function App() {
                                     ])}
                                     onReply={(message) => {
                                         notificationNavigation.cancel();
-                                        if (!inlineReplies(message, conversation.replies))
-                                            return openThread(message);
-                                        setInlineThread(message.id);
-                                        setInlineFocus((request) => request + 1);
+                                        setThread(message);
+                                        setThreadFocus((request) => request + 1);
                                     }}
-                                    onOpenThread={openThread}
-                                    replies={conversation.replies}
-                                    inlineThread={inlineThread}
-                                    renderInlineComposer={(parent, collapsed) => (
-                                        <InlineReply
-                                            key={parent.id}
-                                            parent={parent}
-                                            collapsed={collapsed}
-                                            focusRequest={inlineFocus}
-                                            api={api}
-                                            socket={socket}
-                                            state={state}
-                                            permission={conversationPermission}
-                                            user={user}
-                                            connected={connected}
-                                            openPoll={openPoll}
-                                            formattingToolbar={formattingToolbar}
-                                            setFormattingToolbar={setFormattingToolbar}
-                                            onClose={() => setInlineThread(null)}
-                                            onMoveToPanel={() => {
-                                                setInlineThread(null);
-                                                openThread(parent);
-                                            }}
-                                        />
-                                    )}
                                     permission={conversationPermission}
                                     conversation={conversation}
                                     search={search}
@@ -2537,24 +2465,33 @@ function App() {
                                             ? 'Say it with an emoji.'
                                             : 'Add a reaction'}
                                     </h2>
-                                    <EmojiPicker
-                                        custom={state.emojis || []}
-                                        onPick={(emoji) => {
-                                            if (modal === 'emoji') {
-                                                setDraft((d) => appendText(d, emoji));
-                                                setModal(null);
-                                            } else
-                                                void act(async () => {
-                                                    await api(
-                                                        `/messages/${modal.split(':')[1]}/reaction`,
-                                                        'POST',
-                                                        { emoji },
-                                                    );
-                                                    recordEmojiUse([emoji]);
-                                                    setModal(null);
-                                                });
-                                        }}
-                                    />
+                                    <div className="emoji-picker">
+                                        {[
+                                            ...standardEmojis,
+                                            ...(state.emojis || []).map((e) => `:${e.name}:`),
+                                        ].map((emoji) => (
+                                            <button
+                                                key={emoji}
+                                                onClick={() => {
+                                                    if (modal === 'emoji') {
+                                                        setDraft((d) => appendText(d, emoji));
+                                                        setModal(null);
+                                                    } else
+                                                        void act(async () => {
+                                                            await api(
+                                                                `/messages/${modal.split(':')[1]}/reaction`,
+                                                                'POST',
+                                                                { emoji },
+                                                            );
+                                                            setModal(null);
+                                                        });
+                                                }}
+                                                title={emoji}
+                                            >
+                                                <Emoji value={emoji} custom={state.emojis || []} />
+                                            </button>
+                                        ))}
+                                    </div>
                                     <button
                                         className="secondary"
                                         onClick={() => openSettings('emojis')}

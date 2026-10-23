@@ -139,15 +139,6 @@ test('message jumps load bounded surrounding history with correct pagination and
         [reply.id],
     );
     const privateRoom = canonicalRoom(`dm:${f.owner.user.id}:${f.member.user.id}`);
-    const anchoredParent = await f.api(
-        f.member,
-        `/messages?room=general&around=${target.id}&limit=21`,
-    );
-    assert.deepEqual(
-        anchoredParent.replies.map((message) => message.id),
-        [reply.id],
-        'notification jumps preserve short inline threads in their surrounding history',
-    );
     const dm = await f.api(f.owner, '/messages', 'POST', {
         room: privateRoom,
         body: 'Private target',

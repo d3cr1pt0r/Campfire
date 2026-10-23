@@ -544,39 +544,6 @@ app.whenReady()
             'DM context action clears only the selected conversation',
         );
 
-        const inlineRoot = await ownerApi('/messages', 'POST', {
-            room: 'general',
-            body: 'Merged inline notification behavior',
-        });
-        await wait(
-            `!!document.querySelector('[data-message-id="${inlineRoot.id}"]')`,
-            'new inline thread parent is visible',
-        );
-        await pause(800);
-        const beforeInline = await js('window.__notificationAudio.tones');
-        for (let i = 1; i <= 3; i++) {
-            await send('Merged inline reply ' + i, 'general', inlineRoot.id);
-            await wait(
-                `document.querySelector('[data-message-id="${inlineRoot.id}"] .inline-thread')?.textContent.includes('Merged inline reply ${i}') && !(${count})`,
-                'visible inline reply ' + i + ' stays silent and does not add a notification',
-            );
-        }
-        assert.equal(await js('window.__notificationAudio.tones'), beforeInline);
-        const fourthInline = await send(
-            'Fourth reply requires the thread panel',
-            'general',
-            inlineRoot.id,
-        );
-        await wait(
-            `${count} === '1' && !document.querySelector('[data-message-id="${inlineRoot.id}"] .inline-thread')`,
-            'reply beyond the inline limit retains its notification',
-        );
-        await js(`${general}.click()`);
-        await wait(
-            `!(${count}) && ${pinged(fourthInline.id)} && !!document.querySelector('.thread-panel')`,
-            'notification traversal still opens and highlights a thread that grew beyond the inline limit',
-        );
-
         win.destroy();
         clearTimeout(deadline);
         app.exit(0);
