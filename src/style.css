@@ -12,8 +12,20 @@
     font-weight: 100 900;
     font-display: swap;
 }
+/* Noto Color Emoji, so every member sees the same emoji (licence beside the font). The
+   range leaves digits, #, *, ©, ® and ™ to the text font; it loads with the first emoji. */
+@font-face {
+    font-family: 'Campfire Emoji';
+    src: url('./assets/fonts/noto-color-emoji.woff2') format('woff2');
+    font-display: swap;
+    unicode-range:
+        U+200D, U+203C, U+2049, U+20E3, U+2139, U+2194-2199, U+21A9-21AA, U+231A-231B, U+2328,
+        U+23CF, U+23E9-23F3, U+23F8-23FA, U+24C2, U+25AA-25AB, U+25B6, U+25C0, U+25FB-25FE,
+        U+2600-27BF, U+2934-2935, U+2B05-2B07, U+2B1B-2B1C, U+2B50, U+2B55, U+3030, U+303D, U+3297,
+        U+3299, U+FE0F, U+1F000-1FAFF, U+E0020-E007F;
+}
 :root {
-    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-ui: 'Campfire Emoji', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-family: var(--font-ui);
     color: #f0ece8;
     background: #201a17;
@@ -2066,12 +2078,15 @@ small {
     min-height: 26px;
 }
 .emoji-picker {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+    display: block;
     max-height: 48vh;
     overflow-y: auto;
+    margin: 12px 0 16px;
+}
+.emoji-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
     gap: 5px;
-    margin: 16px 0;
 }
 .emoji-picker button {
     padding: 7px;
@@ -3224,12 +3239,67 @@ button:disabled {
 .thread-replies:hover {
     text-decoration: underline;
 }
+/* Short threads sit under their message, indented to its text column. */
+.inline-thread {
+    --reply-indent: 36px;
+    padding-bottom: 4px;
+}
+.inline-thread-normal {
+    --reply-indent: 46px;
+}
+.inline-thread-hidden {
+    --reply-indent: 24px;
+}
+.inline-thread > .message,
+.inline-reply {
+    padding-left: var(--reply-indent);
+}
+.inline-thread .message-meta button {
+    font-size: 14px;
+}
+.inline-reply {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    max-width: 820px;
+    padding-right: 30px;
+}
+.inline-reply-box {
+    flex: 1;
+    min-width: 0;
+}
+.inline-reply .composer-wrap {
+    padding: 4px 0 6px;
+}
+.inline-reply-close {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    margin-top: 12px;
+    padding: 6px;
+    color: var(--muted);
+}
+.inline-reply .thread-emoji-picker {
+    padding: 4px 0;
+}
+.inline-reply .emoji-picker {
+    max-height: 200px;
+    margin-bottom: 0;
+}
+.inline-reply .emoji-grid {
+    grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+}
 .thread-emoji-picker {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
     padding: 8px 14px;
-    max-height: 220px;
-    overflow-y: auto;
 }
 .thread-panel .emoji-picker {
+    max-height: 200px;
+    margin-bottom: 0;
+}
+.thread-panel .emoji-grid {
     grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
 }
 @media (max-width: 1100px) {

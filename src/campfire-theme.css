@@ -16,7 +16,8 @@
     --nav-muted: #ae9f8c;
     --border: var(--line);
     --font-code:
-        ui-monospace, 'Cascadia Mono', 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+        'Campfire Emoji', ui-monospace, 'Cascadia Mono', 'Cascadia Code', Consolas, 'SF Mono',
+        Menlo, monospace;
     --code-bg: #00000038;
     --code-ink: #f0c48f;
     --warning: #f2b84b;
@@ -4604,5 +4605,53 @@ label,
     }
     .channel-tree-notifications .tree-category-name {
         flex-basis: calc(100% - 60px);
+    }
+}
+
+/* Emoji picker search and sections, and the member's most used emoji beside the composer
+   and in message actions. */
+.emoji-picker-panel {
+    flex: 1;
+    min-width: 0;
+}
+.emoji-search {
+    width: 100%;
+    margin-top: 4px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+.emoji-picker section + section {
+    margin-top: 12px;
+}
+.emoji-picker h3 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+}
+.emoji-empty {
+    margin: 8px 2px;
+    color: var(--muted);
+    font-size: 13px;
+}
+.message-actions .quick-reaction {
+    font-size: 17px;
+    line-height: 1;
+}
+.message-actions .quick-reaction[aria-pressed='true'] {
+    background: var(--soft-accent);
+}
+.composer > .composer-emoji {
+    font-size: 20px;
+    line-height: 1;
+}
+.composer-wrap {
+    container-type: inline-size;
+}
+/* Narrow composers keep their room for typing. */
+@container (max-width: 480px) {
+    .composer > .composer-emoji {
+        display: none;
     }
 }
