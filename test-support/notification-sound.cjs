@@ -454,8 +454,18 @@ app.whenReady()
         );
         await js(`${general}.click(); ${general}.click()`);
         await wait(
-            `${count} === '2' && ${pinged(reply.id)} && !!document.querySelector('.thread-panel')`,
-            'rapid channel clicks traverse the next message then open and highlight its thread reply',
+            `${count} === '2' && ${pinged(reply.id)} && ${pinged(root.id)} && !!document.querySelector('.thread-panel')`,
+            'rapid channel clicks highlight both the thread reply and its original channel message',
+        );
+        assert.equal(
+            await js(`(() => {
+                const node = document.querySelector('.chat-area .message-ping[data-message-id="${root.id}"]');
+                const bounds = node?.getBoundingClientRect();
+                const viewport = node?.closest('.messages')?.getBoundingClientRect();
+                return !!bounds && !!viewport && bounds.top < viewport.bottom && bounds.bottom > viewport.top;
+            })()`),
+            true,
+            'the original message is scrolled into the main chat viewport',
         );
         await fs.writeFile(
             path.join(process.env.MEMBER_OUTPUT, 'notification-thread-traversal.png'),

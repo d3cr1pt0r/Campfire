@@ -2141,14 +2141,16 @@ function App() {
                                 )}
                                 <ChatMessages
                                     jump={
-                                        !search &&
-                                        !pins &&
-                                        !notificationJump?.message.thread &&
-                                        notificationJump?.message.room === room
-                                            ? notificationNavigation.messageJump
+                                        !search && !pins && notificationJump?.message.room === room
+                                            ? (notificationNavigation.parentJump ??
+                                              notificationNavigation.messageJump)
                                             : undefined
                                     }
-                                    onJumpShown={notificationNavigation.shown}
+                                    onJumpShown={
+                                        notificationJump?.parent
+                                            ? notificationNavigation.parentShown
+                                            : notificationNavigation.shown
+                                    }
                                     onJumpFailed={notificationNavigation.failed}
                                     messageAvatars={prefs.messageAvatars}
                                     showRoleColors={prefs.showRoleColors}

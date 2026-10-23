@@ -13,6 +13,7 @@ export function useNotificationNavigation(
     const serial = useRef(0);
     const pending = useRef<{
         request: number;
+        remaining: Set<'message' | 'parent'>;
         resolve: () => void;
         reject: (error: Error) => void;
     } | null>(null);
@@ -34,7 +35,12 @@ export function useNotificationNavigation(
                             if (error) reject(error);
                             else resolve();
                         };
-                        pending.current = { request, resolve: () => done(), reject: done };
+                        pending.current = {
+                            request,
+                            remaining: new Set(target.parent ? ['message', 'parent'] : ['message']),
+                            resolve: () => done(),
+                            reject: done,
+                        };
                         navigate(target.message.room, target.parent);
                         setJump({ ...target, request });
                     }),
@@ -53,15 +59,23 @@ export function useNotificationNavigation(
             navigation.cancel();
         };
     }, [navigation]);
-    const shown = useCallback((request: number) => {
-        if (pending.current?.request === request) pending.current.resolve();
+    // A thread notification is ready only after both its reply and original
+    // message are visible, so queued clicks cannot skip the parent's highlight.
+    const markShown = useCallback((request: number, part: 'message' | 'parent') => {
+        const current = pending.current;
+        if (current?.request !== request) return;
+        current.remaining.delete(part);
+        if (!current.remaining.size) current.resolve();
     }, []);
+    const shown = useCallback((request: number) => markShown(request, 'message'), [markShown]);
+    const parentShown = useCallback((request: number) => markShown(request, 'parent'), [markShown]);
     const failed = useCallback((request: number, error: Error) => {
         if (pending.current?.request === request) pending.current.reject(error);
     }, []);
     return {
         jump,
         shown,
+        parentShown,
         failed,
         cancel: navigation.cancel,
         open: (room: string, unread: boolean) => {
@@ -72,6 +86,9 @@ export function useNotificationNavigation(
                 navigate(room, null);
             }
         },
+        parentJump: jump?.parent
+            ? ({ id: jump.parent.id, request: jump.request } satisfies MessageJump)
+            : undefined,
         messageJump: jump
             ? ({ id: jump.message.id, request: jump.request } satisfies MessageJump)
             : undefined,
