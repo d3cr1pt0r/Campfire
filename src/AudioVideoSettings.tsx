@@ -4,7 +4,7 @@ import type { Preferences, VideoAdaptation } from './types';
 import { Toggle } from './forms';
 import { MicrophoneMeter } from './MicrophoneMeter';
 import { formatMicrophoneError, openMicrophone } from './media';
-import { audioLevel } from './audioPreferences';
+import { audioLevel, speechActivation, voiceReleaseDelay } from './audioPreferences';
 import { ActivationThreshold } from './ActivationThreshold';
 import type { MicrophoneReading } from './microphoneMonitor';
 import { createNotificationSound } from './notifications';
@@ -254,6 +254,24 @@ export function AudioVideoSettings({
                         value={prefs.noise}
                         set={(value) => change('noise', value)}
                     />
+                    <label>
+                        Noise suppression engine
+                        <select
+                            value={
+                                prefs.noiseSuppressionEngine === 'chromium' ? 'chromium' : 'rnnoise'
+                            }
+                            disabled={!prefs.noise}
+                            onChange={(event) =>
+                                change(
+                                    'noiseSuppressionEngine',
+                                    event.target.value as 'chromium' | 'rnnoise',
+                                )
+                            }
+                        >
+                            <option value="chromium">Chromium</option>
+                            <option value="rnnoise">RNNoise</option>
+                        </select>
+                    </label>
                     <Toggle
                         title="Echo cancellation"
                         value={prefs.echoCancellation ?? true}
@@ -267,7 +285,8 @@ export function AudioVideoSettings({
                 </div>
                 <p className="audio-help">
                     Echo cancellation helps with speakers. Turn automatic gain off for consistent
-                    manual volume. Processing uses Chromium.
+                    manual volume. RNNoise runs locally; echo cancellation and automatic gain
+                    continue to use Chromium with either noise suppression engine.
                 </p>
                 <Toggle
                     title="Push-to-talk"
@@ -283,12 +302,78 @@ export function AudioVideoSettings({
                     set={(value) => change('voiceActivation', value)}
                 />
                 {prefs.voiceActivation && (
-                    <ActivationThreshold
-                        value={prefs.voiceThreshold}
-                        reading={microphoneReading}
-                        disabled={prefs.pushToTalk}
-                        onChange={(value) => change('voiceThreshold', value)}
-                    />
+                    <>
+                        <label>
+                            Activation method
+                            <select
+                                value={prefs.voiceActivationMode ?? 'level'}
+                                disabled={prefs.pushToTalk}
+                                onChange={(event) =>
+                                    change(
+                                        'voiceActivationMode',
+                                        event.target.value as 'level' | 'speech',
+                                    )
+                                }
+                            >
+                                <option value="level">Microphone volume</option>
+                                <option
+                                    value="speech"
+                                    disabled={
+                                        !prefs.noise || prefs.noiseSuppressionEngine === 'chromium'
+                                    }
+                                >
+                                    Speech detection (RNNoise)
+                                </option>
+                            </select>
+                        </label>
+                        {speechActivation(prefs) ? (
+                            <>
+                                <AudioSlider
+                                    label="Speech sensitivity"
+                                    value={audioLevel(prefs.speechSensitivity, 0.5)}
+                                    disabled={prefs.pushToTalk}
+                                    change={(value) => change('speechSensitivity', value)}
+                                />
+                                <p className="audio-help">
+                                    {prefs.pushToTalk
+                                        ? 'Voice activation is bypassed while push-to-talk is enabled.'
+                                        : 'Higher sensitivity accepts less certain speech. Lower sensitivity rejects more non-speech sounds but can miss quiet words.'}
+                                </p>
+                            </>
+                        ) : (
+                            <>
+                                {prefs.voiceActivationMode === 'speech' && (
+                                    <p className="audio-help">
+                                        Speech detection needs RNNoise noise suppression. Microphone
+                                        volume activation is used until RNNoise is enabled.
+                                    </p>
+                                )}
+                                <ActivationThreshold
+                                    value={prefs.voiceThreshold}
+                                    reading={microphoneReading}
+                                    disabled={prefs.pushToTalk}
+                                    onChange={(value) => change('voiceThreshold', value)}
+                                />
+                            </>
+                        )}
+                        <details className="account-details">
+                            <summary>Advanced voice activation</summary>
+                            <AudioSlider
+                                label="Speech release delay"
+                                value={voiceReleaseDelay(prefs.voiceReleaseDelay)}
+                                min={0}
+                                max={1000}
+                                step={10}
+                                suffix=" ms"
+                                disabled={prefs.pushToTalk}
+                                change={(value) => change('voiceReleaseDelay', value)}
+                            />
+                            <p className="audio-help">
+                                Keeps the microphone open briefly after speech to preserve word
+                                endings. Applies to both activation methods.
+                            </p>
+                        </details>
+                    </>
                 )}
                 <MicrophoneMeter
                     onReading={setMicrophoneReading}

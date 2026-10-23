@@ -105,7 +105,7 @@ export function createApp({
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader(
             'Content-Security-Policy',
-            `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; img-src 'self' data: blob: ${klipyMediaHosts.map((host) => `https://${host}`).join(' ')}; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
+            `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; img-src 'self' data: blob: ${klipyMediaHosts.map((host) => `https://${host}`).join(' ')}; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
         );
         if (req.method === 'OPTIONS') return res.sendStatus(204);
         next();

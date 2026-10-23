@@ -44,7 +44,7 @@ export function MicrophoneMeter({
         setError('');
         try {
             // Run inside the button's user gesture, before capture/effects await.
-            const current = new AudioContext();
+            const current = new AudioContext({ sampleRate: 48000 });
             context.current = current;
             void current.resume().catch((reason) => {
                 if (context.current === current) setError(analysisError(reason));
@@ -104,6 +104,7 @@ export function MicrophoneMeter({
         preferences.input,
         preferences.inputLabel,
         preferences.noise,
+        preferences.noiseSuppressionEngine,
         preferences.echoCancellation,
         preferences.autoGainControl,
         preferences.microphoneVolume,

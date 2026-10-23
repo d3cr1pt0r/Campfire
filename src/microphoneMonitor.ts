@@ -4,7 +4,13 @@ import { audioLevel } from './audioPreferences.ts';
 
 type InputPreferences = Pick<
     Preferences,
-    'input' | 'inputLabel' | 'noise' | 'echoCancellation' | 'autoGainControl' | 'microphoneVolume'
+    | 'input'
+    | 'inputLabel'
+    | 'noise'
+    | 'noiseSuppressionEngine'
+    | 'echoCancellation'
+    | 'autoGainControl'
+    | 'microphoneVolume'
 >;
 export type MicrophoneLevel = {
     percent: number;
@@ -55,7 +61,7 @@ export function createMicrophoneMonitor({
     onReading,
     onError,
     onFallback,
-    createContext = () => new AudioContext(),
+    createContext = () => new AudioContext({ sampleRate: 48000 }),
     openInput = openMicrophone,
     context: sharedContext,
     schedule = (callback) => globalThis.requestAnimationFrame(callback),
@@ -67,6 +73,7 @@ export function createMicrophoneMonitor({
     let input: MediaStream | null = activeStream || null;
     let source: MediaStreamAudioSourceNode | null = null,
         splitter: ChannelSplitterNode | null = null;
+    let denoiser: (AudioWorkletNode & { destroy: () => void }) | undefined;
     const analysers: AnalyserNode[] = [];
     const owned = !activeStream;
     const stop = () => {
@@ -74,6 +81,8 @@ export function createMicrophoneMonitor({
         stopped = true;
         if (frame !== null) cancel(frame);
         source?.disconnect();
+        denoiser?.destroy();
+        denoiser?.disconnect();
         splitter?.disconnect();
         analysers.forEach((analyser) => analyser.disconnect());
         if (owned) input?.getTracks().forEach((track) => track.stop());
@@ -107,19 +116,37 @@ export function createMicrophoneMonitor({
             if (!track || track.readyState === 'ended')
                 throw Object.assign(new Error(''), { name: 'NotFoundError' });
             source = context.createMediaStreamSource(input);
+            let measuredSource: AudioNode = source;
+            if (owned && preferences.noise && preferences.noiseSuppressionEngine !== 'chromium') {
+                const { createRnnoise } = await import('./rnnoise');
+                denoiser = await createRnnoise(context);
+                if (stopped) {
+                    denoiser.destroy();
+                    denoiser.disconnect();
+                    return;
+                }
+                denoiser.onprocessorerror = () => {
+                    stop();
+                    onError(new Error('RNNoise processing failed. Restart the microphone test.'));
+                };
+                source.connect(denoiser);
+                measuredSource = denoiser;
+            }
             // AnalyserNode downmixes its input to mono. Opposite-polarity stereo
             // channels can cancel, so measure each channel before that downmix.
-            const channels = Math.max(1, Math.min(8, track.getSettings?.().channelCount || 2));
+            const channels = denoiser
+                ? 1
+                : Math.max(1, Math.min(8, track.getSettings?.().channelCount || 2));
             if (channels > 1) {
                 splitter = context.createChannelSplitter(channels);
-                source.connect(splitter);
+                measuredSource.connect(splitter);
             }
             for (let channel = 0; channel < channels; channel++) {
                 const analyser = context.createAnalyser();
                 analyser.fftSize = 2048;
                 analysers.push(analyser);
                 if (splitter) splitter.connect(analyser, channel);
-                else source.connect(analyser);
+                else measuredSource.connect(analyser);
             }
             // Analyser outputs may remain unconnected; never play mic audio.
             const samples = new Float32Array(2048);

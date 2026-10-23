@@ -53,7 +53,7 @@ function fixture() {
     let opened = 0,
         fallbacks = 0;
     const options = {
-        preferences: { input: '', noise: true },
+        preferences: { input: '', noise: true, noiseSuppressionEngine: 'chromium' },
         createContext: () => context,
         openInput: async () => {
             opened++;

@@ -35,6 +35,8 @@ try {
     const env = {
         ...process.env,
         AUDIO_WORKLET: worklet ? `/assets/${worklet}` : '',
+        RNNOISE_WORKLET: `/assets/${assets.find((name) => name.startsWith('rnnoise.worklet-'))}`,
+        RNNOISE_WASM: `/assets/${assets.find((name) => name.startsWith('rnnoise_simd-') && name.endsWith('.wasm'))}`,
         AUDIO_ORIGIN: `http://127.0.0.1:${service.http.address().port}`,
         AUDIO_RENDERER: `http://127.0.0.1:${port}`,
         AUDIO_ACCOUNTS: JSON.stringify(accounts),

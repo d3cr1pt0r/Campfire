@@ -3,11 +3,16 @@ import type { Preferences } from './types';
 
 type CapturePreferences = Pick<
     Preferences,
-    'input' | 'inputLabel' | 'noise' | 'echoCancellation' | 'autoGainControl'
+    | 'input'
+    | 'inputLabel'
+    | 'noise'
+    | 'noiseSuppressionEngine'
+    | 'echoCancellation'
+    | 'autoGainControl'
 >;
 export function microphoneConstraints(preferences: CapturePreferences) {
     return {
-        noiseSuppression: preferences.noise,
+        noiseSuppression: preferences.noise && preferences.noiseSuppressionEngine === 'chromium',
         echoCancellation: preferences.echoCancellation ?? true,
         autoGainControl: preferences.autoGainControl ?? true,
     };

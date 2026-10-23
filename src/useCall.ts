@@ -149,11 +149,15 @@ export function useCall(
             );
     }, [
         prefs.noise,
+        prefs.noiseSuppressionEngine,
         prefs.echoCancellation,
         prefs.autoGainControl,
         prefs.microphoneVolume,
         prefs.voiceActivation,
         prefs.voiceThreshold,
+        prefs.voiceActivationMode,
+        prefs.speechSensitivity,
+        prefs.voiceReleaseDelay,
         prefs.pushToTalk,
         channel,
     ]);

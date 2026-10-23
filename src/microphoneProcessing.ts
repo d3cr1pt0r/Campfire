@@ -1,16 +1,19 @@
 import { openMicrophone, microphoneConstraints } from './media';
 import voiceGateUrl from './voiceGate.worklet.js?url&no-inline';
-import { audioLevel, voiceThreshold } from './audioPreferences';
+import { audioLevel, voiceGateSettings } from './audioPreferences';
 import type { Preferences } from './types';
+import type { createRnnoise } from './rnnoise';
 
 export async function openProcessedMicrophone(preferences: Preferences) {
     // Resume during the initiating gesture, before requesting capture.
-    const context = new AudioContext();
+    const context = new AudioContext({ sampleRate: 48000 });
     const resumed = context.resume();
+    const openDenoiser = async () => (await import('./rnnoise')).createRnnoise(context);
     let raw: MediaStream | undefined;
     let source: MediaStreamAudioSourceNode | undefined;
     let gain: GainNode | undefined;
     let gate: AudioWorkletNode | undefined;
+    let denoiser: Awaited<ReturnType<typeof createRnnoise>> | undefined;
     let destination: MediaStreamAudioDestinationNode | undefined;
     let monitor: MediaStreamAudioDestinationNode | undefined;
     let stopped = false;
@@ -25,12 +28,24 @@ export async function openProcessedMicrophone(preferences: Preferences) {
         destination?.stream.getTracks().forEach((track) => track.stop());
         monitor?.stream.getTracks().forEach((track) => track.stop());
         source?.disconnect();
+        denoiser?.destroy();
+        denoiser?.disconnect();
         gain?.disconnect();
         gate?.disconnect();
         if (gate) gate.port.close();
         void context.close().catch(() => {});
     };
-    let constraints = JSON.stringify(microphoneConstraints(preferences));
+    const usesRnnoise = (prefs: Preferences) =>
+        prefs.noise && prefs.noiseSuppressionEngine !== 'chromium';
+    const signatureFor = (prefs: Preferences) =>
+        JSON.stringify([microphoneConstraints(prefs), usesRnnoise(prefs)]);
+    let constraints = signatureFor(preferences);
+    const connectSource = () => {
+        if (denoiser) {
+            source!.connect(denoiser).connect(gain!);
+            denoiser.connect(gate!, 1, 1);
+        } else source!.connect(gain!);
+    };
     let queue = Promise.resolve();
     const update = (next: Preferences) => {
         if (stopped) return Promise.resolve();
@@ -39,18 +54,24 @@ export async function openProcessedMicrophone(preferences: Preferences) {
             context.currentTime,
             0.01,
         );
-        gate!.port.postMessage({
-            enabled: !!next.voiceActivation && !next.pushToTalk,
-            threshold: voiceThreshold(next.voiceThreshold),
-        });
-        const requested = microphoneConstraints(next);
-        const signature = JSON.stringify(requested);
+        gate!.port.postMessage(voiceGateSettings(next));
+        const signature = signatureFor(next);
         if (signature === constraints) return queue;
         constraints = signature;
         queue = queue
             .catch(() => {})
             .then(async () => {
                 if (stopped) return;
+                const nextDenoiser = usesRnnoise(next) ? await openDenoiser() : undefined;
+                if (stopped) {
+                    nextDenoiser?.destroy();
+                    nextDenoiser?.disconnect();
+                    return;
+                }
+                denoiser?.destroy();
+                denoiser?.disconnect();
+                denoiser = nextDenoiser;
+                if (denoiser) denoiser.onprocessorerror = stop;
                 // Chromium can reuse a running capture source with its old processing.
                 // Release it before reopening; the destination track stays attached to peers.
                 raw!.getAudioTracks()[0].removeEventListener('ended', stop);
@@ -67,7 +88,7 @@ export async function openProcessedMicrophone(preferences: Preferences) {
                 }
                 raw = replacement.stream;
                 source = context.createMediaStreamSource(raw);
-                source.connect(gain!);
+                connectSource();
                 raw.getAudioTracks()[0].addEventListener('ended', stop, { once: true });
             })
             .catch((error) => {
@@ -86,11 +107,16 @@ export async function openProcessedMicrophone(preferences: Preferences) {
         raw = result.stream;
         await ready;
         source = context.createMediaStreamSource(raw);
+        if (usesRnnoise(preferences)) {
+            denoiser = await openDenoiser();
+            denoiser.onprocessorerror = stop;
+        }
         gain = context.createGain();
         gain.gain.value = audioLevel(preferences.microphoneVolume, 1, 2);
-        gate = new AudioWorkletNode(context, 'campfire-voice-gate');
+        gate = new AudioWorkletNode(context, 'campfire-voice-gate', { numberOfInputs: 2 });
         destination = context.createMediaStreamDestination();
-        source.connect(gain).connect(gate).connect(destination);
+        connectSource();
+        gain.connect(gate).connect(destination);
         monitor = context.createMediaStreamDestination();
         gain.connect(monitor);
         raw.getAudioTracks()[0].addEventListener('ended', stop, { once: true });

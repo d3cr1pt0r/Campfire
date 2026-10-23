@@ -3,7 +3,7 @@ const { readFile } = require('node:fs/promises');
 const path = require('node:path');
 // KLIPY's GIF media hosts, as listed in shared/klipy.js.
 const CSP =
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: http: ws:; img-src 'self' data: blob: https://static.klipy.com https://static1.klipy.com https://static2.klipy.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'";
+    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: http: ws:; img-src 'self' data: blob: https://static.klipy.com https://static1.klipy.com https://static2.klipy.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'";
 const mime = {
     '.html': 'text/html; charset=utf-8',
     '.js': 'text/javascript; charset=utf-8',
@@ -12,6 +12,7 @@ const mime = {
     '.png': 'image/png',
     '.ico': 'image/x-icon',
     '.woff2': 'font/woff2',
+    '.wasm': 'application/wasm',
 };
 
 // UI asset host only: community APIs run on the separately hosted server.

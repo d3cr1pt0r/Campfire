@@ -95,6 +95,7 @@ test('desktop saves DM navigation separately for each server and account', () =>
 test('desktop asset host serves UI with CSP and has no community API', async () => {
     const directory = mkdtempSync(path.join(tmpdir(), 'campfire-assets-'));
     writeFileSync(path.join(directory, 'index.html'), '<h1>Campfire</h1>');
+    writeFileSync(path.join(directory, 'rnnoise.wasm'), Buffer.from([0, 97, 115, 109]));
     const server = createRendererServer(directory);
     server.address = () => ({ port: 40509 });
     const request = (url, host = '127.0.0.1:40509', method = 'GET') =>
@@ -123,6 +124,10 @@ test('desktop asset host serves UI with CSP and has no community API', async () 
         assert.equal(page.status, 200);
         assert.match(page.body.toString(), /Campfire/);
         assert.match(page.headers['Content-Security-Policy'], /script-src 'self'/);
+        assert.match(page.headers['Content-Security-Policy'], /'wasm-unsafe-eval'/);
+        const wasm = await request('/rnnoise.wasm');
+        assert.equal(wasm.status, 200);
+        assert.equal(wasm.headers['Content-Type'], 'application/wasm');
         // Desktop HTTP is gated by the main-process per-origin policy, rather than CSP.
         const connect = page.headers['Content-Security-Policy']
             .match(/connect-src ([^;]+)/)[1]

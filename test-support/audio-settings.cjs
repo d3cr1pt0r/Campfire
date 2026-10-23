@@ -95,7 +95,12 @@ async function client(account, name) {
         };
         const Gate=window.AudioWorkletNode;
         window.AudioWorkletNode=class extends Gate {
-            constructor(...args){super(...args);window.__audio.gates.push(this);}
+            constructor(...args){
+                super(...args);this.processorName=args[1];this.messages=[];
+                const post=this.port.postMessage.bind(this.port);
+                this.port.postMessage=(data,...rest)=>{this.messages.push(data);return post(data,...rest)};
+                window.__audio.gates.push(this);
+            }
         };
         const Peer=window.RTCPeerConnection;
         window.RTCPeerConnection=class extends Peer {
@@ -111,7 +116,7 @@ async function client(account, name) {
     await win.loadURL(renderer);
     await js(
         win,
-        `localStorage.setItem('connection',JSON.stringify(${JSON.stringify({ url: origin, token: account.token })}));localStorage.setItem('preferences',JSON.stringify({theme:'ember',noise:false,echoCancellation:false,autoGainControl:false,sounds:false,messageSounds:false,autoIdle:false}));`,
+        `localStorage.setItem('connection',JSON.stringify(${JSON.stringify({ url: origin, token: account.token })}));localStorage.setItem('preferences',JSON.stringify({theme:'ember',noise:false,noiseSuppressionEngine:'chromium',echoCancellation:false,autoGainControl:false,sounds:false,messageSounds:false,autoIdle:false}));`,
     );
     await win.reload();
     await wait(
@@ -130,6 +135,24 @@ app.whenReady()
         const alice = await client(accounts[0], 'alice'),
             bob = await client(accounts[1], 'bob');
         await openSettings(alice);
+        if (process.env.AUDIO_RNNOISE_ONLY) {
+            await require('./rnnoise-check.cjs')({
+                alice,
+                bob,
+                js,
+                click,
+                wait,
+                prefs,
+                openSettings,
+                closeSettings,
+                pause,
+                slider,
+            });
+            assert.deepEqual(failures, []);
+            clearTimeout(deadline);
+            app.exit(0);
+            return;
+        }
         if (process.env.AUDIO_BASELINE) {
             for (const theme of ['ember', 'canvas']) {
                 await js(

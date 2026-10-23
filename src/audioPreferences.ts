@@ -10,6 +10,29 @@ export function voiceThreshold(value: number | undefined) {
         ? Math.max(-60, Math.min(0, value))
         : -45;
 }
+export function voiceReleaseDelay(value: number | undefined) {
+    return typeof value === 'number' && Number.isFinite(value)
+        ? Math.max(0, Math.min(1000, value))
+        : 200;
+}
+export function speechActivation(
+    prefs: Pick<Preferences, 'noise' | 'noiseSuppressionEngine' | 'voiceActivationMode'>,
+) {
+    return (
+        prefs.noise &&
+        prefs.noiseSuppressionEngine !== 'chromium' &&
+        prefs.voiceActivationMode === 'speech'
+    );
+}
+export function voiceGateSettings(prefs: Preferences) {
+    return {
+        enabled: !!prefs.voiceActivation && !prefs.pushToTalk,
+        mode: speechActivation(prefs) ? 'speech' : 'level',
+        threshold: voiceThreshold(prefs.voiceThreshold),
+        speechThreshold: 0.95 - 0.9 * audioLevel(prefs.speechSensitivity, 0.5),
+        releaseMs: voiceReleaseDelay(prefs.voiceReleaseDelay),
+    };
+}
 // The live marker and the activation slider share the same -60 to 0 dBFS scale.
 export function voiceThresholdPercent(decibels: number | null | undefined) {
     return typeof decibels === 'number' && Number.isFinite(decibels)

@@ -191,6 +191,7 @@ export type Preferences = {
     screenBitrate?: number;
     screenAdaptation?: VideoAdaptation;
     noise: boolean;
+    noiseSuppressionEngine?: 'chromium' | 'rnnoise';
     echoCancellation?: boolean;
     autoGainControl?: boolean;
     microphoneVolume?: number;
@@ -198,6 +199,9 @@ export type Preferences = {
     soundEffectsVolume?: number;
     voiceActivation?: boolean;
     voiceThreshold?: number;
+    voiceActivationMode?: 'level' | 'speech';
+    speechSensitivity?: number;
+    voiceReleaseDelay?: number;
     participantVolumes?: Record<string, { voice: number; stream: number }>;
     pushToTalk: boolean;
     sounds: boolean;
