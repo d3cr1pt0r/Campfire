@@ -160,14 +160,6 @@ CREATE TABLE IF NOT EXISTS conversation_reads(
     sequence INTEGER NOT NULL CHECK(sequence>=0),
     PRIMARY KEY(user,room,thread)
 );
-CREATE TABLE IF NOT EXISTS activity_acknowledgments(
-    user TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    message TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-    PRIMARY KEY(user,message)
-);
-CREATE TRIGGER IF NOT EXISTS activity_acknowledged AFTER INSERT ON activity_acknowledgments BEGIN
-    UPDATE activity_version SET version=version+1 WHERE id=1;
-END;
 CREATE TABLE IF NOT EXISTS notification_preferences(
     user TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     settings TEXT NOT NULL

@@ -1,22 +1,6 @@
 import type { Message } from './types';
-import { inlineReplyLimit } from '../shared/threads.js';
 
-// A channel page also carries the replies of its short threads.
-export type MessagePage = {
-    messages: Message[];
-    next: string | null;
-    replies?: Message[];
-    newer?: boolean;
-};
-// A short thread's replies, shown under its message. Null when the thread opens in
-// the panel instead: it is too long, the view has no inline replies, or some of its
-// replies have not arrived yet.
-export function inlineReplies(message: Message, replies: Map<string, Message[]> | null) {
-    if (!replies || message.thread) return null;
-    const loaded = replies.get(message.id) ?? [];
-    const count = Math.max(message.replyCount ?? 0, loaded.length);
-    return count <= inlineReplyLimit && loaded.length >= count ? loaded : null;
-}
+export type MessagePage = { messages: Message[]; next: string | null };
 // A message after retention removed its files and link cards, which leave placeholders.
 export const removeFiles = (message: Message): Message => ({
     ...message,
@@ -42,12 +26,11 @@ type Snapshot = {
     loading: boolean;
     loaded: boolean;
     error: string;
-    newer?: boolean;
 };
 
 export function createConversation(
     room: string,
-    load: (before: string | null, signal: AbortSignal, latest?: boolean) => Promise<MessagePage>,
+    load: (before: string | null, signal: AbortSignal) => Promise<MessagePage>,
     matches: (message: Message) => boolean = () => true,
 ) {
     let snapshot: Snapshot = { messages: [], next: null, loading: false, loaded: false, error: '' };
@@ -83,31 +66,18 @@ export function createConversation(
     const receive = (event: ConversationEvent) => {
         if (closed || (event.type === 'upsert' && event.message.room !== room)) return;
         pending?.events.push(event);
-        if (
-            snapshot.newer &&
-            event.type === 'upsert' &&
-            !snapshot.messages.some(
-                (m) => m.id === event.message.id || m.id === event.message.thread,
-            )
-        )
-            return;
         publish({ ...snapshot, messages: apply(snapshot.messages, event) });
     };
-    const request = async (older: boolean, latest = false) => {
+    const request = async (older: boolean) => {
         if (closed || (older && (pending || !snapshot.next))) return;
         pending?.controller.abort();
         const current = { controller: new AbortController(), events: [] as ConversationEvent[] };
         pending = current;
         publish({ ...snapshot, loading: true, error: '' });
         try {
-            const page = await load(
-                older ? snapshot.next : null,
-                current.controller.signal,
-                latest,
-            );
+            const page = await load(older ? snapshot.next : null, current.controller.signal);
             if (closed || pending !== current) return;
-            const received = [...page.messages, ...(page.replies ?? [])];
-            const initial = older ? [...snapshot.messages, ...received] : received;
+            const initial = older ? [...snapshot.messages, ...page.messages] : page.messages;
             let messages = [
                 ...new Map(
                     initial.filter((m) => m.room === room && matches(m)).map((m) => [m.id, m]),
@@ -115,24 +85,13 @@ export function createConversation(
             ];
             // Events that arrived after this request started win over its snapshot,
             // including edits and deletions of messages not yet loaded.
-            for (const event of current.events) {
-                if (
-                    (page.newer || (older && snapshot.newer)) &&
-                    event.type === 'upsert' &&
-                    !messages.some(
-                        (m) => m.id === event.message.id || m.id === event.message.thread,
-                    )
-                )
-                    continue;
-                messages = apply(messages, event);
-            }
+            for (const event of current.events) messages = apply(messages, event);
             publish({
                 messages: sorted(messages),
                 next: page.next,
                 loading: false,
                 loaded: true,
                 error: '',
-                ...(page.newer || (older && snapshot.newer) ? { newer: true } : {}),
             });
         } catch (error) {
             if (!closed && pending === current && !current.controller.signal.aborted)
@@ -152,7 +111,6 @@ export function createConversation(
         receive,
         reload: () => request(false),
         loadOlder: () => request(true),
-        loadLatest: () => request(false, true),
         cancel() {
             pending?.controller.abort();
             pending = null;

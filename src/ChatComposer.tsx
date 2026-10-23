@@ -62,8 +62,6 @@ type Props = {
     onGif?: (gif: Gif) => void;
     formattingToolbar: boolean;
     setFormattingToolbar: (shown: boolean) => void;
-    // Escape in the editor closes a reply box that can be dismissed.
-    onCancel?: () => void;
 };
 export function ChatComposer({
     attachments,
@@ -95,7 +93,6 @@ export function ChatComposer({
     onGif,
     formattingToolbar,
     setFormattingToolbar,
-    onCancel,
 }: Props) {
     const editor = useRef<RichEditorHandle>(null);
     const form = useRef<HTMLFormElement>(null);
@@ -255,10 +252,6 @@ export function ChatComposer({
         if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
             if (!e.ctrlKey && !e.metaKey && inCodeBlock(state)) return false;
             if (!busy) form.current?.requestSubmit();
-            return true;
-        }
-        if (e.key === 'Escape' && onCancel) {
-            onCancel();
             return true;
         }
         return false;

@@ -1,4 +1,4 @@
-import type { ActivitySnapshot, Message } from './types';
+import type { ActivitySnapshot } from './types';
 import type { ApiClient } from './api';
 
 const empty: ActivitySnapshot = { version: -1, unread: {}, latest: {} };
@@ -54,15 +54,7 @@ export function createActivityClient(api: ApiClient, fail: (error: Error) => voi
     return {
         receive,
         read,
-        acknowledge: async (message: Pick<Message, 'id' | 'room'>) => {
-            const current = generation;
-            const value = await api<ActivitySnapshot>('/activity/acknowledge', 'POST', {
-                room: message.room,
-                message: message.id,
-            });
-            if (current === generation) receive(value);
-        },
-        dismiss: (room: string, through = snapshot.latest[room]) => read(room, through, null, true),
+        dismiss: (room: string) => read(room, snapshot.latest[room], null, true),
         getSnapshot: () => snapshot,
         subscribe(listener: () => void) {
             listeners.add(listener);

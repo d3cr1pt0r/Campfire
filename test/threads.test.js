@@ -40,29 +40,16 @@ test('threads isolate history, share chat features, enforce permissions, and per
         { name: 'reply.txt', data: 'thread file' },
     ]);
     const second = await send(owner, root.id, 'Second');
-    const otherReply = await send(owner, other.id, 'Other thread');
+    await send(owner, other.id, 'Other thread');
     for (const [index, message] of [root, other, first, second].entries())
         service.db.prepare('UPDATE messages SET created=? WHERE id=?').run(index + 1, message.id);
     assert.equal(first.thread, root.id);
     assert.equal((await api(member, `/messages/${root.id}`)).replyCount, 2);
-    const channel = await api(member, '/messages?room=general');
     assert.deepEqual(
-        channel.messages.map((m) => m.id),
+        (await api(member, '/messages?room=general')).messages.map((m) => m.id),
         [root.id, other.id],
     );
-    // Threads of up to three replies bring them along, to show under their message.
-    assert.deepEqual(
-        channel.replies.map((m) => m.id),
-        [first.id, second.id, otherReply.id],
-    );
-    for (const body of ['Two', 'Three', 'Four']) await send(owner, other.id, body);
-    assert.deepEqual(
-        (await api(member, '/messages?room=general')).replies.map((m) => m.id),
-        [first.id, second.id],
-    );
-    assert.equal((await api(member, '/messages?room=general&search=Parent')).replies, undefined);
     const history = `/messages?room=general&thread=${root.id}`;
-    assert.equal((await api(member, history)).replies, undefined);
     assert.deepEqual(
         (await api(member, history)).messages.map((m) => m.id),
         [first.id, second.id],

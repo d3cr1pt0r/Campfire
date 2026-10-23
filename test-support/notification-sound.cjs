@@ -87,11 +87,7 @@ app.whenReady()
             'saved account connects without pointer or keyboard interaction',
         );
         win.hide();
-        const send = async (
-            body,
-            room = 'dm:' + [alice.user.id, bob.user.id].sort().join(':'),
-            thread = null,
-        ) => {
+        const send = async (body, room = 'dm:' + [alice.user.id, bob.user.id].sort().join(':')) => {
             const response = await fetch(origin + '/api/messages', {
                 method: 'POST',
                 headers: {
@@ -101,11 +97,9 @@ app.whenReady()
                 body: JSON.stringify({
                     room,
                     body,
-                    ...(thread ? { thread } : {}),
                 }),
             });
             assert.equal(response.status, 200);
-            return response.json();
         };
         await send('DM while the app is hidden immediately after startup');
         await wait(
@@ -414,168 +408,6 @@ app.whenReady()
         assert.equal(await js('window.__notificationAudio.tones'), 0);
         assert.equal((await ownerApi('/activity', 'GET')).unread[dmRoom], undefined);
         console.log('PASS focused DM suppression also persists its read position');
-
-        const activity = await ownerApi('/activity', 'GET');
-        for (const [room, through] of Object.entries(activity.latest)) {
-            await ownerApi('/activity/read', 'POST', { room, through, all: true });
-        }
-        const root = await ownerApi('/messages', 'POST', {
-            room: 'general',
-            body: 'Notification traversal thread',
-        });
-        const oldest = await send('Traversal oldest', 'general');
-        const second = await send('Traversal second', 'general');
-        const reply = await send('Traversal thread reply', 'general', root.id);
-        const fourth = await send('Traversal fourth', 'general');
-        const newest = await send('Traversal newest', 'general');
-        // Own messages push every pending target beyond the latest history page without
-        // introducing more notifications. The jump must fetch around its target.
-        for (let i = 0; i < 130; i++)
-            await ownerApi('/messages', 'POST', {
-                room: 'general',
-                body: 'Own history filler ' + i,
-            });
-        const general = `[...document.querySelectorAll('.nav-item.channel')].find(node=>node.textContent.startsWith('general'))`;
-        const count = `${general}?.querySelector('.count')?.textContent.trim()`;
-        const pinged = (id) => `!!document.querySelector('.message-ping[data-message-id="${id}"]')`;
-        await wait(
-            `${count} === '5'`,
-            'five pending channel notifications are retained while another conversation is open',
-        );
-        await js(`${general}.click()`);
-        await wait(
-            `${count} === '4' && ${pinged(newest.id)}`,
-            'first channel click clears only the newest notification and highlights its old-history message',
-        );
-        await js(`document.querySelector('.chat-area .jump-latest').click()`);
-        await wait(
-            `document.querySelector('.chat-area').textContent.includes('Own history filler 129') && ${count} === '4'`,
-            'Jump to latest returns from bounded history without clearing the backlog',
-        );
-        await js(`${general}.click(); ${general}.click()`);
-        await wait(
-            `${count} === '2' && ${pinged(reply.id)} && !!document.querySelector('.thread-panel')`,
-            'rapid channel clicks traverse the next message then open and highlight its thread reply',
-        );
-        await fs.writeFile(
-            path.join(process.env.MEMBER_OUTPUT, 'notification-thread-traversal.png'),
-            (await win.capturePage()).toPNG(),
-        );
-        await js(`{
-            const input = document.querySelector('input[aria-label="Search thread"]');
-            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'no-such-thread-message');
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        }`);
-        await wait(
-            `document.querySelector('.thread-panel').textContent.includes('No matching messages.') && ${count} === '2'`,
-            'thread search still works after a notification jump without clearing pending items',
-        );
-        await js(`${general}.click()`);
-        await wait(
-            `${count} === '1' && ${pinged(second.id)} && !document.querySelector('.thread-panel')`,
-            'next channel click leaves the thread and highlights the next pending message',
-        );
-        await js(`${general}.click()`);
-        await wait(
-            `!(${count}) && ${pinged(oldest.id)}`,
-            'final channel click clears the last pending notification',
-        );
-        await js(`${general}.click()`);
-        await wait(
-            `!(${count}) && document.querySelector('.chat-area').textContent.includes('Own history filler 129')`,
-            'channel with no notifications uses ordinary navigation',
-        );
-
-        await js('document.querySelector(\'.direct-message[aria-label^="Message Bob"]\').click()');
-        await send('Clear channel thread notification', 'general', root.id);
-        await send('Clear channel top-level notification', 'general');
-        await wait(
-            `${count} === '2'`,
-            'channel queue includes top-level messages and thread replies',
-        );
-        await js(
-            `${general}.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:180,clientY:280}))`,
-        );
-        await wait(
-            `!!document.querySelector('.notification-context-menu [role="menuitem"]')`,
-            'right-click offers Clear notifications for a channel with pending items',
-        );
-        await send('Arrival after clear menu opened', 'general');
-        await wait(`${count} === '3'`, 'new arrival is retained while clear menu is open');
-        await js(`document.querySelector('.notification-context-menu [role="menuitem"]').click()`);
-        await wait(
-            `${count} === '1'`,
-            'clear menu clears its snapshot including threads and preserves later arrivals',
-        );
-        await js(
-            `${general}.dispatchEvent(new KeyboardEvent('keydown',{key:'F10',shiftKey:true,bubbles:true}))`,
-        );
-        await wait(
-            `!!document.querySelector('.notification-context-menu [role="menuitem"]')`,
-            'keyboard context menu offers the same clear action',
-        );
-        await js(`document.querySelector('.notification-context-menu [role="menuitem"]').click()`);
-        await wait(
-            `!(${count})`,
-            'clear action removes remaining channel notifications without navigating',
-        );
-        await js(
-            `${general}.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:180,clientY:280}))`,
-        );
-        assert.equal(await js(`!!document.querySelector('.notification-context-menu')`), false);
-        console.log('PASS channel context action is absent when there are no notifications');
-        await js(`${general}.click()`);
-        await send('Clear DM one');
-        await send('Clear DM two');
-        await wait(
-            `document.querySelector('.dm-unread')?.textContent.trim() === '2'`,
-            'DM queue accumulates independently',
-        );
-        await js(
-            `document.querySelector('.direct-message[aria-label^="Message Bob"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:150,clientY:180}))`,
-        );
-        await wait(
-            `!!document.querySelector('.notification-context-menu [role="menuitem"]')`,
-            'DM right-click offers Clear notifications',
-        );
-        await js(`document.querySelector('.notification-context-menu [role="menuitem"]').click()`);
-        await wait(
-            `!document.querySelector('.dm-unread')`,
-            'DM context action clears only the selected conversation',
-        );
-
-        const inlineRoot = await ownerApi('/messages', 'POST', {
-            room: 'general',
-            body: 'Merged inline notification behavior',
-        });
-        await wait(
-            `!!document.querySelector('[data-message-id="${inlineRoot.id}"]')`,
-            'new inline thread parent is visible',
-        );
-        await pause(800);
-        const beforeInline = await js('window.__notificationAudio.tones');
-        for (let i = 1; i <= 3; i++) {
-            await send('Merged inline reply ' + i, 'general', inlineRoot.id);
-            await wait(
-                `document.querySelector('[data-message-id="${inlineRoot.id}"] .inline-thread')?.textContent.includes('Merged inline reply ${i}') && !(${count})`,
-                'visible inline reply ' + i + ' stays silent and does not add a notification',
-            );
-        }
-        assert.equal(await js('window.__notificationAudio.tones'), beforeInline);
-        const fourthInline = await send(
-            'Fourth reply requires the thread panel',
-            'general',
-            inlineRoot.id,
-        );
-        await wait(
-            `${count} === '1' && !document.querySelector('[data-message-id="${inlineRoot.id}"] .inline-thread')`,
-            'reply beyond the inline limit retains its notification',
-        );
-        await js(`${general}.click()`);
-        await wait(
-            `!(${count}) && ${pinged(fourthInline.id)} && !!document.querySelector('.thread-panel')`,
-            'notification traversal still opens and highlights a thread that grew beyond the inline limit',
-        );
 
         win.destroy();
         clearTimeout(deadline);

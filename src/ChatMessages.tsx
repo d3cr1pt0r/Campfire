@@ -3,7 +3,7 @@ import { VoiceInviteCard } from './VoiceInviteCard';
 import { ReactionChip } from './ReactionChip';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
-import type { State, User, Message, MessageJump } from './types';
+import type { State, User, Message } from './types';
 import type { ApiClient } from './api';
 
 import { Avatar } from './Avatar';
@@ -32,7 +32,6 @@ import { frequentEmoji, recordEmojiUse, useEmojiUses } from './emojiUsage';
 import { ImageAttachment } from './ImageAttachment';
 import { LinkPreviews } from './LinkPreviews';
 import { needsScrollHistory, restoredScrollOffset, type ChatScrollPosition } from './chatScroll';
-import { inlineReplies } from './conversation';
 import { conversationSchedule, hasFiles, messageRetention, pinKeeps, unpinText } from './retention';
 import type { RetentionUnit } from '../shared/retention.js';
 
@@ -54,7 +53,6 @@ export function ChatMessages(
     const [saved] = useState(() => (scrollKey ? scrollMemory?.get(scrollKey) : undefined));
     const { conversation, visibleMessages } = props;
     const waiting =
-        !props.jump &&
         !!saved &&
         !saved.atEnd &&
         !conversation.error &&
@@ -78,7 +76,7 @@ export function ChatMessages(
     return (
         <ChatMessageList
             {...listProps}
-            saved={props.jump ? undefined : saved}
+            saved={saved}
             save={(position) => {
                 if (scrollKey) scrollMemory?.set(scrollKey, position);
             }}
@@ -105,10 +103,6 @@ function ChatMessageList({
     setEdit,
     clearFilters,
     onReply,
-    onOpenThread,
-    replies = null,
-    inlineThread = null,
-    renderInlineComposer,
     messageAvatars,
     showRoleColors,
     currentVoiceChannel,
@@ -118,22 +112,9 @@ function ChatMessageList({
     retentionUnit,
     saved,
     save,
-    jump,
-    onJumpShown,
-    onJumpFailed,
 }: {
-    jump?: MessageJump;
-    onJumpShown?: (request: number) => void;
-    onJumpFailed?: (request: number, error: Error) => void;
     messageAvatars?: MessageAvatarMode;
     showRoleColors?: boolean;
-    // Opens a thread in the panel; replying may instead open a box under a short thread.
-    onOpenThread?: (message: Message) => void;
-    // Thread replies by parent, where short threads show under their message.
-    replies?: Map<string, Message[]> | null;
-    // The message whose thread has a reply box open under it, and that box.
-    inlineThread?: string | null;
-    renderInlineComposer?: (parent: Message, collapsed: boolean) => React.ReactNode;
     notify?: (text: string) => void;
     // Thread replies share the clock of the thread they belong to.
     retentionUnit?: RetentionUnit;
@@ -164,8 +145,6 @@ function ChatMessageList({
     const scroll = useRef<HTMLDivElement>(null);
     const initialized = useRef(false);
     const [focusedId, setFocusedId] = useState<string | null>(null);
-    const [ping, setPing] = useState<MessageJump | null>(null);
-    const completedJump = useRef(0);
     const virtualizer = useVirtualizer({
         count: visibleMessages.length + 1,
         getScrollElement: useCallback(() => scroll.current, []),
@@ -184,15 +163,16 @@ function ChatMessageList({
             saved && !saved.atEnd ? restoredScrollOffset(saved, visibleMessages) : 0,
         useAnimationFrameWithResizeObserver: true,
         anchorTo: 'end',
-        followOnAppend: !jump && !conversation.newer,
+        followOnAppend: true,
         scrollEndThreshold: 80,
-        // Focused rows and an open reply box stay mounted, keeping their state.
         rangeExtractor: (range) => {
             const indexes = defaultRangeExtractor(range);
-            const kept = [focusedId, inlineThread, jump?.id]
-                .map((id) => (id ? visibleMessages.findIndex((m) => m.id === id) + 1 : 0))
-                .filter((index) => index > 0);
-            return [...new Set([...indexes, ...kept])].sort((a, b) => a - b);
+            const focused = focusedId
+                ? visibleMessages.findIndex((m) => m.id === focusedId) + 1
+                : -1;
+            return focused > 0
+                ? [...new Set([...indexes, focused])].sort((a, b) => a - b)
+                : indexes;
         },
     });
     // Measurements above the reading position must compensate even while
@@ -202,70 +182,9 @@ function ChatMessageList({
     useLayoutEffect(() => {
         if (!initialized.current && visibleMessages.length) {
             initialized.current = true;
-            if (!jump && (!saved || saved.atEnd) && !search && !pins) virtualizer.scrollToEnd();
+            if ((!saved || saved.atEnd) && !search && !pins) virtualizer.scrollToEnd();
         }
-    }, [visibleMessages.length, virtualizer, search, pins, saved, jump]);
-    useLayoutEffect(() => {
-        if (!jump || completedJump.current === jump.request || conversation.loading) return;
-        const index = visibleMessages.findIndex((message) => message.id === jump.id);
-        if (conversation.error || (conversation.loaded && index < 0)) {
-            completedJump.current = jump.request;
-            onJumpFailed?.(
-                jump.request,
-                new Error(
-                    conversation.error || 'This notification message is no longer available.',
-                ),
-            );
-            return;
-        }
-        if (!conversation.loaded) return;
-        let frame = 0,
-            attempts = 0;
-        const reveal = () => {
-            virtualizer.scrollToIndex(index + 1, { align: 'center' });
-            frame = requestAnimationFrame(() => {
-                const node = scroll.current?.querySelector<HTMLElement>(
-                    `[data-message-id="${CSS.escape(jump.id)}"]`,
-                );
-                const bounds = node?.getBoundingClientRect(),
-                    viewport = scroll.current?.getBoundingClientRect();
-                if (
-                    bounds &&
-                    viewport &&
-                    bounds.bottom > viewport.top &&
-                    bounds.top < viewport.bottom
-                ) {
-                    completedJump.current = jump.request;
-                    setPing(jump);
-                    onJumpShown?.(jump.request);
-                } else if (++attempts < 60) reveal();
-                else {
-                    completedJump.current = jump.request;
-                    onJumpFailed?.(
-                        jump.request,
-                        new Error('Unable to show the notification message.'),
-                    );
-                }
-            });
-        };
-        reveal();
-        return () => cancelAnimationFrame(frame);
-    }, [
-        jump?.id,
-        jump?.request,
-        conversation.loaded,
-        conversation.loading,
-        conversation.error,
-        visibleMessages,
-        virtualizer,
-        onJumpShown,
-        onJumpFailed,
-    ]);
-    useEffect(() => {
-        if (!ping) return;
-        const timer = window.setTimeout(() => setPing(null), 2000);
-        return () => window.clearTimeout(timer);
-    }, [ping]);
+    }, [visibleMessages.length, virtualizer, search, pins, saved]);
     const remember = useRef(() => {});
     remember.current = () => {
         const element = scroll.current;
@@ -417,36 +336,13 @@ function ChatMessageList({
                                 !previous ||
                                 showDate ||
                                 messageTime(previous.created) !== messageTime(m.created);
-                            const shown = inlineReplies(m, replies);
-                            const composing = inlineThread === m.id && !!renderInlineComposer;
-                            const shared = {
-                                permission,
-                                state,
-                                user,
-                                color,
-                                dm,
-                                download,
-                                act,
-                                api,
-                                setModal,
-                                setEdit,
-                                onReply,
-                                onOpenThread,
-                                thread,
-                                notify,
-                                retentionUnit,
-                                messageAvatars,
-                                showRoleColors,
-                                currentVoiceChannel,
-                                onJoinVoice,
-                            };
                             return (
                                 <div
                                     key={item.key}
                                     ref={virtualizer.measureElement}
                                     data-index={item.index}
                                     data-message-id={m.id}
-                                    className={`virtual-message ${ping?.id === m.id ? 'message-ping' : ''}`}
+                                    className="virtual-message"
                                     style={{ transform: `translateY(${item.start}px)` }}
                                     onFocusCapture={() => setFocusedId(m.id)}
                                     onBlurCapture={(event) => {
@@ -466,31 +362,27 @@ function ChatMessageList({
                                         </div>
                                     )}
                                     <ChatMessage
-                                        {...shared}
                                         message={m}
                                         showTime={showTime}
-                                        repliesShown={!!shown}
+                                        permission={permission}
+                                        state={state}
+                                        user={user}
+                                        color={color}
+                                        dm={dm}
+                                        download={download}
+                                        act={act}
+                                        api={api}
+                                        setModal={setModal}
+                                        setEdit={setEdit}
+                                        onReply={onReply}
+                                        thread={thread}
+                                        notify={notify}
+                                        retentionUnit={retentionUnit}
+                                        messageAvatars={messageAvatars}
+                                        showRoleColors={showRoleColors}
+                                        currentVoiceChannel={currentVoiceChannel}
+                                        onJoinVoice={onJoinVoice}
                                     />
-                                    {(!!shown?.length || composing) && (
-                                        <div
-                                            className={`inline-thread inline-thread-${messageAvatarMode(messageAvatars)}`}
-                                        >
-                                            {shown?.map((reply, index) => (
-                                                <ChatMessage
-                                                    {...shared}
-                                                    key={reply.id}
-                                                    message={reply}
-                                                    inlineParent={m}
-                                                    showTime={
-                                                        messageTime(
-                                                            (shown[index - 1] ?? m).created,
-                                                        ) !== messageTime(reply.created)
-                                                    }
-                                                />
-                                            ))}
-                                            {composing && renderInlineComposer(m, !shown)}
-                                        </div>
-                                    )}
                                 </div>
                             );
                         })()
@@ -506,15 +398,8 @@ function ChatMessageList({
                         <h3>{pins ? 'No pinned messages yet.' : 'No matching messages.'}</h3>
                     </div>
                 )}
-            {!!visibleMessages.length && (conversation.newer || !virtualizer.isAtEnd()) && (
-                <button
-                    className="jump-latest secondary"
-                    onClick={() => {
-                        if (conversation.newer)
-                            void conversation.loadLatest().then(() => virtualizer.scrollToEnd());
-                        else virtualizer.scrollToEnd();
-                    }}
-                >
+            {!!visibleMessages.length && !virtualizer.isAtEnd() && (
+                <button className="jump-latest secondary" onClick={() => virtualizer.scrollToEnd()}>
                     Jump to latest
                 </button>
             )}
@@ -535,7 +420,6 @@ export function ChatMessage({
     setModal,
     setEdit,
     onReply,
-    onOpenThread,
     messageAvatars,
     showRoleColors,
     currentVoiceChannel,
@@ -544,8 +428,6 @@ export function ChatMessage({
     notify,
     retentionUnit,
     showTime = true,
-    inlineParent,
-    repliesShown = false,
 }: Pick<
     React.ComponentProps<typeof ChatMessageList>,
     | 'messageAvatars'
@@ -563,23 +445,12 @@ export function ChatMessage({
     | 'setModal'
     | 'setEdit'
     | 'onReply'
-    | 'onOpenThread'
     | 'thread'
     | 'notify'
     | 'retentionUnit'
-> & {
-    message: Message;
-    showTime?: boolean;
-    // Set on a reply shown under its thread's first message.
-    inlineParent?: Message;
-    // The thread's replies already show under this message.
-    repliesShown?: boolean;
-}) {
+> & { message: Message; showTime?: boolean }) {
     const u = m.author ? user(m.author) : undefined;
     const avatars = messageAvatarMode(messageAvatars);
-    // Replies under a message use the compact size, keeping them below it in weight.
-    const size = inlineParent && avatars === 'normal' ? 'compact' : avatars;
-    const replyTarget = inlineParent ?? m;
     const now = Date.now();
     const schedule = conversationSchedule(state, m.room),
         unit = retentionUnit ?? m.retention,
@@ -598,7 +469,7 @@ export function ChatMessage({
         });
     };
     return (
-        <article className={`message message-avatars-${size}${inlineParent ? ' reply' : ''}`}>
+        <article className={`message message-avatars-${avatars}`}>
             {avatars !== 'hidden' && <Avatar user={u} color={color(u)} />}
             <div className="message-body">
                 <div className="message-line">
@@ -730,11 +601,8 @@ export function ChatMessage({
                         />
                     ))}
                 </div>
-                {!thread && !repliesShown && !!m.replyCount && (
-                    <button
-                        className="thread-replies"
-                        onClick={() => (onOpenThread ?? onReply)?.(m)}
-                    >
+                {!thread && !!m.replyCount && (
+                    <button className="thread-replies" onClick={() => onReply?.(m)}>
                         <MessageCircle size={15} />
                         {m.replyCount} {m.replyCount === 1 ? 'reply' : 'replies'}
                     </button>
@@ -761,15 +629,15 @@ export function ChatMessage({
                 >
                     <Smile size={16} />
                 </button>
-                {!thread && !replyTarget.thread && onReply && (
+                {!thread && !m.thread && onReply && (
                     <button
                         title="Reply in thread"
                         aria-label="Reply in thread"
                         disabled={
                             !permission('threads.reply') ||
-                            (!replyTarget.replyCount && !permission('threads.create'))
+                            (!m.replyCount && !permission('threads.create'))
                         }
-                        onClick={() => onReply(replyTarget)}
+                        onClick={() => onReply(m)}
                     >
                         <Reply size={16} />
                     </button>

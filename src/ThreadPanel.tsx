@@ -1,13 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MessageCircle, Pin, Search, X } from 'lucide-react';
 import { ChatMessage, ChatMessages } from './ChatMessages';
-import { ThreadReplyComposer, useThreadReply } from './ThreadReply';
+import { ChatComposer } from './ChatComposer';
+import { EmojiPicker } from './EmojiPicker';
+import { emojiInMessage, recordEmojiUse } from './emojiUsage';
 import { useConversation } from './useConversation';
+import { useConversationRead } from './useUnread';
 import { removeFiles } from './conversation';
-import type { ApiClient } from './api';
-import type { AppSocket, Message, State, User, MessageJump } from './types';
+import { messagePayload, type ApiClient } from './api';
+import type { AppSocket, Message, State, User } from './types';
 import type { MessageAvatarMode } from './messageAppearance';
 import type { PollTarget } from './PollDialog';
+import { appendText } from './richText';
+import { validateFileSelection } from '../shared/uploads.js';
 
 type Props = {
     messageAvatars?: MessageAvatarMode;
@@ -16,9 +21,7 @@ type Props = {
     onJoinVoice?: (channel: string) => void;
     focusRequest: number;
     parent: Message;
-    jump?: MessageJump;
-    onJumpShown?: (request: number) => void;
-    onJumpFailed?: (request: number, error: Error) => void;
+    markRead: (room: string, through: number, thread?: string | null) => void;
     api: ApiClient;
     socket: AppSocket | null;
     state: State;
@@ -39,34 +42,40 @@ type Props = {
 };
 
 export function ThreadPanel(props: Props) {
-    const { parent, api, socket, state, onClose } = props;
+    const { parent, api, socket, state, permission, user, connected, onClose } = props;
     const [root, setRoot] = useState(parent);
     const [rootError, setRootError] = useState('');
     const [search, setSearch] = useState('');
     const [pins, setPins] = useState(false);
+    const [draft, setDraft] = useState('');
+    const [attachments, setAttachments] = useState<File[]>([]);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+    const [picker, setPicker] = useState(false);
+    const [typing, setTyping] = useState<Record<string, number>>({});
+    const fileInput = useRef<HTMLInputElement>(null);
+    const lastTyping = useRef(0);
+    const sending = useRef(false);
+    const selectedFiles = useRef(attachments);
+    selectedFiles.current = attachments;
+    const mounted = useRef(true);
     const close = useRef(onClose);
     close.current = onClose;
     const notify = useRef(props.notify);
     notify.current = props.notify;
-    const reply = useThreadReply({ ...props, parent: root });
-    const conversation = useConversation(
-        api,
-        socket,
+    const canPost =
+        permission('threads.reply') && (!!root.replyCount || permission('threads.create'));
+    const conversation = useConversation(api, socket, parent.room, true, search, pins, parent.id);
+    useConversationRead(
         parent.room,
-        true,
-        search,
-        pins,
+        conversation.messages,
+        connected && conversation.loaded && !conversation.loading && !search && !pins,
+        props.markRead,
         parent.id,
-        props.jump?.id ?? null,
     );
-    useEffect(() => {
-        if (props.jump) {
-            setSearch('');
-            setPins(false);
-        }
-    }, [props.jump?.request]);
 
     useEffect(() => {
+        mounted.current = true;
         let controller: AbortController | undefined;
         // Live edits/counts received during a fetch take precedence over its snapshot.
         let revision = 0;
@@ -110,22 +119,105 @@ export function ThreadPanel(props: Props) {
             revision++;
             setRoot((message) => removeFiles(message));
         };
+        const onTyping = (event: { room: string; user: string; thread?: string | null }) => {
+            if (
+                event.room === parent.room &&
+                event.thread === parent.id &&
+                event.user !== state.me.id
+            )
+                setTyping((previous) => ({ ...previous, [event.user]: Date.now() + 3500 }));
+        };
         socket?.on('connect', load);
         socket?.on('message:update', update);
         socket?.on('message:delete', remove);
         socket?.on('messages:expired', expire);
         socket?.on('messages:files-removed', strip);
+        socket?.on('typing', onTyping);
         void load();
+        const timer = setInterval(
+            () =>
+                setTyping((previous) =>
+                    Object.fromEntries(
+                        Object.entries(previous).filter(([, expires]) => expires > Date.now()),
+                    ),
+                ),
+            1500,
+        );
         return () => {
+            mounted.current = false;
             controller?.abort();
+            clearInterval(timer);
             socket?.off('connect', load);
             socket?.off('message:update', update);
             socket?.off('message:delete', remove);
             socket?.off('messages:expired', expire);
             socket?.off('messages:files-removed', strip);
+            socket?.off('typing', onTyping);
         };
-    }, [api, socket, parent.id, parent.room]);
+    }, [api, socket, parent.id, parent.room, state.me.id]);
 
+    const addFiles = (files: File[]) => {
+        if (!mounted.current || !canPost || !permission('files.attach') || sending.current) return;
+        try {
+            const next = [...selectedFiles.current, ...files];
+            validateFileSelection(next, state.maxUploadBytes);
+            selectedFiles.current = next;
+            setAttachments(next);
+        } catch (e) {
+            setError((e as Error).message);
+        }
+    };
+    const pasteDesktop = async (target: HTMLElement, insertText: (text: string) => void) => {
+        if (!window.campfire?.readClipboardAttachments || !canPost) return;
+        try {
+            const clipboard = await window.campfire.readClipboardAttachments(state.maxUploadBytes);
+            if (
+                !mounted.current ||
+                !target.isConnected ||
+                !target.isContentEditable ||
+                document.activeElement !== target
+            )
+                return;
+            if (clipboard.files.length)
+                addFiles(
+                    clipboard.files.map(
+                        (file) =>
+                            new File([new Uint8Array(file.data)], file.name, { type: file.type }),
+                    ),
+                );
+            else if (clipboard.text) insertText(clipboard.text);
+        } catch (e) {
+            if (mounted.current) setError((e as Error).message);
+        }
+    };
+    const send = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (sending.current || !canPost || !connected || (!draft.trim() && !attachments.length))
+            return;
+        sending.current = true;
+        setBusy(true);
+        setError('');
+        const text = draft;
+        const files = [...attachments];
+        try {
+            validateFileSelection(files, state.maxUploadBytes);
+            await api(
+                '/messages',
+                'POST',
+                messagePayload({ room: parent.room, thread: parent.id, body: text }, files),
+            );
+            recordEmojiUse(emojiInMessage(text, state.emojis || []));
+            if (mounted.current) {
+                setDraft((previous) => (previous === text ? '' : previous));
+                setAttachments([]);
+            }
+        } catch (e) {
+            if (mounted.current) setError((e as Error).message);
+        } finally {
+            sending.current = false;
+            if (mounted.current) setBusy(false);
+        }
+    };
     const clearFilters = () => {
         setSearch('');
         setPins(false);
@@ -138,14 +230,14 @@ export function ThreadPanel(props: Props) {
                 if (event.dataTransfer.types.includes('Files')) {
                     event.preventDefault();
                     event.stopPropagation();
-                    event.dataTransfer.dropEffect = reply.canPost && !reply.busy ? 'copy' : 'none';
+                    event.dataTransfer.dropEffect = canPost && !busy ? 'copy' : 'none';
                 }
             }}
             onDrop={(event) => {
                 if (event.dataTransfer.types.includes('Files')) {
                     event.preventDefault();
                     event.stopPropagation();
-                    reply.addFiles(Array.from(event.dataTransfer.files));
+                    addFiles(Array.from(event.dataTransfer.files));
                 }
             }}
         >
@@ -191,7 +283,6 @@ export function ThreadPanel(props: Props) {
                 currentVoiceChannel={props.currentVoiceChannel}
                 onJoinVoice={props.onJoinVoice}
                 {...props}
-                jump={search || pins ? undefined : props.jump}
                 key={`${search}:${pins}`}
                 thread
                 retentionUnit={root.retention}
@@ -203,11 +294,66 @@ export function ThreadPanel(props: Props) {
                 visibleMessages={conversation.messages}
                 clearFilters={clearFilters}
             />
-            <ThreadReplyComposer
-                {...props}
-                parent={root}
-                reply={reply}
+            {error && (
+                <p className="inline-notice" role="alert">
+                    {error}
+                </p>
+            )}
+            {picker && (
+                <div className="thread-emoji-picker">
+                    <EmojiPicker
+                        custom={state.emojis || []}
+                        disabled={!canPost || busy}
+                        onPick={(emoji) => {
+                            setDraft((text) => appendText(text, emoji));
+                            setPicker(false);
+                        }}
+                    />
+                    <button aria-label="Close emoji picker" onClick={() => setPicker(false)}>
+                        <X size={16} />
+                    </button>
+                </div>
+            )}
+            <ChatComposer
+                focusRequest={props.focusRequest}
+                canAttach={canPost && permission('files.attach')}
+                uploadLimit={state.maxUploadBytes}
+                users={state.users}
+                state={state}
+                emojis={state.emojis}
+                attachments={attachments}
+                setAttachments={setAttachments}
+                draft={draft}
+                setDraft={setDraft}
+                busy={busy}
+                canPost={canPost}
+                connected={connected}
+                fileInput={fileInput}
+                lastTyping={lastTyping}
+                addFiles={addFiles}
+                send={send}
+                pasteDesktop={pasteDesktop}
+                onEmoji={() => setPicker(!picker)}
+                onTyping={() => socket?.emit('typing', parent.room, parent.id)}
+                typing={typing}
+                user={user}
                 placeholder="Reply to thread"
+                label="Thread reply"
+                onPoll={(question) =>
+                    props.openPoll({ room: parent.room, thread: parent.id, question })
+                }
+                klipyKey={state.klipyKey}
+                onGif={(gif) =>
+                    void api('/messages', 'POST', {
+                        room: parent.room,
+                        thread: parent.id,
+                        body: gif.send.url,
+                    }).catch((e: Error) => {
+                        if (mounted.current) setError(e.message);
+                    })
+                }
+                formattingToolbar={props.formattingToolbar}
+                setFormattingToolbar={props.setFormattingToolbar}
             />
         </aside>
     );

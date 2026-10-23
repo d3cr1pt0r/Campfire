@@ -3,7 +3,6 @@ import express from 'express';
 import { imageInfo, imageMime } from './images.js';
 import { formatUploadLimit, maxUploadFiles } from '../shared/uploads.js';
 import { canonicalRoom } from '../shared/rooms.js';
-import { inlineReplyLimit } from '../shared/threads.js';
 import { emojis } from '../shared/emojis.js';
 import { check, route } from './policies.js';
 import { containsText, transaction } from './database.js';
@@ -33,19 +32,6 @@ export function registerMessages({
     const thumbnails = createThumbnails({ get, all, run });
     const requireAction = (user, room, permission) =>
         check(canInRoom(user, room, permission), 'Permission denied in this conversation', 403);
-    const inlineRepliesFor = (messages, viewer) => {
-        const short = messages
-            .filter((m) => !m.thread && m.replyCount && m.replyCount <= inlineReplyLimit)
-            .map((m) => m.id);
-        return short.length
-            ? messageViews(
-                  all(
-                      `SELECT * FROM messages WHERE thread IN (${short.map(() => '?').join(',')}) ORDER BY created,id`,
-                      ...short,
-                  ),
-              ).map((view) => forViewer(view, viewer))
-            : [];
-    };
     const threadParent = (user, room, thread) => {
         check(
             typeof thread === 'string' && thread.length > 0 && thread.length <= 100,
@@ -108,65 +94,6 @@ export function registerMessages({
             check(hasRoom(req.user, room), 'Unknown conversation', 403);
             const limit = Number(req.query.limit || 500);
             check(Number.isInteger(limit) && limit >= 1 && limit <= 500, 'Invalid page size');
-            if (req.query.around !== undefined) {
-                check(
-                    typeof req.query.around === 'string' && req.query.around.length <= 100,
-                    'Invalid message target',
-                );
-                check(
-                    !req.query.before && !req.query.search && req.query.pinned !== '1',
-                    'History jumps cannot use filters',
-                );
-                const target = get(
-                    'SELECT * FROM messages WHERE id=? AND room=?',
-                    req.query.around,
-                    room,
-                );
-                check(
-                    target && (target.thread ?? null) === (req.query.thread ?? null),
-                    'Message not found',
-                    404,
-                );
-                if (target.thread) threadParent(req.user, room, target.thread);
-                const thread = target.thread ?? null;
-                const side = Math.floor((limit - 1) / 2);
-                const before = all(
-                    'SELECT * FROM messages WHERE room=? AND thread IS ? AND (created<? OR (created=? AND id<?)) ORDER BY created DESC,id DESC LIMIT ?',
-                    room,
-                    thread,
-                    target.created,
-                    target.created,
-                    target.id,
-                    side + 1,
-                );
-                const after = all(
-                    'SELECT * FROM messages WHERE room=? AND thread IS ? AND (created>? OR (created=? AND id>?)) ORDER BY created,id LIMIT ?',
-                    room,
-                    thread,
-                    target.created,
-                    target.created,
-                    target.id,
-                    side + 1,
-                );
-                const hasOlder = before.length > side,
-                    newer = after.length > side;
-                before.length = Math.min(before.length, side);
-                after.length = Math.min(after.length, side);
-                const oldest = before.at(-1) ?? target;
-                const rows = [...before.reverse(), target, ...after];
-                const messages = messageViews(rows).map((view) => forViewer(view, req.user.id));
-                res.json({
-                    messages,
-                    ...(target.thread ? {} : { replies: inlineRepliesFor(messages, req.user.id) }),
-                    next: hasOlder
-                        ? Buffer.from(JSON.stringify([oldest.created, oldest.id])).toString(
-                              'base64url',
-                          )
-                        : null,
-                    newer,
-                });
-                return;
-            }
             const clauses = ['room=?'],
                 params = [room];
             if (req.query.thread !== undefined) {
@@ -217,11 +144,7 @@ export function registerMessages({
             const messages = messageViews(rows.filter((row) => !row.gone).reverse()).map((view) =>
                 forViewer(view, req.user.id),
             );
-            if (req.query.thread !== undefined || req.query.search || req.query.pinned === '1')
-                return res.json({ messages, next });
-            // Short threads show under their message, so their replies come with the page.
-            const replies = inlineRepliesFor(messages, req.user.id);
-            res.json({ messages, next, replies });
+            res.json({ messages, next });
         }),
     );
     // Text and polls arrive as JSON; files as multipart/form-data with room, body and thread

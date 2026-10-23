@@ -30,9 +30,6 @@ import { connectionHint, pinsFor, trustStep } from './serverTrust';
 import { version as appVersion } from '../package.json';
 import { ChatComposer } from './ChatComposer';
 import { ThreadPanel } from './ThreadPanel';
-import { InlineReply } from './ThreadReply';
-import { inlineReplies } from './conversation';
-import { inlineReplyLimit } from '../shared/threads.js';
 import { PollDialog, type PollTarget } from './PollDialog';
 import { ChatMessages } from './ChatMessages';
 import type { ChatScrollPosition } from './chatScroll';
@@ -50,9 +47,7 @@ import { useDialog } from './useDialog';
 import { useModalNavigation } from './modalNavigation';
 import { createApiClient, messagePayload } from './api';
 import { useConversation } from './useConversation';
-import { useUnread } from './useUnread';
-import { useNotificationNavigation } from './useNotificationNavigation';
-import { useNotificationContextMenu } from './NotificationContextMenu';
+import { useUnread, useConversationRead } from './useUnread';
 import { useNotificationPreferences } from './useNotificationPreferences';
 import { isReadingConversation } from './activity';
 import { canonicalRoom, dmParticipant } from '../shared/rooms.js';
@@ -390,17 +385,7 @@ function App() {
     const [thread, setThread] = useState<Message | null>(null);
     const [composerFocus, setComposerFocus] = useState(0);
     const [threadFocus, setThreadFocus] = useState(0);
-    useEffect(() => setThread((previous) => (previous?.room === room ? previous : null)), [room]);
-    useEffect(() => setThread(null), [url, token]);
-    // The short thread with a reply box open under its message.
-    const [inlineThread, setInlineThread] = useState<string | null>(null);
-    const [inlineFocus, setInlineFocus] = useState(0);
-    useEffect(() => setInlineThread(null), [room, url, token]);
-    const openThread = (message: Message) => {
-        notificationNavigation.cancel();
-        setThread(message);
-        setThreadFocus((request) => request + 1);
-    };
+    useEffect(() => setThread(null), [room, url, token]);
     const [search, setSearch] = useState(''),
         [pins, setPins] = useState(false),
         [members, setMembers] = useState(() => window.innerWidth > 1100),
@@ -420,7 +405,7 @@ function App() {
         url,
         reportError,
     );
-    const { unread, latest, acknowledge, dismissUnread } = useUnread(
+    const { unread, markRead, dismissUnread } = useUnread(
         api,
         socket,
         state?.activity,
@@ -451,20 +436,6 @@ function App() {
         };
     }, []);
     const [navigationOpen, setNavigationOpen] = useState(false);
-    const navigateNotification = useCallback((destination: string, parent: Message | null) => {
-        setRoom(destination);
-        setThread(parent);
-        setSearch('');
-        setPins(false);
-        setNavigationOpen(false);
-    }, []);
-    const notificationNavigation = useNotificationNavigation(
-        api,
-        navigateNotification,
-        acknowledge,
-        reportError,
-    );
-    const notificationMenu = useNotificationContextMenu(unread, latest, dismissUnread);
     const [compact, setCompact] = useState(() => window.innerWidth <= 800);
     const navigation = useRef<HTMLDivElement>(null);
     useDialog(navigation, () => setNavigationOpen(false), compact && navigationOpen);
@@ -538,35 +509,13 @@ function App() {
         !!state &&
         (room.startsWith('dm:') ||
             state.channels.some((channel) => channel.id === room && channel.kind === 'text'));
-    const notificationJump = notificationNavigation.jump;
-    const conversation = useConversation(
-        api,
-        socket,
+    const conversation = useConversation(api, socket, room, !!token && roomVisible, search, pins);
+    useConversationRead(
         room,
-        !!token && roomVisible,
-        search,
-        pins,
-        null,
-        notificationJump?.message.room === room
-            ? (notificationJump.parent?.id ?? notificationJump.message.id)
-            : null,
+        conversation.messages,
+        !!token && roomVisible && conversation.loaded && !conversation.loading && !search && !pins,
+        markRead,
     );
-    const inlineSnapshot = {
-        room,
-        messages: conversation.messages,
-        replies: conversation.replies,
-        counts: new Map(
-            conversation.messages.map((message) => [
-                message.id,
-                Math.max(
-                    message.replyCount ?? 0,
-                    conversation.replies?.get(message.id)?.length ?? 0,
-                ),
-            ]),
-        ),
-    };
-    const inlineView = useRef(inlineSnapshot);
-    inlineView.current = inlineSnapshot;
     useEffect(() => {
         if (
             state &&
@@ -791,29 +740,6 @@ function App() {
             if (seenMessages.size > 1000) seenMessages.delete(seenMessages.values().next().value!);
             const me = stateRef.current?.me;
             const preferences = prefsRef.current;
-            const inlineParent =
-                m.thread && inlineView.current.room === m.room
-                    ? inlineView.current.messages.find((parent) => parent.id === m.thread)
-                    : undefined;
-            const shownReplies = inlineParent
-                ? inlineReplies(inlineParent, inlineView.current.replies)
-                : null;
-            const inlineCount = inlineParent
-                ? (inlineView.current.counts.get(inlineParent.id) ?? 0) + 1
-                : 0;
-            if (inlineParent) inlineView.current.counts.set(inlineParent.id, inlineCount);
-            const inlineVisible = shownReplies !== null && inlineCount <= inlineReplyLimit;
-            const reading = isReadingConversation(
-                m,
-                roomRef.current,
-                threadRef.current?.id === m.thread || inlineVisible ? (m.thread ?? null) : null,
-                document.visibilityState === 'visible',
-                document.hasFocus(),
-            );
-            if (reading && me && m.author !== me.id)
-                void acknowledge(m).catch((error: Error & { status?: number }) => {
-                    if (error.status !== 403 && error.status !== 404) reportError(error);
-                });
             if (
                 !me ||
                 !shouldNotify(
@@ -826,6 +752,13 @@ function App() {
                 )
             )
                 return;
+            const reading = isReadingConversation(
+                m,
+                roomRef.current,
+                threadRef.current?.id ?? null,
+                document.visibilityState === 'visible',
+                document.hasFocus(),
+            );
             if (preferences.messageSounds !== false && !reading)
                 void messageSound.play(notificationSound(m, me, stateRef.current?.users));
             if (
@@ -981,11 +914,17 @@ function App() {
         if (!state) return;
         setComposerFocus((request) => request + 1);
         const destination = canonicalRoom(`dm:${state.me.id}:${id}`);
-        notificationNavigation.open(destination, unread[destination] > 0);
+        setRoom(destination);
+        setNavigationOpen(false);
+        setSearch('');
+        setPins(false);
     };
-    const selectRoom = (id: string, traverse = false) => {
+    const selectRoom = (id: string) => {
         setComposerFocus((request) => request + 1);
-        notificationNavigation.open(id, traverse && unread[id] > 0);
+        setRoom(id);
+        setNavigationOpen(false);
+        setSearch('');
+        setPins(false);
     };
     const submitLogin = async (f: FormData) => {
         await act(async () => {
@@ -1711,7 +1650,6 @@ function App() {
                                 unread={unread}
                                 color={color}
                                 dm={dm}
-                                notificationMenu={notificationMenu.handlers}
                                 close={(destination) => {
                                     dismissUnread(destination);
                                     if (room === destination)
@@ -1737,8 +1675,7 @@ function App() {
                                             key={c.id}
                                             className={`nav-item channel ${room === c.id ? 'selected' : ''}`}
                                             aria-current={room === c.id ? 'page' : undefined}
-                                            onClick={() => selectRoom(c.id, true)}
-                                            {...notificationMenu.handlers(c.id)}
+                                            onClick={() => selectRoom(c.id)}
                                         >
                                             <Hash size={20} />
                                             {c.name}
@@ -2180,16 +2117,6 @@ function App() {
                                     </div>
                                 )}
                                 <ChatMessages
-                                    jump={
-                                        !search &&
-                                        !pins &&
-                                        !notificationJump?.message.thread &&
-                                        notificationJump?.message.room === room
-                                            ? notificationNavigation.messageJump
-                                            : undefined
-                                    }
-                                    onJumpShown={notificationNavigation.shown}
-                                    onJumpFailed={notificationNavigation.failed}
                                     messageAvatars={prefs.messageAvatars}
                                     showRoleColors={prefs.showRoleColors}
                                     currentVoiceChannel={call.channel}
@@ -2204,37 +2131,9 @@ function App() {
                                         pins,
                                     ])}
                                     onReply={(message) => {
-                                        notificationNavigation.cancel();
-                                        if (!inlineReplies(message, conversation.replies))
-                                            return openThread(message);
-                                        setInlineThread(message.id);
-                                        setInlineFocus((request) => request + 1);
+                                        setThread(message);
+                                        setThreadFocus((request) => request + 1);
                                     }}
-                                    onOpenThread={openThread}
-                                    replies={conversation.replies}
-                                    inlineThread={inlineThread}
-                                    renderInlineComposer={(parent, collapsed) => (
-                                        <InlineReply
-                                            key={parent.id}
-                                            parent={parent}
-                                            collapsed={collapsed}
-                                            focusRequest={inlineFocus}
-                                            api={api}
-                                            socket={socket}
-                                            state={state}
-                                            permission={conversationPermission}
-                                            user={user}
-                                            connected={connected}
-                                            openPoll={openPoll}
-                                            formattingToolbar={formattingToolbar}
-                                            setFormattingToolbar={setFormattingToolbar}
-                                            onClose={() => setInlineThread(null)}
-                                            onMoveToPanel={() => {
-                                                setInlineThread(null);
-                                                openThread(parent);
-                                            }}
-                                        />
-                                    )}
                                     permission={conversationPermission}
                                     conversation={conversation}
                                     search={search}
@@ -2301,13 +2200,7 @@ function App() {
                                     focusRequest={threadFocus}
                                     key={`${url}:${state.me.id}:${room}:${thread.id}`}
                                     parent={thread}
-                                    jump={
-                                        notificationJump?.message.thread === thread.id
-                                            ? notificationNavigation.messageJump
-                                            : undefined
-                                    }
-                                    onJumpShown={notificationNavigation.shown}
-                                    onJumpFailed={notificationNavigation.failed}
+                                    markRead={markRead}
                                     api={api}
                                     socket={socket}
                                     state={state}
@@ -2322,17 +2215,13 @@ function App() {
                                     openPoll={openPoll}
                                     connected={connected}
                                     notify={notify}
-                                    onClose={() => {
-                                        notificationNavigation.cancel();
-                                        setThread(null);
-                                    }}
+                                    onClose={() => setThread(null)}
                                     formattingToolbar={formattingToolbar}
                                     setFormattingToolbar={setFormattingToolbar}
                                 />
                             )}
                             {members && !thread && (
                                 <MemberList
-                                    notificationMenu={notificationMenu.handlers}
                                     state={state}
                                     color={color}
                                     dm={dm}
@@ -2360,7 +2249,6 @@ function App() {
                         />
                     )}
                 </main>
-                {notificationMenu.menu}
                 {modal && (
                     <div
                         className="modal-backdrop"

@@ -3239,56 +3239,6 @@ button:disabled {
 .thread-replies:hover {
     text-decoration: underline;
 }
-/* Short threads sit under their message, indented to its text column. */
-.inline-thread {
-    --reply-indent: 36px;
-    padding-bottom: 4px;
-}
-.inline-thread-normal {
-    --reply-indent: 46px;
-}
-.inline-thread-hidden {
-    --reply-indent: 24px;
-}
-.inline-thread > .message,
-.inline-reply {
-    padding-left: var(--reply-indent);
-}
-.inline-thread .message-meta button {
-    font-size: 14px;
-}
-.inline-reply {
-    display: flex;
-    align-items: flex-start;
-    gap: 4px;
-    max-width: 820px;
-    padding-right: 30px;
-}
-.inline-reply-box {
-    flex: 1;
-    min-width: 0;
-}
-.inline-reply .composer-wrap {
-    padding: 4px 0 6px;
-}
-.inline-reply-close {
-    flex-shrink: 0;
-    width: 30px;
-    height: 30px;
-    margin-top: 12px;
-    padding: 6px;
-    color: var(--muted);
-}
-.inline-reply .thread-emoji-picker {
-    padding: 4px 0;
-}
-.inline-reply .emoji-picker {
-    max-height: 200px;
-    margin-bottom: 0;
-}
-.inline-reply .emoji-grid {
-    grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
-}
 .thread-emoji-picker {
     display: flex;
     align-items: flex-start;
@@ -5642,38 +5592,4 @@ body.stream-popout-body {
 }
 .desktop-update-banner button {
     flex-shrink: 0;
-}
-
-.notification-context-menu {
-    position: fixed;
-    z-index: 10000;
-    min-width: 190px;
-    padding: 6px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--panel);
-    box-shadow: 0 8px 28px #0005;
-}
-.notification-context-menu button {
-    width: 100%;
-    padding: 9px 12px;
-    text-align: left;
-}
-.message-ping > .message {
-    background: color-mix(in srgb, var(--accent) 22%, transparent);
-    border-radius: 6px;
-    animation: notification-message-ping 2s ease-out;
-}
-@keyframes notification-message-ping {
-    from {
-        background: color-mix(in srgb, var(--accent) 50%, transparent);
-    }
-    to {
-        background: color-mix(in srgb, var(--accent) 10%, transparent);
-    }
-}
-@media (prefers-reduced-motion: reduce) {
-    .message-ping > .message {
-        animation: none;
-    }
 }
