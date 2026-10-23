@@ -3780,7 +3780,7 @@ label,
     color: inherit;
 }
 .message-time .retention-ending {
-    flex-shrink: 0;
+    vertical-align: -1px;
     margin-right: 3px;
     color: var(--accent);
 }

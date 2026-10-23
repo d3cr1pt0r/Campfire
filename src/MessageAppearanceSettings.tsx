@@ -54,9 +54,6 @@ export function MessageAppearanceSettings({
                 {['A little more room for conversation.', 'Choose the layout that suits you.'].map(
                     (text, index) => (
                         <article className={`message message-avatars-${mode}`} key={text}>
-                            <time className="message-time">
-                                <span>11:{index ? '43' : '42'} AM</span>
-                            </time>
                             {mode !== 'hidden' && <Avatar user={user} color={color} />}
                             <div className="message-body">
                                 <div className="message-line">
@@ -71,6 +68,11 @@ export function MessageAppearanceSettings({
                                         </strong>
                                     </span>
                                     <span className="message-text">{text}</span>
+                                    <time className="message-time">
+                                        <span className={index ? 'message-time-repeat' : undefined}>
+                                            11:42
+                                        </span>
+                                    </time>
                                 </div>
                             </div>
                         </article>

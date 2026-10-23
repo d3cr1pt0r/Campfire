@@ -34,6 +34,14 @@ import { needsScrollHistory, restoredScrollOffset, type ChatScrollPosition } fro
 import { conversationSchedule, hasFiles, messageRetention, pinKeeps, unpinText } from './retention';
 import type { RetentionUnit } from '../shared/retention.js';
 
+// 24-hour clock, e.g. 09:58.
+const messageTime = (created: number) =>
+    new Date(created).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+    });
+
 export function ChatMessages(
     props: Omit<React.ComponentProps<typeof ChatMessageList>, 'saved' | 'save'> & {
         scrollMemory?: Map<string, ChatScrollPosition>;
@@ -322,6 +330,11 @@ function ChatMessageList({
                             const date = new Date(m.created).toDateString();
                             const showDate =
                                 !previous || new Date(previous.created).toDateString() !== date;
+                            // Rows in the same minute as the one above leave the time out.
+                            const showTime =
+                                !previous ||
+                                showDate ||
+                                messageTime(previous.created) !== messageTime(m.created);
                             return (
                                 <div
                                     key={item.key}
@@ -349,6 +362,7 @@ function ChatMessageList({
                                     )}
                                     <ChatMessage
                                         message={m}
+                                        showTime={showTime}
                                         permission={permission}
                                         state={state}
                                         user={user}
@@ -412,6 +426,7 @@ export function ChatMessage({
     thread = false,
     notify,
     retentionUnit,
+    showTime = true,
 }: Pick<
     React.ComponentProps<typeof ChatMessageList>,
     | 'messageAvatars'
@@ -432,7 +447,7 @@ export function ChatMessage({
     | 'thread'
     | 'notify'
     | 'retentionUnit'
-> & { message: Message }) {
+> & { message: Message; showTime?: boolean }) {
     const u = m.author ? user(m.author) : undefined;
     const avatars = messageAvatarMode(messageAvatars);
     const now = Date.now();
@@ -442,21 +457,6 @@ export function ChatMessage({
     const retention = messageRetention(schedule, unit, m.created, Boolean(m.pinned), now, files);
     return (
         <article className={`message message-avatars-${avatars}`}>
-            <time
-                className="message-time"
-                dateTime={new Date(m.created).toISOString()}
-                title={retention?.title}
-            >
-                {retention?.ending && (
-                    <Hourglass className="retention-ending" size={10} aria-hidden />
-                )}
-                <span>
-                    {new Date(m.created).toLocaleTimeString('en-US', {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                    })}
-                </span>
-            </time>
             {avatars !== 'hidden' && <Avatar user={u} color={color(u)} />}
             <div className="message-body">
                 <div className="message-line">
@@ -482,6 +482,18 @@ export function ChatMessage({
                             {Boolean(m.edited) && <small className="edited"> (edited)</small>}
                         </div>
                     )}
+                    <time
+                        className="message-time"
+                        dateTime={new Date(m.created).toISOString()}
+                        title={retention?.title}
+                    >
+                        {retention?.ending && (
+                            <Hourglass className="retention-ending" size={10} aria-hidden />
+                        )}
+                        <span className={showTime ? undefined : 'message-time-repeat'}>
+                            {messageTime(m.created)}
+                        </span>
+                    </time>
                 </div>
                 {!!m.previews?.length && (
                     <LinkPreviews
