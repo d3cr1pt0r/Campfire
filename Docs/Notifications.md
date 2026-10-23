@@ -30,7 +30,7 @@ DMs have a separate default and searchable conversation overrides. **All message
 
 Server mute overrides every notification choice for that server, including DMs and incoming calls. Do not disturb also silences message alerts and incoming calls. Muting does not hide unread indicators, prevent message delivery, or change stored defaults and overrides.
 
-This design adapts Discord's [notification levels and category/channel overrides](https://support.discord.com/hc/en-us/articles/215253258-Notifications-Settings-101) to Campfire's existing features. It adds no mobile push, email, activity/event alerts, role mentions, or @everyone/@here mentions.
+Notification settings cover the features described above. They do not include mobile push, email, activity/event alerts, role mentions, or @everyone/@here mentions.
 
 ## Verification
 

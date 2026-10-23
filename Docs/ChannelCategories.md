@@ -22,8 +22,6 @@ Deleting a category requires confirmation. Its channels become uncategorized, ke
 
 The category tables are additive to the currently supported database schema; no existing channel is moved or rewritten on startup. The existing refusal of databases from unsupported older Campfire versions remains in effect.
 
-Discord’s [category guide](https://support.discord.com/hc/en-us/articles/115001580171-Channel-Categories-101) and [permission syncing reference](https://support.discord.com/hc/en-us/articles/206029707-Setting-Up-Permissions-FAQ) informed the synced/custom model. Campfire displays an aggregate unread badge on a collapsed category instead of exposing its channel rows.
-
 ## Verification
 
 - `node test/categories.test.js`: text/voice inheritance, custom exceptions, private visibility, resync, deletion, role combinations, inspector explanations, hierarchy, and delegated privilege boundaries.
