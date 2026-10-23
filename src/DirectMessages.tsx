@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type HTMLAttributes } from 'react';
 import { ChevronDown, Pin, Trash2 } from 'lucide-react';
 import { canonicalRoom } from '../shared/rooms.js';
 import { Avatar } from './Avatar';
@@ -32,6 +32,7 @@ export function DirectMessages({
     close,
     storage,
     storageKey,
+    notificationMenu,
 }: {
     state: State;
     socket: AppSocket | null;
@@ -42,6 +43,7 @@ export function DirectMessages({
     close: (destination: string) => void;
     storage: Pick<Storage, 'getItem' | 'setItem'>;
     storageKey: string;
+    notificationMenu?: (room: string) => HTMLAttributes<HTMLElement>;
 }) {
     const [saved, setSaved] = useState<Saved>(() => {
         try {
@@ -187,6 +189,7 @@ export function DirectMessages({
                                 aria-current={room === destination ? 'page' : undefined}
                                 aria-label={`Message ${displayName(user)}${count ? `, ${count} unread messages` : ''}`}
                                 onClick={() => dm(user.id)}
+                                {...notificationMenu?.(destination)}
                             >
                                 <div className="avatar-status">
                                     <Avatar user={user} color={color(user)} />

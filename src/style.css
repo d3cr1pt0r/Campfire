@@ -5593,3 +5593,37 @@ body.stream-popout-body {
 .desktop-update-banner button {
     flex-shrink: 0;
 }
+
+.notification-context-menu {
+    position: fixed;
+    z-index: 10000;
+    min-width: 190px;
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    box-shadow: 0 8px 28px #0005;
+}
+.notification-context-menu button {
+    width: 100%;
+    padding: 9px 12px;
+    text-align: left;
+}
+.message-ping > .message {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    border-radius: 6px;
+    animation: notification-message-ping 2s ease-out;
+}
+@keyframes notification-message-ping {
+    from {
+        background: color-mix(in srgb, var(--accent) 50%, transparent);
+    }
+    to {
+        background: color-mix(in srgb, var(--accent) 10%, transparent);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .message-ping > .message {
+        animation: none;
+    }
+}

@@ -12,26 +12,28 @@ export function useConversation(
     search: string,
     pins: boolean,
     thread: string | null = null,
+    around: string | null = null,
 ) {
-    const conversation = useMemo(
-        () =>
-            createConversation(
-                room,
-                (before, signal) => {
-                    const params = new URLSearchParams({ room, limit: '100' });
-                    if (thread) params.set('thread', thread);
-                    if (before) params.set('before', before);
-                    if (search) params.set('search', search);
-                    if (pins) params.set('pinned', '1');
-                    return api<MessagePage>(`/messages?${params}`, 'GET', undefined, signal);
-                },
-                (message) =>
-                    (message.thread ?? null) === thread &&
-                    (!pins || !!message.pinned) &&
-                    (!search || message.body.toLowerCase().includes(search.toLowerCase())),
-            ),
-        [api, room, search, pins, thread],
-    );
+    const conversation = useMemo(() => {
+        let anchor = search || pins ? null : around;
+        return createConversation(
+            room,
+            (before, signal, latest) => {
+                if (latest) anchor = null;
+                const params = new URLSearchParams({ room, limit: '100' });
+                if (thread) params.set('thread', thread);
+                if (before) params.set('before', before);
+                else if (anchor) params.set('around', anchor);
+                if (search) params.set('search', search);
+                if (pins) params.set('pinned', '1');
+                return api<MessagePage>(`/messages?${params}`, 'GET', undefined, signal);
+            },
+            (message) =>
+                (message.thread ?? null) === thread &&
+                (!pins || !!message.pinned) &&
+                (!search || message.body.toLowerCase().includes(search.toLowerCase())),
+        );
+    }, [api, room, search, pins, thread, around]);
     const snapshot = useSyncExternalStore(conversation.subscribe, conversation.getSnapshot);
     useEffect(() => {
         if (!enabled) return;
@@ -76,6 +78,7 @@ export function useConversation(
         ...snapshot,
         messages: enabled ? snapshot.messages : [],
         loadOlder: conversation.loadOlder,
+        loadLatest: conversation.loadLatest,
         reload: conversation.reload,
     };
 }

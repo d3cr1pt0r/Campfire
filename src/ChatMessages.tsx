@@ -3,7 +3,7 @@ import { VoiceInviteCard } from './VoiceInviteCard';
 import { ReactionChip } from './ReactionChip';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
-import type { State, User, Message } from './types';
+import type { State, User, Message, MessageJump } from './types';
 import type { ApiClient } from './api';
 
 import { Avatar } from './Avatar';
@@ -53,6 +53,7 @@ export function ChatMessages(
     const [saved] = useState(() => (scrollKey ? scrollMemory?.get(scrollKey) : undefined));
     const { conversation, visibleMessages } = props;
     const waiting =
+        !props.jump &&
         !!saved &&
         !saved.atEnd &&
         !conversation.error &&
@@ -76,7 +77,7 @@ export function ChatMessages(
     return (
         <ChatMessageList
             {...listProps}
-            saved={saved}
+            saved={props.jump ? undefined : saved}
             save={(position) => {
                 if (scrollKey) scrollMemory?.set(scrollKey, position);
             }}
@@ -112,7 +113,13 @@ function ChatMessageList({
     retentionUnit,
     saved,
     save,
+    jump,
+    onJumpShown,
+    onJumpFailed,
 }: {
+    jump?: MessageJump;
+    onJumpShown?: (request: number) => void;
+    onJumpFailed?: (request: number, error: Error) => void;
     messageAvatars?: MessageAvatarMode;
     showRoleColors?: boolean;
     notify?: (text: string) => void;
@@ -145,6 +152,8 @@ function ChatMessageList({
     const scroll = useRef<HTMLDivElement>(null);
     const initialized = useRef(false);
     const [focusedId, setFocusedId] = useState<string | null>(null);
+    const [ping, setPing] = useState<MessageJump | null>(null);
+    const completedJump = useRef(0);
     const virtualizer = useVirtualizer({
         count: visibleMessages.length + 1,
         getScrollElement: useCallback(() => scroll.current, []),
@@ -163,16 +172,17 @@ function ChatMessageList({
             saved && !saved.atEnd ? restoredScrollOffset(saved, visibleMessages) : 0,
         useAnimationFrameWithResizeObserver: true,
         anchorTo: 'end',
-        followOnAppend: true,
+        followOnAppend: !jump && !conversation.newer,
         scrollEndThreshold: 80,
         rangeExtractor: (range) => {
             const indexes = defaultRangeExtractor(range);
             const focused = focusedId
                 ? visibleMessages.findIndex((m) => m.id === focusedId) + 1
                 : -1;
-            return focused > 0
-                ? [...new Set([...indexes, focused])].sort((a, b) => a - b)
-                : indexes;
+            const target = jump ? visibleMessages.findIndex((m) => m.id === jump.id) + 1 : -1;
+            return [
+                ...new Set([...indexes, ...[focused, target].filter((index) => index > 0)]),
+            ].sort((a, b) => a - b);
         },
     });
     // Measurements above the reading position must compensate even while
@@ -182,9 +192,70 @@ function ChatMessageList({
     useLayoutEffect(() => {
         if (!initialized.current && visibleMessages.length) {
             initialized.current = true;
-            if ((!saved || saved.atEnd) && !search && !pins) virtualizer.scrollToEnd();
+            if (!jump && (!saved || saved.atEnd) && !search && !pins) virtualizer.scrollToEnd();
         }
-    }, [visibleMessages.length, virtualizer, search, pins, saved]);
+    }, [visibleMessages.length, virtualizer, search, pins, saved, jump]);
+    useLayoutEffect(() => {
+        if (!jump || completedJump.current === jump.request || conversation.loading) return;
+        const index = visibleMessages.findIndex((message) => message.id === jump.id);
+        if (conversation.error || (conversation.loaded && index < 0)) {
+            completedJump.current = jump.request;
+            onJumpFailed?.(
+                jump.request,
+                new Error(
+                    conversation.error || 'This notification message is no longer available.',
+                ),
+            );
+            return;
+        }
+        if (!conversation.loaded) return;
+        let frame = 0,
+            attempts = 0;
+        const reveal = () => {
+            virtualizer.scrollToIndex(index + 1, { align: 'center' });
+            frame = requestAnimationFrame(() => {
+                const node = scroll.current?.querySelector<HTMLElement>(
+                    `[data-message-id="${CSS.escape(jump.id)}"]`,
+                );
+                const bounds = node?.getBoundingClientRect(),
+                    viewport = scroll.current?.getBoundingClientRect();
+                if (
+                    bounds &&
+                    viewport &&
+                    bounds.bottom > viewport.top &&
+                    bounds.top < viewport.bottom
+                ) {
+                    completedJump.current = jump.request;
+                    setPing(jump);
+                    onJumpShown?.(jump.request);
+                } else if (++attempts < 60) reveal();
+                else {
+                    completedJump.current = jump.request;
+                    onJumpFailed?.(
+                        jump.request,
+                        new Error('Unable to show the notification message.'),
+                    );
+                }
+            });
+        };
+        reveal();
+        return () => cancelAnimationFrame(frame);
+    }, [
+        jump?.id,
+        jump?.request,
+        conversation.loaded,
+        conversation.loading,
+        conversation.error,
+        visibleMessages,
+        virtualizer,
+        onJumpShown,
+        onJumpFailed,
+    ]);
+    useEffect(() => {
+        if (!ping) return;
+        const timer = window.setTimeout(() => setPing(null), 2000);
+        return () => window.clearTimeout(timer);
+    }, [ping]);
     const remember = useRef(() => {});
     remember.current = () => {
         const element = scroll.current;
@@ -342,7 +413,7 @@ function ChatMessageList({
                                     ref={virtualizer.measureElement}
                                     data-index={item.index}
                                     data-message-id={m.id}
-                                    className="virtual-message"
+                                    className={`virtual-message ${ping?.id === m.id ? 'message-ping' : ''}`}
                                     style={{ transform: `translateY(${item.start}px)` }}
                                     onFocusCapture={() => setFocusedId(m.id)}
                                     onBlurCapture={(event) => {
@@ -398,8 +469,15 @@ function ChatMessageList({
                         <h3>{pins ? 'No pinned messages yet.' : 'No matching messages.'}</h3>
                     </div>
                 )}
-            {!!visibleMessages.length && !virtualizer.isAtEnd() && (
-                <button className="jump-latest secondary" onClick={() => virtualizer.scrollToEnd()}>
+            {!!visibleMessages.length && (conversation.newer || !virtualizer.isAtEnd()) && (
+                <button
+                    className="jump-latest secondary"
+                    onClick={() => {
+                        if (conversation.newer)
+                            void conversation.loadLatest().then(() => virtualizer.scrollToEnd());
+                        else virtualizer.scrollToEnd();
+                    }}
+                >
                     Jump to latest
                 </button>
             )}

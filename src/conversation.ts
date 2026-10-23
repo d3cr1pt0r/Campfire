@@ -1,6 +1,6 @@
 import type { Message } from './types';
 
-export type MessagePage = { messages: Message[]; next: string | null };
+export type MessagePage = { messages: Message[]; next: string | null; newer?: boolean };
 // A message after retention removed its files and link cards, which leave placeholders.
 export const removeFiles = (message: Message): Message => ({
     ...message,
@@ -26,11 +26,12 @@ type Snapshot = {
     loading: boolean;
     loaded: boolean;
     error: string;
+    newer?: boolean;
 };
 
 export function createConversation(
     room: string,
-    load: (before: string | null, signal: AbortSignal) => Promise<MessagePage>,
+    load: (before: string | null, signal: AbortSignal, latest?: boolean) => Promise<MessagePage>,
     matches: (message: Message) => boolean = () => true,
 ) {
     let snapshot: Snapshot = { messages: [], next: null, loading: false, loaded: false, error: '' };
@@ -66,16 +67,26 @@ export function createConversation(
     const receive = (event: ConversationEvent) => {
         if (closed || (event.type === 'upsert' && event.message.room !== room)) return;
         pending?.events.push(event);
+        if (
+            snapshot.newer &&
+            event.type === 'upsert' &&
+            !snapshot.messages.some((m) => m.id === event.message.id)
+        )
+            return;
         publish({ ...snapshot, messages: apply(snapshot.messages, event) });
     };
-    const request = async (older: boolean) => {
+    const request = async (older: boolean, latest = false) => {
         if (closed || (older && (pending || !snapshot.next))) return;
         pending?.controller.abort();
         const current = { controller: new AbortController(), events: [] as ConversationEvent[] };
         pending = current;
         publish({ ...snapshot, loading: true, error: '' });
         try {
-            const page = await load(older ? snapshot.next : null, current.controller.signal);
+            const page = await load(
+                older ? snapshot.next : null,
+                current.controller.signal,
+                latest,
+            );
             if (closed || pending !== current) return;
             const initial = older ? [...snapshot.messages, ...page.messages] : page.messages;
             let messages = [
@@ -85,13 +96,22 @@ export function createConversation(
             ];
             // Events that arrived after this request started win over its snapshot,
             // including edits and deletions of messages not yet loaded.
-            for (const event of current.events) messages = apply(messages, event);
+            for (const event of current.events) {
+                if (
+                    (page.newer || (older && snapshot.newer)) &&
+                    event.type === 'upsert' &&
+                    !messages.some((m) => m.id === event.message.id)
+                )
+                    continue;
+                messages = apply(messages, event);
+            }
             publish({
                 messages: sorted(messages),
                 next: page.next,
                 loading: false,
                 loaded: true,
                 error: '',
+                ...(page.newer || (older && snapshot.newer) ? { newer: true } : {}),
             });
         } catch (error) {
             if (!closed && pending === current && !current.controller.signal.aborted)
@@ -111,6 +131,7 @@ export function createConversation(
         receive,
         reload: () => request(false),
         loadOlder: () => request(true),
+        loadLatest: () => request(false, true),
         cancel() {
             pending?.controller.abort();
             pending = null;

@@ -12,6 +12,38 @@ const deferred = () => {
     });
     return { promise, resolve, reject };
 };
+
+test('bounded history windows do not append across missing newer history and can return to latest', async () => {
+    const older = deferred();
+    const history = createConversation('general', async (before, _signal, latest) => {
+        if (before) return older.promise;
+        return latest
+            ? { messages: [message('latest')], next: null }
+            : { messages: [message('target')], next: 'older', newer: true };
+    });
+    await history.reload();
+    history.receive({ type: 'upsert', message: message('beyond-gap') });
+    assert.deepEqual(
+        history.getSnapshot().messages.map((entry) => entry.id),
+        ['target'],
+    );
+    const loading = history.loadOlder();
+    history.receive({ type: 'upsert', message: message('during-load') });
+    older.resolve({ messages: [message('earlier')], next: null });
+    await loading;
+    assert.equal(history.getSnapshot().newer, true);
+    assert.equal(
+        history.getSnapshot().messages.some((entry) => entry.id === 'during-load'),
+        false,
+    );
+    await history.loadLatest();
+    assert.equal(!!history.getSnapshot().newer, false);
+    history.receive({ type: 'upsert', message: message('new-live') });
+    assert.deepEqual(
+        history.getSnapshot().messages.map((entry) => entry.id),
+        ['latest', 'new-live'],
+    );
+});
 const message = (id, body = id, room = 'general') => ({
     id,
     body,

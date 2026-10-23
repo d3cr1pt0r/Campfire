@@ -1,5 +1,6 @@
 import { canonicalRoom } from '../shared/rooms.js';
 import { check, route } from './policies.js';
+import { forViewer } from './poll-view.js';
 
 const modes = ['all', 'mentions', 'muted'];
 function preferences(value) {
@@ -37,7 +38,7 @@ function preferences(value) {
     };
 }
 
-export function createActivity({ app, io, get, all, run, hasRoom, userFor }) {
+export function createActivity({ app, io, get, all, run, hasRoom, userFor, messageView }) {
     const snapshot = (user) => {
         const baseline =
             get('SELECT sequence FROM activity_baselines WHERE user=?', user.id)?.sequence ?? 0;
@@ -45,13 +46,15 @@ export function createActivity({ app, io, get, all, run, hasRoom, userFor }) {
             latest = {};
         const rooms = all(
             `SELECT m.room,MAX(a.sequence) latest,
-            SUM(CASE WHEN m.author IS NOT NULL AND m.author<>? AND a.sequence>MAX(?,COALESCE(r.sequence,0),COALESCE(c.sequence,0)) THEN 1 ELSE 0 END) unread
+            SUM(CASE WHEN m.author IS NOT NULL AND m.author<>? AND seen.message IS NULL AND a.sequence>MAX(?,COALESCE(r.sequence,0),COALESCE(c.sequence,0)) THEN 1 ELSE 0 END) unread
             FROM message_activity a JOIN messages m ON m.id=a.message
             LEFT JOIN conversation_reads r ON r.user=? AND r.room=m.room AND r.thread=COALESCE(m.thread,'')
             LEFT JOIN conversation_reads c ON c.user=? AND c.room=m.room AND c.thread='*'
+            LEFT JOIN activity_acknowledgments seen ON seen.user=? AND seen.message=m.id
             GROUP BY m.room`,
             user.id,
             baseline,
+            user.id,
             user.id,
             user.id,
         );
@@ -84,6 +87,67 @@ export function createActivity({ app, io, get, all, run, hasRoom, userFor }) {
         '/api/activity',
         route((req, res) => res.set('Cache-Control', 'no-store').json(snapshot(req.user))),
     );
+    app.get(
+        '/api/activity/next',
+        route((req, res) => {
+            const room = canonicalRoom(req.query.room);
+            check(hasRoom(req.user, room), 'Unknown conversation', 403);
+            const message = get(
+                `SELECT m.* FROM message_activity a JOIN messages m ON m.id=a.message
+            LEFT JOIN conversation_reads r ON r.user=? AND r.room=m.room AND r.thread=COALESCE(m.thread,'')
+            LEFT JOIN conversation_reads c ON c.user=? AND c.room=m.room AND c.thread='*'
+            LEFT JOIN activity_acknowledgments seen ON seen.user=? AND seen.message=m.id
+            WHERE m.room=? AND m.author IS NOT NULL AND m.author<>? AND seen.message IS NULL
+            AND a.sequence>MAX(COALESCE((SELECT sequence FROM activity_baselines WHERE user=?),0),COALESCE(r.sequence,0),COALESCE(c.sequence,0))
+            ORDER BY a.sequence DESC LIMIT 1`,
+                req.user.id,
+                req.user.id,
+                req.user.id,
+                room,
+                req.user.id,
+                req.user.id,
+            );
+            res.set('Cache-Control', 'no-store').json(
+                message
+                    ? {
+                          message: forViewer(messageView(message), req.user.id),
+                          parent: message.thread
+                              ? forViewer(
+                                    messageView(
+                                        get('SELECT * FROM messages WHERE id=?', message.thread),
+                                    ),
+                                    req.user.id,
+                                )
+                              : null,
+                      }
+                    : null,
+            );
+        }),
+    );
+    app.post(
+        '/api/activity/acknowledge',
+        route((req, res) => {
+            const room = canonicalRoom(req.body?.room);
+            check(hasRoom(req.user, room), 'Unknown conversation', 403);
+            check(
+                typeof req.body.message === 'string' && req.body.message.length <= 100,
+                'Invalid message',
+            );
+            const message = get(
+                'SELECT id FROM messages WHERE id=? AND room=?',
+                req.body.message,
+                room,
+            );
+            check(message, 'Message not found', 404);
+            run(
+                'INSERT OR IGNORE INTO activity_acknowledgments(user,message) VALUES(?,?)',
+                req.user.id,
+                message.id,
+            );
+            publish(null, req.user.id);
+            res.json(snapshot(req.user));
+        }),
+    );
     app.post(
         '/api/activity/read',
         route((req, res) => {
@@ -105,8 +169,18 @@ export function createActivity({ app, io, get, all, run, hasRoom, userFor }) {
                 through,
                 room,
             );
+            // A menu's latest message can be deleted before Clear is clicked. An issued,
+            // now-deleted sequence is still a safe cutoff: later arrivals have higher numbers.
+            const deletedCutoff =
+                entireConversation &&
+                !message &&
+                through <=
+                    (get("SELECT seq FROM sqlite_sequence WHERE name='message_activity'")?.seq ??
+                        0) &&
+                !get('SELECT 1 FROM message_activity WHERE sequence=?', through);
             check(
-                message && (entireConversation || (message.thread ?? null) === thread),
+                deletedCutoff ||
+                    (message && (entireConversation || (message.thread ?? null) === thread)),
                 'Unknown read position',
                 404,
             );

@@ -4,13 +4,17 @@ Open **Settings → Notifications**. Server mute, channel defaults, category rul
 
 ## Missed messages and unread badges
 
-Unread badges survive app and server restarts. Each server stores your read position for each conversation; messages received while the app is closed appear as unread when you reconnect. Reading or explicitly clearing a conversation synchronizes to your other devices. Restoring badges does not replay old sounds or desktop alerts.
+Unread badges survive app and server restarts. Each server stores pending activity and your acknowledgments; messages received while the app is closed appear in the existing channel and DM badges when you reconnect. Clearing synchronizes to your other devices. Restoring badges does not replay old sounds or desktop alerts.
 
-Opening an unfiltered channel or DM while Campfire is visible and focused marks the loaded messages read. Incoming messages in that conversation stay quiet. Search and pinned-message views do not clear unread history. Thread replies remain unread until their thread is opened, and an explicit conversation clear includes its threads. Removing a DM from Messages clears its unread activity through the latest received snapshot; later arrivals remain unread.
+Click a channel name or a user/DM with pending notifications to visit its newest pending message. Campfire loads the surrounding history, scrolls the message into view, and highlights it for two seconds. Only that message's notification clears once it is displayed. A thread reply opens its thread and highlights the reply. Repeated clicks visit the next newest pending message, one at a time. With no pending items, clicking uses ordinary navigation. **Jump to latest** returns from an older history window without clearing pending items.
+
+Opening or focusing a conversation does not automatically clear its backlog. New messages arriving in the currently open, visible, focused conversation stay quiet and are individually acknowledged without clearing older pending items. Replies in an unopened thread remain pending. Search and pinned-message views do not clear the backlog. Reduced-motion users receive a static highlight.
+
+Right-click a text channel, DM row, or member to choose **Clear notifications** for that conversation. The option appears only while notifications remain. Keyboard users can press Shift+F10 or the context-menu key. Clearing includes thread replies, does not navigate away, and applies through the menu's captured snapshot so later arrivals remain pending. Removing a DM from Messages also clears its pending activity through the latest snapshot.
 
 Unread badges are independent of alert preferences: mute and Do not disturb silence alerts while retaining missed activity. Deleted or expired messages stop contributing to badges, and inaccessible conversations are omitted.
 
-When this feature is first installed, existing message history starts as read. Subsequent activity is tracked persistently. There is no notification inbox yet.
+When persistent tracking is first installed, existing message history starts as read. Subsequent activity is tracked persistently. Notification traversal uses the existing sidebar badges; there is no separate notification inbox.
 
 ## Delivery
 
@@ -44,8 +48,8 @@ Notification settings cover the features described above. They do not include mo
 
 ## Verification
 
-- `node test/activity.test.js`: restart persistence, read races, thread scopes, permissions, deletion, synced rules, and account-specific socket updates.
-- `node --experimental-strip-types test/activity-client.test.js`: stale-response handling, focused-conversation suppression, and preference scoping.
+- `node test/activity.test.js`: newest-first traversal, individual acknowledgments, bounded message jumps, restart persistence, clear races, thread scopes, permissions, deletion, synced rules, and account-specific socket updates.
+- `node --experimental-strip-types test/activity-client.test.js`: serialized clicks, failed/cancelled navigation, stale-response handling, focused-conversation suppression, and preference scoping.
 - `node --experimental-strip-types test/mentions-notifications.test.js`: precedence, legacy defaults, DMs, threads, server/account isolation, mute, and DND.
 - `node scripts/verify-notification-settings.mjs`: Electron controls, persistence, permission feedback, inheritance reset, and dark/light layouts at desktop and narrow sizes.
-- `node scripts/verify-member-messaging.mjs --sound`: real Web Audio playback and socket-message policy checks, including category inheritance and focused-conversation behavior. Desktop alerts are observed through an instrumented Notification API; this does not prove native OS delivery on every platform.
+- `node scripts/verify-member-messaging.mjs --sound`: real Web Audio playback, focused-conversation behavior, missed badges, newest-first sidebar traversal, old-history and thread highlighting, and conditional context menus with a clear/new-arrival race. Desktop alerts are observed through an instrumented Notification API; this does not prove native OS delivery on every platform.

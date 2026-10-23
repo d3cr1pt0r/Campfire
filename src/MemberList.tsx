@@ -1,4 +1,5 @@
-import { Fragment } from 'react';
+import { Fragment, type HTMLAttributes } from 'react';
+import { canonicalRoom } from '../shared/rooms.js';
 import { Phone, X } from 'lucide-react';
 import { hasPermission } from '../shared/permissions.js';
 import { MemberIdentity } from './MemberIdentity';
@@ -14,6 +15,7 @@ export function MemberList({
     callActive,
     busy,
     onClose,
+    notificationMenu,
 }: {
     state: State;
     color: (user?: User) => string | undefined;
@@ -22,6 +24,7 @@ export function MemberList({
     callActive: boolean;
     busy: boolean;
     onClose: () => void;
+    notificationMenu?: (room: string) => HTMLAttributes<HTMLElement>;
 }) {
     return (
         <aside className="member-list" id="community-members" aria-label="Community members">
@@ -60,6 +63,9 @@ export function MemberList({
                                         aria-label={`Message ${name}${self ? ' (you)' : ''}`}
                                         title={`@${user.username}`}
                                         onClick={() => dm(user.id)}
+                                        {...notificationMenu?.(
+                                            canonicalRoom(`dm:${state.me.id}:${user.id}`),
+                                        )}
                                     >
                                         <MemberIdentity
                                             user={user}

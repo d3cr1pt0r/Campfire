@@ -8,6 +8,150 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { openDatabase } from '../server/database.js';
 
+test('newest-first traversal acknowledges exactly one message and includes thread parents', async (t) => {
+    const f = await roleFixture(t);
+    const root = await f.api(f.owner, '/messages', 'POST', { room: 'general', body: 'Root' });
+    const older = await f.api(f.owner, '/messages', 'POST', { room: 'general', body: 'Older' });
+    const reply = await f.api(f.owner, '/messages', 'POST', {
+        room: 'general',
+        thread: root.id,
+        body: 'Newest reply',
+    });
+    const next = () => f.api(f.member, '/activity/next?room=general');
+    let target = await next();
+    assert.equal(target.message.id, reply.id);
+    assert.equal(target.parent.id, root.id);
+    assert.equal(
+        (await f.api(f.member, '/activity')).unread.general,
+        3,
+        'selecting a target does not clear it',
+    );
+    const ack = (id) =>
+        f.api(f.member, '/activity/acknowledge', 'POST', { room: 'general', message: id });
+    assert.equal((await ack(reply.id)).unread.general, 2);
+    assert.equal(
+        (await ack(reply.id)).unread.general,
+        2,
+        'two devices acknowledging the same target clear only one',
+    );
+    await f.restart();
+    target = await next();
+    assert.equal(target.message.id, older.id);
+    assert.equal(target.parent, null);
+    assert.equal((await ack(older.id)).unread.general, 1);
+    assert.equal((await next()).message.id, root.id);
+    assert.equal((await ack(root.id)).unread.general, undefined);
+    assert.equal(await next(), null);
+});
+
+test('individual acknowledgments protect the backlog and clear-all preserves arrivals after its cutoff', async (t) => {
+    const f = await roleFixture(t);
+    const room = canonicalRoom(`dm:${f.owner.user.id}:${f.member.user.id}`);
+    const send = (body) => f.api(f.owner, '/messages', 'POST', { room, body });
+    const old = await send('Backlog');
+    const live = await send('Focused new arrival');
+    let activity = await f.api(f.member, '/activity/acknowledge', 'POST', {
+        room,
+        message: live.id,
+    });
+    assert.equal(activity.unread[room], 1);
+    assert.equal(
+        (await f.api(f.member, `/activity/next?room=${encodeURIComponent(room)}`)).message.id,
+        old.id,
+    );
+    const through = activity.latest[room];
+    const later = await send('After the context menu opened');
+    activity = await f.api(f.member, '/activity/read', 'POST', { room, through, all: true });
+    assert.equal(activity.unread[room], 1);
+    assert.equal(
+        (await f.api(f.member, `/activity/next?room=${encodeURIComponent(room)}`)).message.id,
+        later.id,
+    );
+    await f.api(f.other, `/activity/next?room=${encodeURIComponent(room)}`, 'GET', undefined, 403);
+    await f.api(f.other, '/activity/acknowledge', 'POST', { room, message: later.id }, 403);
+    await f.api(
+        f.member,
+        '/activity/acknowledge',
+        'POST',
+        { room: 'general', message: later.id },
+        404,
+    );
+    await f.api(f.owner, `/messages/${later.id}`, 'DELETE');
+    assert.equal((await f.api(f.member, '/activity')).unread[room], undefined);
+    await send('Earlier pending item');
+    const deleted = await send('Menu cutoff that will be deleted');
+    await f.api(f.owner, `/messages/${deleted.id}`, 'DELETE');
+    const newest = await send('After the deleted cutoff');
+    activity = await f.api(f.member, '/activity/read', 'POST', {
+        room,
+        through: deleted.sequence,
+        all: true,
+    });
+    assert.equal(activity.unread[room], 1);
+    assert.equal(
+        (await f.api(f.member, `/activity/next?room=${encodeURIComponent(room)}`)).message.id,
+        newest.id,
+    );
+});
+
+test('message jumps load bounded surrounding history with correct pagination and permissions', async (t) => {
+    const f = await roleFixture(t);
+    const send = (body) => f.api(f.owner, '/messages', 'POST', { room: 'general', body });
+    for (let i = 0; i < 25; i++) await send('Before ' + i);
+    const target = await send('Jump target');
+    for (let i = 0; i < 130; i++) await send('After ' + i);
+    const page = await f.api(f.member, `/messages?room=general&around=${target.id}&limit=21`);
+    assert.equal(page.messages.length, 21);
+    assert.equal(page.messages[10].id, target.id);
+    assert.ok(page.next);
+    assert.equal(page.newer, true);
+    const older = await f.api(f.member, `/messages?room=general&before=${page.next}&limit=21`);
+    assert.equal(
+        older.messages.some((message) => page.messages.some((entry) => entry.id === message.id)),
+        false,
+    );
+    await f.api(
+        f.member,
+        `/messages?room=introductions&around=${target.id}`,
+        'GET',
+        undefined,
+        404,
+    );
+    await f.api(
+        f.member,
+        `/messages?room=general&around=${target.id}&pinned=1`,
+        'GET',
+        undefined,
+        400,
+    );
+    const reply = await f.api(f.owner, '/messages', 'POST', {
+        room: 'general',
+        thread: target.id,
+        body: 'Thread target',
+    });
+    await f.api(f.member, `/messages?room=general&around=${reply.id}`, 'GET', undefined, 404);
+    const replies = await f.api(
+        f.member,
+        `/messages?room=general&thread=${target.id}&around=${reply.id}`,
+    );
+    assert.deepEqual(
+        replies.messages.map((message) => message.id),
+        [reply.id],
+    );
+    const privateRoom = canonicalRoom(`dm:${f.owner.user.id}:${f.member.user.id}`);
+    const dm = await f.api(f.owner, '/messages', 'POST', {
+        room: privateRoom,
+        body: 'Private target',
+    });
+    await f.api(
+        f.other,
+        `/messages?room=${encodeURIComponent(privateRoom)}&around=${dm.id}`,
+        'GET',
+        undefined,
+        403,
+    );
+});
+
 test('existing databases start with history read and initialization never advances saved baselines', () => {
     const directory = mkdtempSync(path.join(tmpdir(), 'campfire-activity-install-'));
     let db = new DatabaseSync(path.join(directory, 'campfire.sqlite'));
