@@ -62,8 +62,6 @@ The package manifest and lockfile declare version 0.2.1. The notes explicitly de
 
 ## v0.2.2 draft
 
-[Prepared description](v0.2.2.md). Covers the 12 commits after local tag v0.2.1 through `d37ccf5`: RNNoise suppression, speech-based activation and automatic live previews, video quality controls and diagnostics, settings readability, call layout and participant arrangements, Overview-first channel/category editing, and account-deletion compatibility with older supported Node versions.
+[Prepared description](v0.2.2.md). Covers the 14 commits after local tag v0.2.1 through `ac29065`: automatic desktop updates, Windows installer packaging, draft-release automation, RNNoise suppression, speech-based activation and automatic live previews, video quality controls and diagnostics, settings readability, call layout and participant arrangements, Overview-first channel/category editing, and account-deletion compatibility with older supported Node versions.
 
 The package manifest and lockfile declare version 0.2.2. No local v0.2.2 tag exists. The changelog link targets the intended v0.2.2 tag; reconcile the notes with that tag before publication. The v0.2.1 database schema is unchanged. This draft was prepared from local history and source without a live release lookup. No release was published or tag created.
-
-The v0.2.2 working draft also includes automatic desktop updates, Windows installer packaging, and draft-release automation in the working tree.
