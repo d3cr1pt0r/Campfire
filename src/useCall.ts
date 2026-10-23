@@ -694,7 +694,11 @@ export function useCall(
         prefs.screenBitrate,
         prefs.screenAdaptation,
     ]);
-    const join = async (id: string, target?: { socket: string; shareId: string }) => {
+    const join = async (
+        id: string,
+        target?: { socket: string; shareId: string },
+        expand = !!target,
+    ) => {
         if (!permissionRef.current('calls.join', id)) {
             report('You do not have permission to join calls.');
             return;
@@ -745,7 +749,7 @@ export function useCall(
                             return;
                         }
                         setChannel(id);
-                        setPanelOpen(!!target);
+                        setPanelOpen(expand);
                         audio.current
                             ?.getTracks()
                             .forEach(

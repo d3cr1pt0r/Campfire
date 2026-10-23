@@ -28,6 +28,7 @@ import { fitCallParticipants } from './callLayout';
 import { describeVideo, formatBitrate, limitMessage } from './videoQuality';
 
 export type CallAreaMode = 'split' | 'call' | 'conversation';
+const expandedMinimumHeight = 250;
 
 export function CallPanel({
     state,
@@ -40,6 +41,7 @@ export function CallPanel({
     user,
     areaMode,
     onAreaModeChange,
+    expandRequest,
 }: {
     state: State;
     call: ReturnType<typeof useCall>;
@@ -51,6 +53,7 @@ export function CallPanel({
     user: (id: string) => User | undefined;
     areaMode: CallAreaMode;
     onAreaModeChange: (mode: CallAreaMode) => void;
+    expandRequest: number;
 }) {
     const dock = useRef<HTMLDivElement>(null);
     const splitter = useRef<HTMLDivElement>(null);
@@ -91,16 +94,23 @@ export function CallPanel({
     );
     const participantOpacity = Math.max(0, Math.min(1, (stageSize.height - 24) / 96));
     const maximum = Math.max(minimum, workspaceHeight - conversationMinimum);
+    const expandedMinimum = Math.min(maximum, Math.max(minimum, expandedMinimumHeight));
     const panelOpen = areaMode === 'call' || (areaMode === 'split' && call.panelOpen);
     const height =
         areaMode === 'call'
             ? maximum
             : panelOpen
-              ? Math.max(minimum, Math.min(maximum, expandedHeight ?? workspaceHeight * 0.43))
+              ? Math.max(
+                    expandedMinimum,
+                    Math.min(maximum, expandedHeight ?? expandedMinimumHeight),
+                )
               : minimum;
     const compactLayout = height < minimum + 64;
     const privateCall = call.channel?.startsWith('private:');
     const canInvite = privateCall && hasPermission(state.me, state.roles, 'calls.start');
+    useLayoutEffect(() => {
+        setExpandedHeight(expandedMinimumHeight);
+    }, [expandRequest]);
     useLayoutEffect(() => {
         const workspace = dock.current?.parentElement;
         if (!workspace) return;
@@ -137,11 +147,11 @@ export function CallPanel({
     const resize = (requested: number) => {
         onAreaModeChange('split');
         const next = Math.max(minimum, Math.min(maximum, requested));
-        if (next <= minimum) {
+        if (next < (minimum + expandedMinimum) / 2 || next <= minimum) {
             call.setPanelOpen(false);
             call.setShowDetails(false);
         } else {
-            setExpandedHeight(next);
+            setExpandedHeight(Math.max(expandedMinimum, next));
             call.setPanelOpen(true);
         }
     };
@@ -154,7 +164,7 @@ export function CallPanel({
         if (show && !call.showDetails) {
             if (areaMode === 'conversation') onAreaModeChange('split');
             setExpandedHeight((previous) =>
-                Math.max(previous ?? workspaceHeight * 0.43, minimum + 180),
+                Math.max(previous ?? expandedMinimumHeight, expandedMinimum),
             );
             call.setPanelOpen(true);
         }
@@ -221,9 +231,13 @@ export function CallPanel({
                     const step = event.shiftKey ? 80 : 20;
                     const requested =
                         event.key === 'ArrowUp'
-                            ? height + step
+                            ? panelOpen
+                                ? height + step
+                                : expandedMinimum
                             : event.key === 'ArrowDown'
-                              ? height - step
+                              ? height <= expandedMinimum
+                                  ? minimum
+                                  : Math.max(expandedMinimum, height - step)
                               : event.key === 'Home'
                                 ? minimum
                                 : event.key === 'End'

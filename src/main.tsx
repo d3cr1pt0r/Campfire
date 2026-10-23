@@ -601,12 +601,20 @@ function App() {
         );
     const speaking = useSpeaking(socket, call.microphone, state?.me.id || '', call.channel);
     const [callAreaMode, setCallAreaMode] = useState<CallAreaMode>('split');
+    const [callPanelExpandRequest, setCallPanelExpandRequest] = useState(0);
     useEffect(() => setCallAreaMode('split'), [call.channel, url, token]);
+    const expandCallPanel = () => {
+        setCallAreaMode('split');
+        setCallPanelExpandRequest((previous) => previous + 1);
+        call.setPanelOpen(true);
+    };
     const toggleCallPanel = () => {
         const open = callAreaMode === 'call' || (callAreaMode === 'split' && call.panelOpen);
-        setCallAreaMode('split');
-        call.setPanelOpen(!open);
-        if (open) call.setShowDetails(false);
+        if (open) {
+            setCallAreaMode('split');
+            call.setPanelOpen(false);
+            call.setShowDetails(false);
+        } else expandCallPanel();
     };
     useEffect(() => {
         storage.setItem('preferences', JSON.stringify(prefs));
@@ -1743,14 +1751,13 @@ function App() {
                                                                 className="voice-stream-indicator"
                                                                 title="Open camera call"
                                                                 onClick={() => {
-                                                                    if (
-                                                                        callAreaMode ===
-                                                                        'conversation'
-                                                                    )
-                                                                        setCallAreaMode('split');
+                                                                    expandCallPanel();
                                                                     if (call.channel !== p.channel)
-                                                                        void call.join(p.channel);
-                                                                    else call.setPanelOpen(true);
+                                                                        void call.join(
+                                                                            p.channel,
+                                                                            undefined,
+                                                                            true,
+                                                                        );
                                                                 }}
                                                             >
                                                                 <Video size={14} /> CAM
@@ -1778,14 +1785,8 @@ function App() {
                                                                     )
                                                                 }
                                                                 onClick={() => {
-                                                                    if (
-                                                                        callAreaMode ===
-                                                                        'conversation'
-                                                                    )
-                                                                        setCallAreaMode('split');
-                                                                    if (p.socket === socket?.id)
-                                                                        call.setPanelOpen(true);
-                                                                    else
+                                                                    expandCallPanel();
+                                                                    if (p.socket !== socket?.id)
                                                                         call.watchStream(
                                                                             p.channel,
                                                                             p.socket,
@@ -1813,7 +1814,7 @@ function App() {
                                         disabled={!!call.channel && call.channel !== c.id}
                                         onClick={() => {
                                             if (call.channel !== c.id) void call.join(c.id);
-                                            else toggleCallPanel();
+                                            else expandCallPanel();
                                         }}
                                     >
                                         <Phone size={18} />
@@ -2226,6 +2227,7 @@ function App() {
                     </ConversationSection>
                     {call.channel && (
                         <CallPanel
+                            expandRequest={callPanelExpandRequest}
                             areaMode={callAreaMode}
                             onAreaModeChange={setCallAreaMode}
                             state={state}
