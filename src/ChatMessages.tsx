@@ -118,7 +118,7 @@ function ChatMessageList({
     onJumpFailed,
 }: {
     jump?: MessageJump;
-    onJumpShown?: (request: number) => void;
+    onJumpShown?: (request: number, visible: string[]) => Promise<string[]>;
     onJumpFailed?: (request: number, error: Error) => void;
     messageAvatars?: MessageAvatarMode;
     showRoleColors?: boolean;
@@ -152,7 +152,7 @@ function ChatMessageList({
     const scroll = useRef<HTMLDivElement>(null);
     const initialized = useRef(false);
     const [focusedId, setFocusedId] = useState<string | null>(null);
-    const [ping, setPing] = useState<MessageJump | null>(null);
+    const [ping, setPing] = useState<{ request: number; ids: string[] } | null>(null);
     const completedJump = useRef(0);
     const virtualizer = useVirtualizer({
         count: visibleMessages.length + 1,
@@ -226,8 +226,31 @@ function ChatMessageList({
                     bounds.top < viewport.bottom
                 ) {
                     completedJump.current = jump.request;
-                    setPing(jump);
-                    onJumpShown?.(jump.request);
+                    setPing({ request: jump.request, ids: [jump.id] });
+                    const visible = [
+                        ...(scroll.current?.querySelectorAll<HTMLElement>(
+                            '.virtual-message[data-message-id]',
+                        ) ?? []),
+                    ]
+                        .filter((row) => {
+                            const bounds = row.querySelector('.message')?.getBoundingClientRect();
+                            return (
+                                bounds &&
+                                bounds.bottom > Math.max(viewport.top, 0) &&
+                                bounds.top < Math.min(viewport.bottom, window.innerHeight) &&
+                                bounds.right > Math.max(viewport.left, 0) &&
+                                bounds.left < Math.min(viewport.right, window.innerWidth)
+                            );
+                        })
+                        .map((row) => row.dataset.messageId!);
+                    void onJumpShown?.(jump.request, visible).then((ids) => {
+                        if (!ids.length) return;
+                        setPing((current) =>
+                            current?.request === jump.request
+                                ? { ...current, ids: [...new Set([...current.ids, ...ids])] }
+                                : current,
+                        );
+                    });
                 } else if (++attempts < 60) reveal();
                 else {
                     completedJump.current = jump.request;
@@ -239,7 +262,9 @@ function ChatMessageList({
             });
         };
         reveal();
-        return () => cancelAnimationFrame(frame);
+        return () => {
+            cancelAnimationFrame(frame);
+        };
     }, [
         jump?.id,
         jump?.request,
@@ -413,7 +438,7 @@ function ChatMessageList({
                                     ref={virtualizer.measureElement}
                                     data-index={item.index}
                                     data-message-id={m.id}
-                                    className={`virtual-message ${ping?.id === m.id ? 'message-ping' : ''}`}
+                                    className={`virtual-message ${ping?.ids.includes(m.id) ? 'message-ping' : ''}`}
                                     style={{ transform: `translateY(${item.start}px)` }}
                                     onFocusCapture={() => setFocusedId(m.id)}
                                     onBlurCapture={(event) => {

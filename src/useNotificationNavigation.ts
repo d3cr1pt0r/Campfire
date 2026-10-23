@@ -7,12 +7,19 @@ export function useNotificationNavigation(
     api: ApiClient,
     navigate: (room: string, parent: Message | null) => void,
     acknowledge: (message: Message) => Promise<void>,
+    acknowledgeVisible: (
+        room: string,
+        messages: string[],
+        signal: AbortSignal,
+    ) => Promise<string[]>,
     fail: (error: Error) => void,
 ) {
     const [jump, setJump] = useState<(NotificationTarget & { request: number }) | null>(null);
     const serial = useRef(0);
     const pending = useRef<{
         request: number;
+        target: Message;
+        signal: AbortSignal;
         remaining: Set<'message' | 'parent'>;
         resolve: () => void;
         reject: (error: Error) => void;
@@ -37,6 +44,8 @@ export function useNotificationNavigation(
                         };
                         pending.current = {
                             request,
+                            target: target.message,
+                            signal,
                             remaining: new Set(target.parent ? ['message', 'parent'] : ['message']),
                             resolve: () => done(),
                             reject: done,
@@ -61,14 +70,35 @@ export function useNotificationNavigation(
     }, [navigation]);
     // A thread notification is ready only after both its reply and original
     // message are visible, so queued clicks cannot skip the parent's highlight.
-    const markShown = useCallback((request: number, part: 'message' | 'parent') => {
-        const current = pending.current;
-        if (current?.request !== request) return;
-        current.remaining.delete(part);
-        if (!current.remaining.size) current.resolve();
-    }, []);
-    const shown = useCallback((request: number) => markShown(request, 'message'), [markShown]);
-    const parentShown = useCallback((request: number) => markShown(request, 'parent'), [markShown]);
+    const markShown = useCallback(
+        async (request: number, part: 'message' | 'parent', visible: string[]) => {
+            const current = pending.current;
+            if (current?.request !== request || !current.remaining.has(part)) return [];
+            try {
+                const matched = await acknowledgeVisible(
+                    current.target.room,
+                    visible.filter((id) => id !== current.target.id),
+                    current.signal,
+                );
+                if (pending.current !== current) return [];
+                current.remaining.delete(part);
+                if (!current.remaining.size) current.resolve();
+                return matched;
+            } catch (error) {
+                if (pending.current === current) current.reject(error as Error);
+                return [];
+            }
+        },
+        [acknowledgeVisible],
+    );
+    const shown = useCallback(
+        (request: number, visible: string[]) => markShown(request, 'message', visible),
+        [markShown],
+    );
+    const parentShown = useCallback(
+        (request: number, visible: string[]) => markShown(request, 'parent', visible),
+        [markShown],
+    );
     const failed = useCallback((request: number, error: Error) => {
         if (pending.current?.request === request) pending.current.reject(error);
     }, []);

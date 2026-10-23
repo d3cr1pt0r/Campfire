@@ -25,6 +25,7 @@ export function useUnread(
         unread: snapshot.unread,
         latest: snapshot.latest,
         acknowledge: client.acknowledge,
+        acknowledgeVisible: client.acknowledgeVisible,
         dismissUnread: client.dismiss,
     };
 }

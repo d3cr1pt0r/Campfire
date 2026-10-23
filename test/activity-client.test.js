@@ -152,3 +152,30 @@ test('synced notification rules replace only this account and server while devic
     assert.equal(merged.messageSounds, false);
     assert.equal(merged.output, 'device-speaker');
 });
+
+test('visible acknowledgments update activity, return queued matches, and discard stale account responses', async () => {
+    const calls = [];
+    const api = (path, method, body, signal) =>
+        new Promise((resolve) => calls.push({ path, method, body, signal, resolve }));
+    const client = createActivityClient(api, () => {});
+    const controller = new AbortController();
+    const first = client.acknowledgeVisible('general', ['visible', 'read'], controller.signal);
+    assert.equal(calls[0].path, '/activity/acknowledge-visible');
+    assert.deepEqual(calls[0].body, { room: 'general', messages: ['visible', 'read'] });
+    assert.equal(calls[0].signal, controller.signal);
+    calls[0].resolve({
+        version: 2,
+        unread: { general: 1 },
+        latest: { general: 4 },
+        messages: ['visible'],
+    });
+    assert.deepEqual(await first, ['visible']);
+    assert.equal(client.getSnapshot().unread.general, 1);
+    assert.deepEqual(await client.acknowledgeVisible('general', []), []);
+    assert.equal(calls.length, 1);
+    const stale = client.acknowledgeVisible('general', ['another']);
+    client.cancel();
+    calls[1].resolve({ version: 3, unread: {}, latest: { general: 5 }, messages: ['another'] });
+    assert.deepEqual(await stale, []);
+    assert.equal(client.getSnapshot().version, 2);
+});

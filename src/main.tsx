@@ -408,7 +408,7 @@ function App() {
         url,
         reportError,
     );
-    const { unread, latest, acknowledge, dismissUnread } = useUnread(
+    const { unread, latest, acknowledge, acknowledgeVisible, dismissUnread } = useUnread(
         api,
         socket,
         state?.activity,
@@ -450,6 +450,7 @@ function App() {
         api,
         navigateNotification,
         acknowledge,
+        acknowledgeVisible,
         reportError,
     );
     const notificationMenu = useNotificationContextMenu(unread, latest, dismissUnread);

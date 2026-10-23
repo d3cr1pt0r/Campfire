@@ -149,6 +149,46 @@ export function createActivity({ app, io, get, all, run, hasRoom, userFor, messa
         }),
     );
     app.post(
+        '/api/activity/acknowledge-visible',
+        route((req, res) => {
+            const room = canonicalRoom(req.body?.room);
+            check(hasRoom(req.user, room), 'Unknown conversation', 403);
+            const ids = req.body?.messages;
+            check(
+                Array.isArray(ids) &&
+                    ids.length <= 500 &&
+                    ids.every((id) => typeof id === 'string' && id.length > 0 && id.length <= 100),
+                'Invalid visible messages',
+            );
+            const unique = [...new Set(ids)];
+            // Match the notification queue, then acknowledge only this viewport's
+            // IDs in one statement. Offscreen and later arrivals stay pending.
+            const acknowledged = unique.length
+                ? all(
+                      `INSERT OR IGNORE INTO activity_acknowledgments(user,message)
+                 SELECT ?,m.id FROM message_activity a JOIN messages m ON m.id=a.message
+                 LEFT JOIN conversation_reads r ON r.user=? AND r.room=m.room AND r.thread=COALESCE(m.thread,'')
+                 LEFT JOIN conversation_reads c ON c.user=? AND c.room=m.room AND c.thread='*'
+                 LEFT JOIN activity_acknowledgments seen ON seen.user=? AND seen.message=m.id
+                 WHERE m.room=? AND m.id IN (${unique.map(() => '?').join(',')})
+                 AND m.author IS NOT NULL AND m.author<>? AND seen.message IS NULL
+                 AND a.sequence>MAX(COALESCE((SELECT sequence FROM activity_baselines WHERE user=?),0),COALESCE(r.sequence,0),COALESCE(c.sequence,0))
+                 RETURNING message`,
+                      req.user.id,
+                      req.user.id,
+                      req.user.id,
+                      req.user.id,
+                      room,
+                      ...unique,
+                      req.user.id,
+                      req.user.id,
+                  ).map((row) => row.message)
+                : [];
+            if (acknowledged.length) publish(null, req.user.id);
+            res.json({ ...snapshot(req.user), messages: acknowledged });
+        }),
+    );
+    app.post(
         '/api/activity/read',
         route((req, res) => {
             const room = canonicalRoom(req.body?.room);

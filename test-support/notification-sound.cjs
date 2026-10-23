@@ -423,10 +423,24 @@ app.whenReady()
             room: 'general',
             body: 'Notification traversal thread',
         });
+        // Keep each traversal target outside the others' viewports. Loaded and
+        // overscan rows must not clear merely because history contains them.
+        const gap = async () => {
+            for (let i = 0; i < 35; i++)
+                await ownerApi('/messages', 'POST', {
+                    room: 'general',
+                    body: 'Offscreen separation ' + i,
+                });
+        };
+        await gap();
         const oldest = await send('Traversal oldest', 'general');
+        await gap();
         const second = await send('Traversal second', 'general');
+        await gap();
         const reply = await send('Traversal thread reply', 'general', root.id);
+        await gap();
         const fourth = await send('Traversal fourth', 'general');
+        await gap();
         const newest = await send('Traversal newest', 'general');
         // Own messages push every pending target beyond the latest history page without
         // introducing more notifications. The jump must fetch around its target.
@@ -496,6 +510,37 @@ app.whenReady()
             'channel with no notifications uses ordinary navigation',
         );
 
+        await js('document.querySelector(\'.direct-message[aria-label^="Message Bob"]\').click()');
+        const offscreen = await send('Offscreen group notification', 'general');
+        await gap();
+        const threadNearby = await send('Nearby thread notification', 'general', root.id);
+        const threadNewest = await send('Newest thread group notification', 'general', root.id);
+        const nearby = [];
+        for (let i = 0; i < 3; i++)
+            nearby.push(await send('Visible group notification ' + i, 'general'));
+        await wait(`${count} === '6'`, 'visible and offscreen queues accumulate independently');
+        await js(`${general}.click()`);
+        await wait(
+            `${count} === '3' && ${nearby.map((m) => pinged(m.id)).join(' && ')}`,
+            'one notification jump highlights and clears all queued messages in the main viewport',
+        );
+        assert.deepEqual(
+            await js(
+                `[...document.querySelectorAll('.chat-area .message-ping')].map(n=>n.dataset.messageId).sort()`,
+            ),
+            nearby.map((m) => m.id).sort(),
+            'read messages and own messages in the same viewport do not ping',
+        );
+        await js(`${general}.click()`);
+        await wait(
+            `${count} === '1' && ${pinged(threadNearby.id)} && ${pinged(threadNewest.id)} && ${pinged(root.id)}`,
+            'thread viewport clears and highlights neighboring queued replies while offscreen channel activity remains',
+        );
+        await js(`${general}.click()`);
+        await wait(
+            `!(${count}) && ${pinged(offscreen.id)}`,
+            'offscreen notification remains available for the next jump',
+        );
         await js('document.querySelector(\'.direct-message[aria-label^="Message Bob"]\').click()');
         await send('Clear channel thread notification', 'general', root.id);
         await send('Clear channel top-level notification', 'general');

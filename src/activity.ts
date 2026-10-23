@@ -62,6 +62,19 @@ export function createActivityClient(api: ApiClient, fail: (error: Error) => voi
             });
             if (current === generation) receive(value);
         },
+        acknowledgeVisible: async (room: string, messages: string[], signal?: AbortSignal) => {
+            if (!messages.length) return [];
+            const current = generation;
+            const value = await api<ActivitySnapshot & { messages: string[] }>(
+                '/activity/acknowledge-visible',
+                'POST',
+                { room, messages },
+                signal,
+            );
+            if (current !== generation) return [];
+            receive(value);
+            return value.messages;
+        },
         dismiss: (room: string, through = snapshot.latest[room]) => read(room, through, null, true),
         getSnapshot: () => snapshot,
         subscribe(listener: () => void) {

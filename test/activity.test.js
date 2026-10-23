@@ -44,6 +44,59 @@ test('newest-first traversal acknowledges exactly one message and includes threa
     assert.equal(await next(), null);
 });
 
+test('visible acknowledgments match only queued IDs and preserve offscreen, private, and later activity', async (t) => {
+    const f = await roleFixture(t);
+    const send = (body, extra = {}) =>
+        f.api(f.owner, '/messages', 'POST', { room: 'general', body, ...extra });
+    const offscreen = await send('Offscreen');
+    const parent = await send('Visible parent');
+    const reply = await send('Visible reply', { thread: parent.id });
+    const alreadyRead = await send('Already read');
+    await f.api(f.member, '/activity/acknowledge', 'POST', {
+        room: 'general',
+        message: alreadyRead.id,
+    });
+    const own = await f.api(f.member, '/messages', 'POST', {
+        room: 'general',
+        body: 'Own message',
+    });
+    const deleted = await send('Deleted before display');
+    await f.api(f.owner, `/messages/${deleted.id}`, 'DELETE');
+    const privateRoom = canonicalRoom(`dm:${f.owner.user.id}:${f.other.user.id}`);
+    const privateMessage = await f.api(f.owner, '/messages', 'POST', {
+        room: privateRoom,
+        body: 'Private',
+    });
+    const ids = [
+        parent.id,
+        reply.id,
+        parent.id,
+        alreadyRead.id,
+        own.id,
+        deleted.id,
+        privateMessage.id,
+        'missing',
+    ];
+    const later = await send('After the viewport snapshot');
+    const ack = (messages, room = 'general', status = 200) =>
+        f.api(f.member, '/activity/acknowledge-visible', 'POST', { room, messages }, status);
+    let result = await ack(ids);
+    assert.deepEqual(new Set(result.messages), new Set([parent.id, reply.id]));
+    assert.equal(result.unread.general, 2);
+    assert.equal((await f.api(f.member, '/activity/next?room=general')).message.id, later.id);
+    result = await ack(ids);
+    assert.deepEqual(result.messages, [], 'repeated display does not ping already cleared items');
+    assert.equal(result.unread.general, 2);
+    assert.deepEqual((await ack([])).messages, []);
+    await ack([privateMessage.id], privateRoom, 403);
+    for (const invalid of [null, [''], [42], Array(501).fill(parent.id)])
+        await ack(invalid, 'general', 400);
+    await f.restart();
+    assert.equal((await f.api(f.member, '/activity')).unread.general, 2);
+    await ack([later.id]);
+    assert.equal((await f.api(f.member, '/activity/next?room=general')).message.id, offscreen.id);
+});
+
 test('individual acknowledgments protect the backlog and clear-all preserves arrivals after its cutoff', async (t) => {
     const f = await roleFixture(t);
     const room = canonicalRoom(`dm:${f.owner.user.id}:${f.member.user.id}`);

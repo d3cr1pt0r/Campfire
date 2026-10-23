@@ -21,7 +21,7 @@ type Props = {
     focusRequest: number;
     parent: Message;
     jump?: MessageJump;
-    onJumpShown?: (request: number) => void;
+    onJumpShown?: (request: number, visible: string[]) => Promise<string[]>;
     onJumpFailed?: (request: number, error: Error) => void;
     api: ApiClient;
     socket: AppSocket | null;
