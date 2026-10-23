@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 interface Window {
     campfire?: {
+        screenAudio?: import('./screenAudio').ScreenAudioBridge;
         updates?: {
             getState(): Promise<import('./DesktopUpdates').UpdateState>;
             check(): Promise<import('./DesktopUpdates').UpdateState>;

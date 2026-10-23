@@ -6,6 +6,7 @@ import { openProcessedMicrophone } from './microphoneProcessing';
 import { createNotificationSound } from './notifications';
 import type { SoundName } from './sounds';
 import { createPeerSignaling } from './signaling';
+import { useScreenShareAudio } from './ScreenShareAudio';
 import {
     createPeerMedia,
     outgoingTracks,
@@ -59,6 +60,9 @@ export function useCall(
     onInputFallback: () => void,
     permission: (name: string, channel?: string | null) => boolean,
 ) {
+    const screenAudio = useScreenShareAudio();
+    const screenAudioCleanup = useRef<(() => void) | null>(null);
+    const screenCapture = useRef<AbortController | null>(null);
     const permissionRef = useRef(permission);
     permissionRef.current = permission;
     const [channel, setChannel] = useState<string | null>(null);
@@ -188,6 +192,9 @@ export function useCall(
         peers.current.delete(peer.id);
     };
     const leave = () => {
+        screenCapture.current?.abort();
+        screenAudioCleanup.current?.();
+        screenAudioCleanup.current = null;
         const wasInCall = !!callChannel.current;
         operation.current++;
         pendingWatch.current = null;
@@ -255,6 +262,9 @@ export function useCall(
         );
     };
     const stopShare = () => {
+        screenCapture.current?.abort();
+        screenAudioCleanup.current?.();
+        screenAudioCleanup.current = null;
         const capture = screen.current;
         screen.current = null;
         shareId.current = null;
@@ -870,6 +880,8 @@ export function useCall(
                 return;
             }
             const settings = videoSettings(prefsRef.current, 'screen');
+            const capture = new AbortController();
+            screenCapture.current = capture;
             const stream = (captured = await navigator.mediaDevices.getDisplayMedia({
                 video: captureConstraints(settings, 'screen'),
                 audio: {
@@ -880,7 +892,16 @@ export function useCall(
                     restrictOwnAudio: true,
                 } as MediaTrackConstraints,
             }));
+            stream.getVideoTracks()[0]?.addEventListener('ended', () => capture.abort(), {
+                once: true,
+                signal: capture.signal,
+            });
+            capture.signal.throwIfAborted();
+            screenAudioCleanup.current = await screenAudio.attach(stream, capture.signal);
             if (attempt !== operation.current || !permissionRef.current('calls.share')) {
+                capture.abort();
+                screenAudioCleanup.current?.();
+                screenAudioCleanup.current = null;
                 stream.getTracks().forEach((t) => t.stop());
                 return;
             }
@@ -888,14 +909,16 @@ export function useCall(
             if (systemAudio) {
                 systemAudio.onended = () => {
                     if (screen.current !== stream) return;
+                    screenAudioCleanup.current?.();
+                    screenAudioCleanup.current = null;
                     void syncMedia().catch((error) => report(`Screen audio: ${error.message}`));
                     report(
                         'Screen-share audio ended. Video sharing continues; restart sharing to capture sound again.',
                     );
                 };
-            } else {
+            } else if (!window.campfire?.screenAudio) {
                 report(
-                    'Sharing video without system audio. Enable Share system audio in the picker if available. Linux desktop capture does not currently provide system audio in this app.',
+                    'Sharing video without system audio. Enable Share system audio in the picker if available.',
                 );
             }
             if (!stream.getVideoTracks().some((track) => track.readyState === 'live'))
@@ -919,9 +942,10 @@ export function useCall(
             if (attempt === operation.current) {
                 stopShare();
                 void syncMedia().catch(() => {});
-                report(
-                    `Screen sharing: ${(e as Error).name || 'Error'} ${(e as Error).message || 'Capture failed'}`,
-                );
+                if ((e as Error).name !== 'AbortError')
+                    report(
+                        `Screen sharing: ${(e as Error).name || 'Error'} ${(e as Error).message || 'Capture failed'}`,
+                    );
             }
         } finally {
             captureBusy.current.share = false;
@@ -994,9 +1018,11 @@ export function useCall(
             stopShare();
             changed = true;
         }
+        if (!canShare) screenCapture.current?.abort();
         if (changed) void syncMedia().catch((error) => report(error.message));
     }, [canJoin, canSpeak, canCamera, canShare, channel]);
     return {
+        screenAudioDialog: screenAudio.dialog,
         canSpeak,
         canCamera,
         canShare,

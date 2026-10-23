@@ -46,6 +46,21 @@
 body {
     color: var(--ink);
 }
+.screen-audio-backdrop {
+    z-index: 100;
+}
+.screen-audio-modal {
+    width: min(460px, 100%);
+}
+.screen-audio-modal h2 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-right: 32px;
+}
+.screen-audio-modal > p strong {
+    overflow-wrap: anywhere;
+}
 .workspace,
 .auth-shell {
     background: var(--content);

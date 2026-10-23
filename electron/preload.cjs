@@ -1,6 +1,19 @@
 const { contextBridge, ipcRenderer } = require('electron');
 // No arbitrary IPC, file access, shell commands, or Node APIs reach the renderer.
 contextBridge.exposeInMainWorld('campfire', {
+    screenAudio:
+        process.platform === 'linux'
+            ? {
+                  info: () => ipcRenderer.invoke('screen-audio:info'),
+                  start: (token, choice) => ipcRenderer.invoke('screen-audio:start', token, choice),
+                  stop: (token) => ipcRenderer.invoke('screen-audio:stop', token),
+                  onEnded: (callback) => {
+                      const listener = (_event, token) => callback(token);
+                      ipcRenderer.on('screen-audio:ended', listener);
+                      return () => ipcRenderer.removeListener('screen-audio:ended', listener);
+                  },
+              }
+            : undefined,
     updates: {
         getState: () => ipcRenderer.invoke('updates:state'),
         check: () => ipcRenderer.invoke('updates:check'),

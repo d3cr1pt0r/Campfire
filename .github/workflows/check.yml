@@ -17,6 +17,11 @@ jobs:
                   node-version: '24'
                   cache: npm
             - run: npm ci
+            - name: Build native audio helper
+              if: runner.os == 'Linux'
+              run: |
+                  sudo apt-get update && sudo apt-get install -y libpipewire-0.3-dev libx11-dev pkg-config
+                  npm run build:pipewire
             - run: npm run format:check
             - run: npm run check
             - run: npm test

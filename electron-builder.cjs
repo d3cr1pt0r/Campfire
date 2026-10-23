@@ -6,6 +6,7 @@ module.exports = {
     files: [
         'dist/**/*',
         'electron/**/*',
+        '!electron/native/bin/**/*',
         'package.json',
         '!node_modules/sharp/**/*',
         '!node_modules/@img/**/*',
@@ -14,6 +15,9 @@ module.exports = {
     npmRebuild: false, // Packaged desktop dependencies do not need native rebuilding.
     publish: { provider: 'github', owner: 'd3cr1pt0r', repo: 'Campfire', releaseType: 'draft' },
     linux: {
+        extraResources: [
+            { from: 'electron/native/bin/campfire-pipewire', to: 'campfire-pipewire' },
+        ],
         icon: 'electron/icons/campfire.png',
         target: [
             { target: 'AppImage', arch: ['x64'] },

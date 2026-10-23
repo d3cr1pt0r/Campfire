@@ -2581,6 +2581,7 @@ function App() {
                 )}
                 {showError}
             </div>
+            {call.screenAudioDialog}
         </MediaContexts>
     );
 }

@@ -11,6 +11,7 @@ const {
     shell,
     powerMonitor,
     clipboard,
+    webContents,
 } = require('electron');
 const path = require('node:path');
 const { installUpdates } = require('./updates.cjs');
@@ -20,6 +21,7 @@ const { createRendererServer, listenRendererServer } = require('./renderer-serve
 const { createClientState } = require('./client-state.cjs');
 const { createAvatarStore } = require('./avatar-cache.cjs');
 const { installHttpPolicy } = require('./http-policy.cjs');
+const { installScreenAudio } = require('./screen-audio.cjs');
 const {
     fingerprint,
     normalizeFingerprint,
@@ -76,6 +78,17 @@ else {
                 }
             };
             installUpdates({ app, ipcMain, BrowserWindow, dialog, trusted });
+            const screenAudio =
+                process.platform === 'linux'
+                    ? installScreenAudio({
+                          app,
+                          ipcMain,
+                          trusted,
+                          helperPath: app.isPackaged
+                              ? path.join(process.resourcesPath, 'campfire-pipewire')
+                              : path.join(__dirname, 'native', 'bin', 'campfire-pipewire'),
+                      })
+                    : null;
             installHttpPolicy({
                 session: session.defaultSession,
                 ipcMain,
@@ -248,23 +261,39 @@ else {
                             types: ['window', 'screen'],
                         });
                         const systemAudio = request.audioRequested && process.platform === 'win32';
-                        const result = await dialog.showMessageBox({
-                            type: 'question',
-                            title: 'Share a screen or window',
-                            message: 'Choose what to share',
-                            detail: systemAudio
-                                ? 'System audio includes sound from all applications, even when sharing a single window.'
-                                : 'System audio capture may not be available on this platform.',
-                            ...(systemAudio
-                                ? { checkboxLabel: 'Share system audio', checkboxChecked: true }
-                                : {}),
-                            buttons: [...sources.map((s) => s.name), 'Cancel'],
-                            cancelId: sources.length,
-                            noLink: true,
-                        });
+                        const result =
+                            process.platform === 'linux' && sources.length === 1
+                                ? { response: 0, checkboxChecked: false }
+                                : await dialog.showMessageBox({
+                                      type: 'question',
+                                      title: 'Share a screen or window',
+                                      message: 'Choose what to share',
+                                      detail: systemAudio
+                                          ? 'System audio includes sound from all applications, even when sharing a single window.'
+                                          : 'System audio capture may not be available on this platform.',
+                                      ...(systemAudio
+                                          ? {
+                                                checkboxLabel: 'Share system audio',
+                                                checkboxChecked: true,
+                                            }
+                                          : {}),
+                                      buttons: [...sources.map((s) => s.name), 'Cancel'],
+                                      cancelId: sources.length,
+                                      noLink: true,
+                                  });
                         if (result.response >= sources.length) return callback({});
+                        const source = sources[result.response];
+                        const windowId =
+                            process.env.XDG_SESSION_TYPE !== 'wayland' &&
+                            !process.env.WAYLAND_DISPLAY
+                                ? /^window:(\d+):/.exec(source.id)?.[1]
+                                : undefined;
+                        screenAudio?.selected(webContents.fromFrame(request.frame), {
+                            name: source.name,
+                            windowId: windowId ? Number(windowId) : undefined,
+                        });
                         callback({
-                            video: sources[result.response],
+                            video: source,
                             ...(systemAudio && result.checkboxChecked ? { audio: 'loopback' } : {}),
                         });
                     } catch {
