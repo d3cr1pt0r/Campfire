@@ -85,6 +85,7 @@ export function useCall() {
         local: null,
         remote,
         details: [],
+        videoWarnings: [],
         join: async (id) => setChannel(id),
         leave: () => setChannel(null),
         watch,

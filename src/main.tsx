@@ -63,7 +63,6 @@ import {
     MicOff,
     Headphones,
     HeadphoneOff,
-    PhoneOff,
     Phone,
     Search,
     Pin,
@@ -1822,20 +1821,6 @@ function App() {
                                     </button>
                                 ))}
                         </div>
-                        {call.channel && (
-                            <div className="voice-connected">
-                                <Radio size={17} />
-                                <div className="voice-connection-copy">
-                                    <strong>Voice connected</strong>
-                                    <small title={`${callName} / ${state.name}`}>
-                                        {callName} / {state.name}
-                                    </small>
-                                </div>
-                                <button title="Disconnect call" onClick={call.leave}>
-                                    <PhoneOff size={17} />
-                                </button>
-                            </div>
-                        )}
                         <div className="user-bar">
                             <div className="avatar-status self-avatar">
                                 <Avatar
@@ -1905,20 +1890,6 @@ function App() {
                     </aside>
                 </div>
                 <main className="workspace" inert={compact && navigationOpen}>
-                    {call.channel && (
-                        <CallPanel
-                            areaMode={callAreaMode}
-                            onAreaModeChange={setCallAreaMode}
-                            state={state}
-                            call={call}
-                            prefs={prefs}
-                            speaking={speaking}
-                            callName={callName}
-                            setModal={setModal}
-                            notify={notify}
-                            user={user}
-                        />
-                    )}
                     <ConversationSection
                         activeCall={!!call.channel}
                         header={
@@ -2249,6 +2220,20 @@ function App() {
                             )}
                         </div>
                     </ConversationSection>
+                    {call.channel && (
+                        <CallPanel
+                            areaMode={callAreaMode}
+                            onAreaModeChange={setCallAreaMode}
+                            state={state}
+                            call={call}
+                            prefs={prefs}
+                            speaking={speaking}
+                            callName={callName}
+                            setModal={setModal}
+                            notify={notify}
+                            user={user}
+                        />
+                    )}
                 </main>
                 {modal && (
                     <div

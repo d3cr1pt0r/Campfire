@@ -93,7 +93,7 @@ app.whenReady()
             `Number(document.querySelector('.call-splitter').getAttribute('aria-valuemin'))`,
         );
         const steps = Math.round((scenario.callHeight - minimum) / 20);
-        for (let step = 0; step < steps; step++) await key('ArrowDown');
+        for (let step = 0; step < steps; step++) await key('ArrowUp');
         const replySelector = `[data-message-id="${scenario.thread}"] .thread-replies`;
         await waitFor(
             `!!document.querySelector(${JSON.stringify(replySelector)})`,

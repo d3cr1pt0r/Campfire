@@ -495,6 +495,12 @@ label,
 }
 .call-identity {
     flex: 1;
+    color: #83d0b0;
+}
+.call-dock.compact .call-heading {
+    height: 100%;
+    min-height: 0;
+    padding-block: 0;
 }
 .call-dock.compact .call-identity {
     max-width: calc(50% - var(--call-controls-width) / 2 - 36px);
@@ -734,7 +740,7 @@ label,
     top: 0;
     left: 50%;
     transform: translateX(-50%);
-    height: 64px;
+    height: 100%;
     display: flex;
     align-items: center;
     padding: 0;
@@ -802,10 +808,6 @@ label,
     .call-dock.compact {
         --call-control-size: 28px;
         --call-control-gap: 2px;
-    }
-    .call-identity > svg,
-    .call-summary-kind {
-        display: none;
     }
     .call-summary-copy strong {
         font-size: 12px;

@@ -67,7 +67,7 @@ export function CallPanel({
     const [conversationMinimum, setConversationMinimum] = useState(84);
     const [expandedHeight, setExpandedHeight] = useState<number | null>(null);
     const [resizing, setResizing] = useState(false);
-    const [minimum, setMinimum] = useState(76);
+    const [minimum, setMinimum] = useState(56);
     const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
     const showLocal = showNonStreaming || call.camera || call.sharing;
     const visibleRemote = call.remote.filter(
@@ -98,20 +98,17 @@ export function CallPanel({
     const compactLayout = height < minimum + 64;
     const privateCall = call.channel?.startsWith('private:');
     const canInvite = privateCall && hasPermission(state.me, state.roles, 'calls.start');
-    const participants = new Set(
-        state.calls
-            .filter((participant) => participant.channel === call.channel)
-            .map((participant) => participant.user),
-    ).size;
     useLayoutEffect(() => {
         const workspace = dock.current?.parentElement;
         if (!workspace) return;
-        const serverHeading = workspace.closest('.app-shell')?.querySelector('.server-heading');
+        const shell = workspace.closest('.app-shell');
+        const serverHeading = shell?.querySelector('.server-heading');
+        const userBar = shell?.querySelector('.user-bar');
         const update = () => {
             const headerHeight = serverHeading?.getBoundingClientRect().height || 76;
             const splitterHeight = splitter.current?.getBoundingClientRect().height || 8;
-            // Include the divider in the compact height so its bottom aligns with the sidebar.
-            setMinimum(Math.max(0, headerHeight - splitterHeight));
+            // The compact dock and its divider together match the sidebar account controls.
+            setMinimum(Math.max(0, (userBar?.getBoundingClientRect().height || 56) - splitterHeight));
             setWorkspaceHeight(workspace.clientHeight);
             // Reserve the conversation header and the divider at maximum call height.
             setConversationMinimum(headerHeight + splitterHeight);
@@ -121,6 +118,7 @@ export function CallPanel({
         observer.observe(workspace);
         if (splitter.current) observer.observe(splitter.current);
         if (serverHeading) observer.observe(serverHeading);
+        if (userBar) observer.observe(userBar);
         return () => observer.disconnect();
     });
     useLayoutEffect(() => {
@@ -175,6 +173,66 @@ export function CallPanel({
     return (
         <>
             <div
+                ref={splitter}
+                className={`call-splitter ${resizing ? 'resizing' : ''}`}
+                role="separator"
+                tabIndex={0}
+                aria-label="Resize call and conversation sections"
+                aria-orientation="horizontal"
+                aria-controls="call-panel"
+                aria-valuemin={minimum}
+                aria-valuemax={Math.round(maximum)}
+                aria-valuenow={Math.round(height)}
+                aria-valuetext={
+                    panelOpen
+                        ? `Call details ${Math.round(height)} pixels high`
+                        : 'Compact call information'
+                }
+                title="Drag to resize call details · Arrow keys to resize · Home to collapse"
+                onPointerDown={(event) => {
+                    if (event.button !== 0) return;
+                    event.preventDefault();
+                    event.currentTarget.focus();
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    drag.current = { pointer: event.pointerId, y: event.clientY, height };
+                    setResizing(true);
+                }}
+                onPointerMove={(event) => {
+                    const start = drag.current;
+                    if (start?.pointer === event.pointerId)
+                        resize(start.height + start.y - event.clientY);
+                }}
+                onPointerUp={(event) => {
+                    if (drag.current?.pointer !== event.pointerId) return;
+                    drag.current = null;
+                    setResizing(false);
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                }}
+                onLostPointerCapture={() => {
+                    drag.current = null;
+                    setResizing(false);
+                }}
+                onKeyDown={(event) => {
+                    const step = event.shiftKey ? 80 : 20;
+                    const requested =
+                        event.key === 'ArrowUp'
+                            ? height + step
+                            : event.key === 'ArrowDown'
+                              ? height - step
+                              : event.key === 'Home'
+                                ? minimum
+                                : event.key === 'End'
+                                  ? maximum
+                                  : null;
+                    if (requested === null) return;
+                    event.preventDefault();
+                    resize(requested);
+                }}
+                onDoubleClick={toggle}
+            >
+                <span />
+            </div>
+            <div
                 ref={dock}
                 className={`call-dock ${resizing ? 'resizing' : ''} ${compactLayout ? 'compact' : ''}`}
                 style={{ height, '--call-control-count': canInvite ? 7 : 6 } as CSSProperties}
@@ -185,14 +243,6 @@ export function CallPanel({
                             {privateCall ? <Phone size={20} /> : <Volume2 size={20} />}
                             <div className="call-summary-copy">
                                 <strong title={callName}>{callName}</strong>
-                                <small
-                                    title={`${privateCall ? 'Private call' : 'Voice channel'} · ${participants} / 8 connected`}
-                                >
-                                    <span className="call-summary-kind">
-                                        {privateCall ? 'Private call' : 'Voice channel'} ·{' '}
-                                    </span>
-                                    {participants} / 8 connected
-                                </small>
                             </div>
                         </div>
                         <div className="call-heading-actions">
@@ -208,7 +258,9 @@ export function CallPanel({
                                     <span>Reduced quality</span>
                                 </button>
                             )}
-                            <span className="live-badge">LIVE</span>
+                            {(call.camera || call.sharing) && (
+                                <span className="live-badge">LIVE</span>
+                            )}
                             <button
                                 className="panel-expand"
                                 title="Expand call details"
@@ -529,13 +581,6 @@ export function CallPanel({
                                     <MonitorUp />
                                 </button>
                                 <button
-                                    className="danger-bg"
-                                    title="Leave call"
-                                    onClick={call.leave}
-                                >
-                                    <PhoneOff />
-                                </button>
-                                <button
                                     title="More call options"
                                     aria-label="More call options"
                                     aria-haspopup="menu"
@@ -631,6 +676,13 @@ export function CallPanel({
                                 >
                                     <Activity />
                                 </button>
+                                <button
+                                    className="danger-bg"
+                                    title="Leave call"
+                                    onClick={call.leave}
+                                >
+                                    <PhoneOff />
+                                </button>
                             </div>
                             {prefs.pushToTalk && (
                                 <small className="call-push-hint">
@@ -640,66 +692,6 @@ export function CallPanel({
                         </div>
                     </div>
                 </section>
-            </div>
-            <div
-                ref={splitter}
-                className={`call-splitter ${resizing ? 'resizing' : ''}`}
-                role="separator"
-                tabIndex={0}
-                aria-label="Resize call and conversation sections"
-                aria-orientation="horizontal"
-                aria-controls="call-panel"
-                aria-valuemin={minimum}
-                aria-valuemax={Math.round(maximum)}
-                aria-valuenow={Math.round(height)}
-                aria-valuetext={
-                    panelOpen
-                        ? `Call details ${Math.round(height)} pixels high`
-                        : 'Compact call information'
-                }
-                title="Drag to resize call details · Arrow keys to resize · Home to collapse"
-                onPointerDown={(event) => {
-                    if (event.button !== 0) return;
-                    event.preventDefault();
-                    event.currentTarget.focus();
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                    drag.current = { pointer: event.pointerId, y: event.clientY, height };
-                    setResizing(true);
-                }}
-                onPointerMove={(event) => {
-                    const start = drag.current;
-                    if (start?.pointer === event.pointerId)
-                        resize(start.height + event.clientY - start.y);
-                }}
-                onPointerUp={(event) => {
-                    if (drag.current?.pointer !== event.pointerId) return;
-                    drag.current = null;
-                    setResizing(false);
-                    event.currentTarget.releasePointerCapture(event.pointerId);
-                }}
-                onLostPointerCapture={() => {
-                    drag.current = null;
-                    setResizing(false);
-                }}
-                onKeyDown={(event) => {
-                    const step = event.shiftKey ? 80 : 20;
-                    const requested =
-                        event.key === 'ArrowDown'
-                            ? height + step
-                            : event.key === 'ArrowUp'
-                              ? height - step
-                              : event.key === 'Home'
-                                ? minimum
-                                : event.key === 'End'
-                                  ? maximum
-                                  : null;
-                    if (requested === null) return;
-                    event.preventDefault();
-                    resize(requested);
-                }}
-                onDoubleClick={toggle}
-            >
-                <span />
             </div>
         </>
     );
