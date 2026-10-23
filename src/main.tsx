@@ -47,7 +47,9 @@ import { useDialog } from './useDialog';
 import { useModalNavigation } from './modalNavigation';
 import { createApiClient, messagePayload } from './api';
 import { useConversation } from './useConversation';
-import { useUnread, useConversationRead } from './useUnread';
+import { useUnread } from './useUnread';
+import { useNotificationNavigation } from './useNotificationNavigation';
+import { useNotificationContextMenu } from './NotificationContextMenu';
 import { useNotificationPreferences } from './useNotificationPreferences';
 import { isReadingConversation } from './activity';
 import { canonicalRoom, dmParticipant } from '../shared/rooms.js';
@@ -385,7 +387,8 @@ function App() {
     const [thread, setThread] = useState<Message | null>(null);
     const [composerFocus, setComposerFocus] = useState(0);
     const [threadFocus, setThreadFocus] = useState(0);
-    useEffect(() => setThread(null), [room, url, token]);
+    useEffect(() => setThread((previous) => (previous?.room === room ? previous : null)), [room]);
+    useEffect(() => setThread(null), [url, token]);
     const [search, setSearch] = useState(''),
         [pins, setPins] = useState(false),
         [members, setMembers] = useState(() => window.innerWidth > 1100),
@@ -405,7 +408,7 @@ function App() {
         url,
         reportError,
     );
-    const { unread, markRead, dismissUnread } = useUnread(
+    const { unread, latest, acknowledge, dismissUnread } = useUnread(
         api,
         socket,
         state?.activity,
@@ -436,6 +439,20 @@ function App() {
         };
     }, []);
     const [navigationOpen, setNavigationOpen] = useState(false);
+    const navigateNotification = useCallback((destination: string, parent: Message | null) => {
+        setRoom(destination);
+        setThread(parent);
+        setSearch('');
+        setPins(false);
+        setNavigationOpen(false);
+    }, []);
+    const notificationNavigation = useNotificationNavigation(
+        api,
+        navigateNotification,
+        acknowledge,
+        reportError,
+    );
+    const notificationMenu = useNotificationContextMenu(unread, latest, dismissUnread);
     const [compact, setCompact] = useState(() => window.innerWidth <= 800);
     const navigation = useRef<HTMLDivElement>(null);
     useDialog(navigation, () => setNavigationOpen(false), compact && navigationOpen);
@@ -505,12 +522,18 @@ function App() {
         !!state &&
         (room.startsWith('dm:') ||
             state.channels.some((channel) => channel.id === room && channel.kind === 'text'));
-    const conversation = useConversation(api, socket, room, !!token && roomVisible, search, pins);
-    useConversationRead(
+    const notificationJump = notificationNavigation.jump;
+    const conversation = useConversation(
+        api,
+        socket,
         room,
-        conversation.messages,
-        !!token && roomVisible && conversation.loaded && !conversation.loading && !search && !pins,
-        markRead,
+        !!token && roomVisible,
+        search,
+        pins,
+        null,
+        notificationJump?.message.room === room
+            ? (notificationJump.parent?.id ?? notificationJump.message.id)
+            : null,
     );
     useEffect(() => {
         if (
@@ -736,6 +759,17 @@ function App() {
             if (seenMessages.size > 1000) seenMessages.delete(seenMessages.values().next().value!);
             const me = stateRef.current?.me;
             const preferences = prefsRef.current;
+            const reading = isReadingConversation(
+                m,
+                roomRef.current,
+                threadRef.current?.id ?? null,
+                document.visibilityState === 'visible',
+                document.hasFocus(),
+            );
+            if (reading && me && m.author !== me.id)
+                void acknowledge(m).catch((error: Error & { status?: number }) => {
+                    if (error.status !== 403 && error.status !== 404) reportError(error);
+                });
             if (
                 !me ||
                 !shouldNotify(
@@ -748,13 +782,6 @@ function App() {
                 )
             )
                 return;
-            const reading = isReadingConversation(
-                m,
-                roomRef.current,
-                threadRef.current?.id ?? null,
-                document.visibilityState === 'visible',
-                document.hasFocus(),
-            );
             if (preferences.messageSounds !== false && !reading)
                 void messageSound.play(notificationSound(m, me, stateRef.current?.users));
             if (
@@ -910,17 +937,11 @@ function App() {
         if (!state) return;
         setComposerFocus((request) => request + 1);
         const destination = canonicalRoom(`dm:${state.me.id}:${id}`);
-        setRoom(destination);
-        setNavigationOpen(false);
-        setSearch('');
-        setPins(false);
+        notificationNavigation.open(destination, unread[destination] > 0);
     };
-    const selectRoom = (id: string) => {
+    const selectRoom = (id: string, traverse = false) => {
         setComposerFocus((request) => request + 1);
-        setRoom(id);
-        setNavigationOpen(false);
-        setSearch('');
-        setPins(false);
+        notificationNavigation.open(id, traverse && unread[id] > 0);
     };
     const submitLogin = async (f: FormData) => {
         await act(async () => {
@@ -1645,6 +1666,7 @@ function App() {
                                 unread={unread}
                                 color={color}
                                 dm={dm}
+                                notificationMenu={notificationMenu.handlers}
                                 close={(destination) => {
                                     dismissUnread(destination);
                                     if (room === destination)
@@ -1670,7 +1692,8 @@ function App() {
                                             key={c.id}
                                             className={`nav-item channel ${room === c.id ? 'selected' : ''}`}
                                             aria-current={room === c.id ? 'page' : undefined}
-                                            onClick={() => selectRoom(c.id)}
+                                            onClick={() => selectRoom(c.id, true)}
+                                            {...notificationMenu.handlers(c.id)}
                                         >
                                             <Hash size={20} />
                                             {c.name}
@@ -2112,6 +2135,16 @@ function App() {
                                     </div>
                                 )}
                                 <ChatMessages
+                                    jump={
+                                        !search &&
+                                        !pins &&
+                                        !notificationJump?.message.thread &&
+                                        notificationJump?.message.room === room
+                                            ? notificationNavigation.messageJump
+                                            : undefined
+                                    }
+                                    onJumpShown={notificationNavigation.shown}
+                                    onJumpFailed={notificationNavigation.failed}
                                     messageAvatars={prefs.messageAvatars}
                                     showRoleColors={prefs.showRoleColors}
                                     currentVoiceChannel={call.channel}
@@ -2126,6 +2159,7 @@ function App() {
                                         pins,
                                     ])}
                                     onReply={(message) => {
+                                        notificationNavigation.cancel();
                                         setThread(message);
                                         setThreadFocus((request) => request + 1);
                                     }}
@@ -2195,7 +2229,13 @@ function App() {
                                     focusRequest={threadFocus}
                                     key={`${url}:${state.me.id}:${room}:${thread.id}`}
                                     parent={thread}
-                                    markRead={markRead}
+                                    jump={
+                                        notificationJump?.message.thread === thread.id
+                                            ? notificationNavigation.messageJump
+                                            : undefined
+                                    }
+                                    onJumpShown={notificationNavigation.shown}
+                                    onJumpFailed={notificationNavigation.failed}
                                     api={api}
                                     socket={socket}
                                     state={state}
@@ -2210,13 +2250,17 @@ function App() {
                                     openPoll={openPoll}
                                     connected={connected}
                                     notify={notify}
-                                    onClose={() => setThread(null)}
+                                    onClose={() => {
+                                        notificationNavigation.cancel();
+                                        setThread(null);
+                                    }}
                                     formattingToolbar={formattingToolbar}
                                     setFormattingToolbar={setFormattingToolbar}
                                 />
                             )}
                             {members && !thread && (
                                 <MemberList
+                                    notificationMenu={notificationMenu.handlers}
                                     state={state}
                                     color={color}
                                     dm={dm}
@@ -2244,6 +2288,7 @@ function App() {
                         />
                     )}
                 </main>
+                {notificationMenu.menu}
                 {modal && (
                     <div
                         className="modal-backdrop"

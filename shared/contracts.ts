@@ -58,6 +58,8 @@ export type CallMember = {
     deafened?: boolean;
     camera?: boolean;
 };
+export type NotificationTarget = { message: Message; parent: Message | null };
+export type MessageJump = { id: string; request: number };
 export type ActivitySnapshot = {
     version: number;
     unread: Record<string, number>;
