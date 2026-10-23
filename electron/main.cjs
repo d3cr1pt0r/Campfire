@@ -343,6 +343,7 @@ else {
                 });
                 void win.loadURL(origin);
             };
+            ensureTray();
             open();
             app.on('activate', () => {
                 if (!BrowserWindow.getAllWindows().length) open();
