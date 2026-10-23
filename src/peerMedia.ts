@@ -42,12 +42,15 @@ export function outgoingTracks(
         streamAudio: screen && subscribed ? track(screen, 'audio') : null,
     };
 }
-// Chromium hands H.264 to the GPU's encoder (Media Foundation on Windows), while its
-// default VP8 always encodes on the CPU, once per receiving peer. Without a hardware
-// encoder H.264 falls back to software; a peer without H.264 negotiates the rest.
-export function preferHardwareVideoCodec(codecs: RTCRtpCodec[]): RTCRtpCodec[] {
-    const h264 = codecs.filter((codec) => codec.mimeType.toLowerCase() === 'video/h264');
-    return [...h264, ...codecs.filter((codec) => !h264.includes(codec))];
+// VP8 encodes on the CPU (libvpx), whose real-time screen mode copes with motion on a limited
+// connection far better than the GPU's H.264 encoder: at 1.5 Mbps a window that had just been
+// moved stayed clean with VP8 but was left blocky for seconds by NVIDIA's encoder. Chromium
+// already offers VP8 first; stating it keeps that independent of its default order.
+export function preferVideoCodec(codecs: RTCRtpCodec[], mimeType = 'video/VP8'): RTCRtpCodec[] {
+    const preferred = codecs.filter(
+        (codec) => codec.mimeType.toLowerCase() === mimeType.toLowerCase(),
+    );
+    return [...preferred, ...codecs.filter((codec) => !preferred.includes(codec))];
 }
 // Encoding limits survive renegotiation and track replacement, so they are only set when the
 // wanted values differ. A sender not yet given an encoding gets them on a later sync.
@@ -126,9 +129,7 @@ export function createPeerMedia(
                         // Set before the first offer or answer, which both follow it.
                         if (role === 'video' && videoCodecs)
                             try {
-                                transceiver.setCodecPreferences(
-                                    preferHardwareVideoCodec(videoCodecs),
-                                );
+                                transceiver.setCodecPreferences(preferVideoCodec(videoCodecs));
                             } catch {
                                 /* The browser's default codec order still connects. */
                             }

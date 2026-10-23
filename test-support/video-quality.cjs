@@ -6,6 +6,8 @@ for (const flag of ['use-fake-device-for-media-stream', 'use-fake-ui-for-media-s
     app.commandLine.appendSwitch(flag);
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.commandLine.appendSwitch('force-device-scale-factor', '1');
+// The fake microphone beeps; nobody should hear it through the other window.
+app.commandLine.appendSwitch('mute-audio');
 app.on('window-all-closed', () => {});
 const [aliceAccount, bobAccount] = JSON.parse(process.env.VIDEO_ACCOUNTS);
 const origin = process.env.VIDEO_ORIGIN,
@@ -260,12 +262,12 @@ app.whenReady()
         await click(bob, 'Connection diagnostics');
         await wait(
             alice,
-            "/Your video to them: \\d+×\\d+ · .*(kbps|Mbps) of [\\d.]+ Mbps · H264 on (GPU|CPU)/.test(document.querySelector('.call-details')?.textContent)",
+            "/Your video to them: \\d+×\\d+ · .*(kbps|Mbps) of [\\d.]+ Mbps · VP8 on CPU/.test(document.querySelector('.call-details')?.textContent)",
             'Alice sees her live outgoing video bitrate against its ceiling',
         );
         await wait(
             bob,
-            "/Their video to you: \\d+×\\d+ · .*(kbps|Mbps) · H264/.test(document.querySelector('.call-details')?.textContent) && /Total upload: .* download: /.test(document.querySelector('.call-details').textContent)",
+            "/Their video to you: \\d+×\\d+ · .*(kbps|Mbps) · VP8/.test(document.querySelector('.call-details')?.textContent) && /Total upload: .* download: /.test(document.querySelector('.call-details').textContent)",
             'Bob sees the incoming video and totals',
         );
         await screenshot(alice, 'diagnostics-sender');

@@ -5,7 +5,7 @@ import {
     outgoingTracks,
     acceptsWatch,
     validMediaState,
-    preferHardwareVideoCodec,
+    preferVideoCodec,
 } from '../src/peerMedia.ts';
 const track = (kind, id) => ({ kind, id, readyState: 'live', enabled: true });
 const stream = (...tracks) => ({ getTracks: () => tracks });
@@ -206,30 +206,32 @@ test('stream availability metadata requires a generation ID and real boolean fla
         assert.equal(validMediaState(bad), false);
 });
 const codec = (mimeType, sdpFmtpLine) => ({ mimeType, clockRate: 90000, sdpFmtpLine });
+// A peer that once preferred H.264 lists it first; VP8 still moves to the front.
 const videoCodecs = () => [
-    codec('video/VP8'),
-    codec('video/rtx'),
     codec('video/H264', 'packetization-mode=1;profile-level-id=42001f'),
+    codec('video/rtx'),
+    codec('video/VP8'),
     codec('video/AV1'),
     codec('video/VP9', 'profile-id=0'),
     codec('video/H264', 'packetization-mode=1;profile-level-id=640032'),
     codec('video/red'),
     codec('video/ulpfec'),
 ];
-test('H.264 is preferred for video, keeping every other codec in its original order', () => {
+test('VP8 is preferred for video, keeping every other codec in its original order', () => {
     const codecs = videoCodecs();
-    assert.deepEqual(preferHardwareVideoCodec(codecs), [
+    assert.deepEqual(preferVideoCodec(codecs), [
         codecs[2],
-        codecs[5],
         codecs[0],
         codecs[1],
         codecs[3],
         codecs[4],
+        codecs[5],
         codecs[6],
         codecs[7],
     ]);
-    const withoutH264 = codecs.filter((c) => c.mimeType !== 'video/H264');
-    assert.deepEqual(preferHardwareVideoCodec(withoutH264), withoutH264);
+    assert.deepEqual(preferVideoCodec([codec('video/vp8')]), [codec('video/vp8')]);
+    const withoutVp8 = codecs.filter((c) => c.mimeType !== 'video/VP8');
+    assert.deepEqual(preferVideoCodec(withoutVp8), withoutVp8);
 });
 test('offerers and responders set the video codec order once, before negotiating', async () => {
     const s = sources(),

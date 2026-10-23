@@ -13,35 +13,35 @@ This document describes the initial source implementation and is intended to be 
 
 ## File map and boundaries
 
-| File | Responsibility |
-| --- | --- |
-| `electron/main.cjs` | Single-instance desktop lifecycle, isolated renderer, permissions, storage IPC and screen/window picker |
-| `electron/renderer-server.cjs` | Local UI-only static asset server with CSP, host/path validation, and no community APIs |
-| `electron/preload.cjs` | Narrow allowlisted client-state storage bridge |
-| `electron/client-state.cjs` | Atomic client settings/session persistence independent of renderer port; OS encryption when available |
-| `electron-builder.cjs` | Windows x64 portable executable configuration |
-| `.github/workflows/windows.yml` | Manually triggered Windows build/test/artifact workflow |
-| `server/index.js` | Standalone entry, environment configuration, signals |
-| `server/app.js` | App factory, REST endpoints, session/permission enforcement, live events, presence and call signaling |
-| `server/schema.sql` | Initial SQLite schema and indexes |
-| `server/security.js` | Password/token hashing and pure permission/conversation-access helpers |
-| `src/main.tsx` | Application/auth shell, chat, member list, settings, dialogs, REST and socket state coordination, media tiles |
-| `src/media.ts` | Shared microphone acquisition, unavailable-device recovery and capture diagnostics |
-| `src/MicrophoneMeter.tsx`, `src/microphoneMonitor.ts` | On-demand settings input meter, signal measurement and capture/analysis resource lifecycle |
-| `src/signaling.ts` | Serialized peer signaling, offer ownership, collision handling and queued ICE |
-| `src/MediaTile.tsx`, `src/playback.ts` | Separate remote audio/video playback, explicit playback retry and output-device recovery |
-| `src/ExpandedVideo.tsx` | Portal-based large video viewer, full screen, keyboard focus and shared participant volume |
-| `src/peerMedia.ts` | Serialized per-peer sender attachment, fixed voice/video/system-audio roles and stream-subscription validation |
-| `src/AudioPlayback.tsx` | Independent voice/system audio elements, playback retry, volume and output routing |
-| `src/profiles.ts` | Nickname-first display names with permanent username fallback |
-| `src/useCall.ts` | Media stream ownership, peer connections, signaling, mute/deafen, PTT, camera and screen track lifecycle |
-| `src/types.ts`, `src/desktop.d.ts` | Client contracts, preload storage API, and Vite client/CSS declarations |
-| `src/style.css` | Responsive dark desktop layout and component styles; no third-party font requests |
-| `test/security.test.js` | Dependency-free password, token, permission and DM-access tests |
-| `test/schema.test.js` | Dependency-free SQLite constraints and cascade behavior |
-| `test/server.test.js` | Temporary-server integration tests with real Socket.IO clients |
-| `test/desktop.test.js` | Desktop storage persistence, encryption integration, asset-host isolation and portable-build configuration |
-| `Dockerfile`, `compose.yaml` | Standalone web/server deployment and persistent data volume |
+| File                                                  | Responsibility                                                                                                 |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `electron/main.cjs`                                   | Single-instance desktop lifecycle, isolated renderer, permissions, storage IPC and screen/window picker        |
+| `electron/renderer-server.cjs`                        | Local UI-only static asset server with CSP, host/path validation, and no community APIs                        |
+| `electron/preload.cjs`                                | Narrow allowlisted client-state storage bridge                                                                 |
+| `electron/client-state.cjs`                           | Atomic client settings/session persistence independent of renderer port; OS encryption when available          |
+| `electron-builder.cjs`                                | Windows x64 portable executable configuration                                                                  |
+| `.github/workflows/windows.yml`                       | Manually triggered Windows build/test/artifact workflow                                                        |
+| `server/index.js`                                     | Standalone entry, environment configuration, signals                                                           |
+| `server/app.js`                                       | App factory, REST endpoints, session/permission enforcement, live events, presence and call signaling          |
+| `server/schema.sql`                                   | Initial SQLite schema and indexes                                                                              |
+| `server/security.js`                                  | Password/token hashing and pure permission/conversation-access helpers                                         |
+| `src/main.tsx`                                        | Application/auth shell, chat, member list, settings, dialogs, REST and socket state coordination, media tiles  |
+| `src/media.ts`                                        | Shared microphone acquisition, unavailable-device recovery and capture diagnostics                             |
+| `src/MicrophoneMeter.tsx`, `src/microphoneMonitor.ts` | On-demand settings input meter, signal measurement and capture/analysis resource lifecycle                     |
+| `src/signaling.ts`                                    | Serialized peer signaling, offer ownership, collision handling and queued ICE                                  |
+| `src/MediaTile.tsx`, `src/playback.ts`                | Separate remote audio/video playback, explicit playback retry and output-device recovery                       |
+| `src/ExpandedVideo.tsx`                               | Portal-based large video viewer, full screen, keyboard focus and shared participant volume                     |
+| `src/peerMedia.ts`                                    | Serialized per-peer sender attachment, fixed voice/video/system-audio roles and stream-subscription validation |
+| `src/AudioPlayback.tsx`                               | Independent voice/system audio elements, playback retry, volume and output routing                             |
+| `src/profiles.ts`                                     | Nickname-first display names with permanent username fallback                                                  |
+| `src/useCall.ts`                                      | Media stream ownership, peer connections, signaling, mute/deafen, PTT, camera and screen track lifecycle       |
+| `src/types.ts`, `src/desktop.d.ts`                    | Client contracts, preload storage API, and Vite client/CSS declarations                                        |
+| `src/style.css`                                       | Responsive dark desktop layout and component styles; no third-party font requests                              |
+| `test/security.test.js`                               | Dependency-free password, token, permission and DM-access tests                                                |
+| `test/schema.test.js`                                 | Dependency-free SQLite constraints and cascade behavior                                                        |
+| `test/server.test.js`                                 | Temporary-server integration tests with real Socket.IO clients                                                 |
+| `test/desktop.test.js`                                | Desktop storage persistence, encryption integration, asset-host isolation and portable-build configuration     |
+| `Dockerfile`, `compose.yaml`                          | Standalone web/server deployment and persistent data volume                                                    |
 
 The UI is shared by browser and Electron. No Node.js primitives are exposed to renderer content; the preload exposes only get/set/remove of the connection, preferences and rendererPort keys. The Electron shell hosts only renderer assets on localhost and does not import the community server or create a community database. Remote community connections go through HTTP and Socket.IO, so the backend can later be moved to another runtime without replacing the UI. The renderer composes separate chat, call, member list, and settings components.
 
@@ -98,40 +98,40 @@ Electron enables context isolation and sandboxing and disables Node integration.
 
 All `/api` routes except `/info` and `/auth/:action` require a session. Errors return `{error: string}` with an HTTP status. Auth returns `{token,user}`. State is a snapshot; state-changing endpoints broadcast `refresh` where relevant.
 
-| Method | Path | Operation |
-| --- | --- | --- |
-| GET | `/api/info` | Server name and registration availability |
-| POST | `/api/auth/register`, `/api/auth/login` | `{username,password}`; register/sign in |
-| POST | `/api/logout` | Revoke current session |
-| GET | `/api/state` | Current user, users, roles, channels, online IDs, visible call roster, private-call invitations/membership, custom emoji metadata, ICE config |
-| GET | `/api/messages?room=...&search=...` | `{messages,next}`: the latest accessible messages (up to `limit`, at most 500) with `before` paging; optional substring filter, run on a worker thread (503 when busy) |
-| POST | `/api/messages` | JSON `{room,body,thread?,poll?}`, or `multipart/form-data` with `room`, `body`, `thread` fields and one `file` part per attachment |
-| PATCH | `/api/messages/:id` | `{body? ,pinned?}` with separate permission checks; returns the message |
-| DELETE | `/api/messages/:id` | Delete owned message or manager-moderated message |
-| POST | `/api/messages/:id/reaction` | Toggle `{emoji}` from the allowed set |
-| GET | `/api/attachments/:id` | Authorized download; `?inline=1` serves sniffed PNG/JPEG/GIF/WebP only as an inline raster |
-| PATCH | `/api/profile` | `{nickname}` for the authenticated account; username edits rejected |
-| POST / DELETE | `/api/profile/avatar` | Set own `{data}` resized PNG / remove own avatar |
-| GET | `/api/avatars/:id` | Authenticated PNG profile image |
-| POST | `/api/emojis` | `{name,data}` bounded PNG, send permission |
-| GET / DELETE | `/api/emojis/:id` | Authenticated image / author or manager deletion |
-| POST | `/api/calls` | `{user}` online server member; returns private room `{id}` |
-| POST | `/api/calls/:id/invite` | `{user}`; caller must participate in this private call |
-| POST | `/api/calls/:id/decline` | Reject invitation or remove own inactive membership |
-| POST | `/api/channels` | `{name,kind}`; manager only |
-| POST | `/api/roles` | `{name,color,permissions}` |
-| PATCH | `/api/roles/:id` | Edit name/optional color/permissions and targeted overrides; lower roles only |
-| PATCH | `/api/users/:id/roles` | `{roles: string[]}`; protected ownership and hierarchy checks |
-| POST | `/api/roles/:id/move` | `{direction: "up" or "down"}`; lower-role hierarchy checks |
-| PUT | `/api/roles/:id/access` | `{overrides: [{channel,permission,effect}]}`; Inherit/Allow/Deny |
-| PATCH | `/api/channels/:id/privacy` | `{private: boolean}`; channel access manager |
-| GET | `/api/users/:id/permissions?channel=ID` | Effective channel permissions and decision reasons |
-| PATCH | `/api/settings` | `{name?,icon?,reactionAuthors?,profileFrames?,maxUploadBytes?,maxStoredUploadBytes?}`; `server.edit` |
-| PATCH | `/api/retention/server`, `/api/retention/dm` | `{retention: days, applyNow?}`; `server.edit` |
-| PATCH | `/api/retention/channels/:id` | `{retention: days or null, applyNow?}` for a text channel; `server.edit` |
-| PATCH | `/api/retention/keep-text` | `{keepText: boolean, applyNow?}`: periods remove only files; turning it off waits a week; `server.edit` |
-| GET | `/api/retention/preview?scope=&channel=&retention=&keepText=` | Messages, files and bytes a change would remove, for scope `server`, `dm`, `channel` or `keep-text`; `server.edit` |
-| GET | `/api/storage` | Attachment use against the quota, database size and free space, pinned bytes, top channels and DMs; `server.edit` |
+| Method        | Path                                                          | Operation                                                                                                                                                              |
+| ------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET           | `/api/info`                                                   | Server name and registration availability                                                                                                                              |
+| POST          | `/api/auth/register`, `/api/auth/login`                       | `{username,password}`; register/sign in                                                                                                                                |
+| POST          | `/api/logout`                                                 | Revoke current session                                                                                                                                                 |
+| GET           | `/api/state`                                                  | Current user, users, roles, channels, online IDs, visible call roster, private-call invitations/membership, custom emoji metadata, ICE config                          |
+| GET           | `/api/messages?room=...&search=...`                           | `{messages,next}`: the latest accessible messages (up to `limit`, at most 500) with `before` paging; optional substring filter, run on a worker thread (503 when busy) |
+| POST          | `/api/messages`                                               | JSON `{room,body,thread?,poll?}`, or `multipart/form-data` with `room`, `body`, `thread` fields and one `file` part per attachment                                     |
+| PATCH         | `/api/messages/:id`                                           | `{body? ,pinned?}` with separate permission checks; returns the message                                                                                                |
+| DELETE        | `/api/messages/:id`                                           | Delete owned message or manager-moderated message                                                                                                                      |
+| POST          | `/api/messages/:id/reaction`                                  | Toggle `{emoji}` from the allowed set                                                                                                                                  |
+| GET           | `/api/attachments/:id`                                        | Authorized download; `?inline=1` serves sniffed PNG/JPEG/GIF/WebP only as an inline raster                                                                             |
+| PATCH         | `/api/profile`                                                | `{nickname}` for the authenticated account; username edits rejected                                                                                                    |
+| POST / DELETE | `/api/profile/avatar`                                         | Set own `{data}` resized PNG / remove own avatar                                                                                                                       |
+| GET           | `/api/avatars/:id`                                            | Authenticated PNG profile image                                                                                                                                        |
+| POST          | `/api/emojis`                                                 | `{name,data}` bounded PNG, send permission                                                                                                                             |
+| GET / DELETE  | `/api/emojis/:id`                                             | Authenticated image / author or manager deletion                                                                                                                       |
+| POST          | `/api/calls`                                                  | `{user}` online server member; returns private room `{id}`                                                                                                             |
+| POST          | `/api/calls/:id/invite`                                       | `{user}`; caller must participate in this private call                                                                                                                 |
+| POST          | `/api/calls/:id/decline`                                      | Reject invitation or remove own inactive membership                                                                                                                    |
+| POST          | `/api/channels`                                               | `{name,kind}`; manager only                                                                                                                                            |
+| POST          | `/api/roles`                                                  | `{name,color,permissions}`                                                                                                                                             |
+| PATCH         | `/api/roles/:id`                                              | Edit name/optional color/permissions and targeted overrides; lower roles only                                                                                          |
+| PATCH         | `/api/users/:id/roles`                                        | `{roles: string[]}`; protected ownership and hierarchy checks                                                                                                          |
+| POST          | `/api/roles/:id/move`                                         | `{direction: "up" or "down"}`; lower-role hierarchy checks                                                                                                             |
+| PUT           | `/api/roles/:id/access`                                       | `{overrides: [{channel,permission,effect}]}`; Inherit/Allow/Deny                                                                                                       |
+| PATCH         | `/api/channels/:id/privacy`                                   | `{private: boolean}`; channel access manager                                                                                                                           |
+| GET           | `/api/users/:id/permissions?channel=ID`                       | Effective channel permissions and decision reasons                                                                                                                     |
+| PATCH         | `/api/settings`                                               | `{name?,icon?,reactionAuthors?,profileFrames?,maxUploadBytes?,maxStoredUploadBytes?}`; `server.edit`                                                                   |
+| PATCH         | `/api/retention/server`, `/api/retention/dm`                  | `{retention: days, applyNow?}`; `server.edit`                                                                                                                          |
+| PATCH         | `/api/retention/channels/:id`                                 | `{retention: days or null, applyNow?}` for a text channel; `server.edit`                                                                                               |
+| PATCH         | `/api/retention/keep-text`                                    | `{keepText: boolean, applyNow?}`: periods remove only files; turning it off waits a week; `server.edit`                                                                |
+| GET           | `/api/retention/preview?scope=&channel=&retention=&keepText=` | Messages, files and bytes a change would remove, for scope `server`, `dm`, `channel` or `keep-text`; `server.edit`                                                     |
+| GET           | `/api/storage`                                                | Attachment use against the quota, database size and free space, pinned bytes, top channels and DMs; `server.edit`                                                      |
 
 ## Socket contract
 
@@ -332,7 +332,6 @@ The nickname-first displayName helper is used for chat authors, avatars, members
 
 Schema tests exercise legacy backfill, restart preservation and immutable/case-sensitive username rejection. Request-handler tests cover defaults, nickname-only updates, caller isolation, invalid values, immutable username attempts, and login by the original username after display-name changes. Display-name fallback has a helper test. Current type check, production build and all 70 non-network checks pass. Live multi-client nickname refresh, watch/stop bandwidth behavior and independent audio/output playback still need testing. Update the backend and all clients; no dependency or extra port changes. Version remains 0.1.3.
 
-
 ## Message threads
 
 Hover a top-level message and choose **Reply in thread** to open the right panel. The first reply creates the thread; a reply-count button then appears beneath the parent and opens the same panel. On narrow windows the panel overlays the right side of chat. Closing it or changing rooms closes the thread view. The member list is hidden while a thread is open.
@@ -371,9 +370,9 @@ Owners can have old messages deleted automatically so a self-hosted database sta
 
 Search scans a conversation's text, which takes longer as history grows, and the server's SQLite calls are synchronous: on the main thread, one slow search would pause chat, typing and call signaling for everyone. `server/reader.js` runs search queries on up to two worker threads (`server/reader-worker.js`), each with its own read-only connection, which WAL mode lets read while the main thread writes. Access is checked before the search and again after it, and the page is re-read from the current rows, so messages edited or deleted meanwhile are left out. At most 32 searches wait; beyond that, and while the server shuts down, search answers 503. A search running longer than 10 seconds is stopped with its worker. A waiting search is dropped when its request closes; one already running finishes. Search is no faster this way, only no longer in everyone's way; see `Docs/BackgroundSearch-2026-10-21.md`.
 
-## Hardware video encoding
+## Video codec
 
-Each peer connection encodes its own copy of the camera or screen, so a share watched by four people is encoded four times. Chromium's default VP8 always encodes on the CPU (libvpx); H.264 goes to the GPU's encoder, on Windows through Media Foundation. `createPeerMedia` therefore puts every H.264 entry first on the video transceiver with `setCodecPreferences`, before the first offer or answer, keeping the other codecs in their original order. A peer without H.264 negotiates the remaining codecs, a machine without a hardware encoder falls back to software H.264, and a rejected codec order leaves the browser default. VP9 and AV1 stay software-encoded here, and `mediaCapabilities.encodingInfo` reports H.264 as not power-efficient even where it is, so it is not consulted. Checked with two loopback connections running this code in Electron 44 on Windows with an NVIDIA GPU: camera and screen video negotiated H.264 and were encoded by `MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)` and decoded by `D3D11VideoDecoder`, both power-efficient. Linux, AMD/Intel GPUs and calls between separate machines are unverified.
+Each peer connection encodes its own copy of the camera or screen, so a share watched by four people is encoded four times. VP8 encodes on the CPU (libvpx); H.264 can go to the GPU's encoder, on Windows through Media Foundation. Calls briefly preferred H.264 for that reason, and on Windows with an NVIDIA GPU it did run on `MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)`. Screen sharing then showed artifacts after windows moved. Measured through window capture at 2560×1300 squeezed to 1.5 Mbps, the picture right after a window stopped moving scored 21 dB with NVIDIA's H.264 and cleared only after about 3 seconds of a fully still screen, while VP8 stayed at about 45 dB throughout; libvpx's real-time screen mode drops frames and refreshes damaged areas instead of smearing them. The decoding is fixed by the standard; the encoders' decisions differ. `createPeerMedia` therefore puts VP8 first on the video transceiver with `setCodecPreferences`, before the first offer or answer, keeping the other codecs in their original order. VP8 is Chromium's default anyway; stating it keeps calls on it independent of that order. A peer without VP8 negotiates the remaining codecs, and a rejected codec order leaves the browser default. VP8 costs CPU per viewer: encoding and decoding a busy 1080p picture took about 60% of one core in a loopback test, so very large shares to several viewers can show the computer-limit warning.
 
 ## Video quality
 
