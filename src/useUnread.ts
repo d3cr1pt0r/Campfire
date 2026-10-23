@@ -52,3 +52,36 @@ export function useConversationRead(
         };
     }, [room, through, enabled, markRead, thread]);
 }
+
+// Short threads showing their replies under their message are read with the
+// conversation, as if each had been opened.
+export function useInlineThreadsRead(
+    room: string,
+    threads: Map<string, Message[]>,
+    enabled: boolean,
+    markRead: ReturnType<typeof createActivityClient>['read'],
+) {
+    const positions = JSON.stringify(
+        [...threads]
+            .map(([thread, replies]) => [
+                thread,
+                replies.reduce((position, reply) => Math.max(position, reply.sequence ?? 0), 0),
+            ])
+            .filter(([, through]) => through),
+    );
+    useEffect(() => {
+        const threads: [string, number][] = JSON.parse(positions);
+        if (!enabled || !threads.length) return;
+        const read = () => {
+            if (document.visibilityState === 'visible' && document.hasFocus())
+                for (const [thread, through] of threads) markRead(room, through, thread);
+        };
+        read();
+        window.addEventListener('focus', read);
+        document.addEventListener('visibilitychange', read);
+        return () => {
+            window.removeEventListener('focus', read);
+            document.removeEventListener('visibilitychange', read);
+        };
+    }, [room, positions, enabled, markRead]);
+}

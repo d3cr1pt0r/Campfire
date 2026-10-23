@@ -32,6 +32,7 @@ import { frequentEmoji, recordEmojiUse, useEmojiUses } from './emojiUsage';
 import { ImageAttachment } from './ImageAttachment';
 import { LinkPreviews } from './LinkPreviews';
 import { needsScrollHistory, restoredScrollOffset, type ChatScrollPosition } from './chatScroll';
+import { inlineReplies } from './conversation';
 import { conversationSchedule, hasFiles, messageRetention, pinKeeps, unpinText } from './retention';
 import type { RetentionUnit } from '../shared/retention.js';
 
@@ -103,6 +104,10 @@ function ChatMessageList({
     setEdit,
     clearFilters,
     onReply,
+    onOpenThread,
+    replies = null,
+    inlineThread = null,
+    renderInlineComposer,
     messageAvatars,
     showRoleColors,
     currentVoiceChannel,
@@ -115,6 +120,13 @@ function ChatMessageList({
 }: {
     messageAvatars?: MessageAvatarMode;
     showRoleColors?: boolean;
+    // Opens a thread in the panel; replying may instead open a box under a short thread.
+    onOpenThread?: (message: Message) => void;
+    // Thread replies by parent, where short threads show under their message.
+    replies?: Map<string, Message[]> | null;
+    // The message whose thread has a reply box open under it, and that box.
+    inlineThread?: string | null;
+    renderInlineComposer?: (parent: Message, collapsed: boolean) => React.ReactNode;
     notify?: (text: string) => void;
     // Thread replies share the clock of the thread they belong to.
     retentionUnit?: RetentionUnit;
@@ -165,13 +177,14 @@ function ChatMessageList({
         anchorTo: 'end',
         followOnAppend: true,
         scrollEndThreshold: 80,
+        // Focused rows and an open reply box stay mounted, keeping their state.
         rangeExtractor: (range) => {
             const indexes = defaultRangeExtractor(range);
-            const focused = focusedId
-                ? visibleMessages.findIndex((m) => m.id === focusedId) + 1
-                : -1;
-            return focused > 0
-                ? [...new Set([...indexes, focused])].sort((a, b) => a - b)
+            const kept = [focusedId, inlineThread]
+                .map((id) => (id ? visibleMessages.findIndex((m) => m.id === id) + 1 : 0))
+                .filter((index) => index > 0);
+            return kept.length
+                ? [...new Set([...indexes, ...kept])].sort((a, b) => a - b)
                 : indexes;
         },
     });
@@ -336,6 +349,29 @@ function ChatMessageList({
                                 !previous ||
                                 showDate ||
                                 messageTime(previous.created) !== messageTime(m.created);
+                            const shown = inlineReplies(m, replies);
+                            const composing = inlineThread === m.id && !!renderInlineComposer;
+                            const shared = {
+                                permission,
+                                state,
+                                user,
+                                color,
+                                dm,
+                                download,
+                                act,
+                                api,
+                                setModal,
+                                setEdit,
+                                onReply,
+                                onOpenThread,
+                                thread,
+                                notify,
+                                retentionUnit,
+                                messageAvatars,
+                                showRoleColors,
+                                currentVoiceChannel,
+                                onJoinVoice,
+                            };
                             return (
                                 <div
                                     key={item.key}
@@ -362,27 +398,31 @@ function ChatMessageList({
                                         </div>
                                     )}
                                     <ChatMessage
+                                        {...shared}
                                         message={m}
                                         showTime={showTime}
-                                        permission={permission}
-                                        state={state}
-                                        user={user}
-                                        color={color}
-                                        dm={dm}
-                                        download={download}
-                                        act={act}
-                                        api={api}
-                                        setModal={setModal}
-                                        setEdit={setEdit}
-                                        onReply={onReply}
-                                        thread={thread}
-                                        notify={notify}
-                                        retentionUnit={retentionUnit}
-                                        messageAvatars={messageAvatars}
-                                        showRoleColors={showRoleColors}
-                                        currentVoiceChannel={currentVoiceChannel}
-                                        onJoinVoice={onJoinVoice}
+                                        repliesShown={!!shown}
                                     />
+                                    {(!!shown?.length || composing) && (
+                                        <div
+                                            className={`inline-thread inline-thread-${messageAvatarMode(messageAvatars)}`}
+                                        >
+                                            {shown?.map((reply, index) => (
+                                                <ChatMessage
+                                                    {...shared}
+                                                    key={reply.id}
+                                                    message={reply}
+                                                    inlineParent={m}
+                                                    showTime={
+                                                        messageTime(
+                                                            (shown[index - 1] ?? m).created,
+                                                        ) !== messageTime(reply.created)
+                                                    }
+                                                />
+                                            ))}
+                                            {composing && renderInlineComposer(m, !shown)}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })()
@@ -420,6 +460,7 @@ export function ChatMessage({
     setModal,
     setEdit,
     onReply,
+    onOpenThread,
     messageAvatars,
     showRoleColors,
     currentVoiceChannel,
@@ -428,6 +469,8 @@ export function ChatMessage({
     notify,
     retentionUnit,
     showTime = true,
+    inlineParent,
+    repliesShown = false,
 }: Pick<
     React.ComponentProps<typeof ChatMessageList>,
     | 'messageAvatars'
@@ -445,12 +488,23 @@ export function ChatMessage({
     | 'setModal'
     | 'setEdit'
     | 'onReply'
+    | 'onOpenThread'
     | 'thread'
     | 'notify'
     | 'retentionUnit'
-> & { message: Message; showTime?: boolean }) {
+> & {
+    message: Message;
+    showTime?: boolean;
+    // Set on a reply shown under its thread's first message.
+    inlineParent?: Message;
+    // The thread's replies already show under this message.
+    repliesShown?: boolean;
+}) {
     const u = m.author ? user(m.author) : undefined;
     const avatars = messageAvatarMode(messageAvatars);
+    // Replies under a message use the compact size, keeping them below it in weight.
+    const size = inlineParent && avatars === 'normal' ? 'compact' : avatars;
+    const replyTarget = inlineParent ?? m;
     const now = Date.now();
     const schedule = conversationSchedule(state, m.room),
         unit = retentionUnit ?? m.retention,
@@ -469,7 +523,7 @@ export function ChatMessage({
         });
     };
     return (
-        <article className={`message message-avatars-${avatars}`}>
+        <article className={`message message-avatars-${size}${inlineParent ? ' reply' : ''}`}>
             {avatars !== 'hidden' && <Avatar user={u} color={color(u)} />}
             <div className="message-body">
                 <div className="message-line">
@@ -601,8 +655,11 @@ export function ChatMessage({
                         />
                     ))}
                 </div>
-                {!thread && !!m.replyCount && (
-                    <button className="thread-replies" onClick={() => onReply?.(m)}>
+                {!thread && !repliesShown && !!m.replyCount && (
+                    <button
+                        className="thread-replies"
+                        onClick={() => (onOpenThread ?? onReply)?.(m)}
+                    >
                         <MessageCircle size={15} />
                         {m.replyCount} {m.replyCount === 1 ? 'reply' : 'replies'}
                     </button>
@@ -629,15 +686,15 @@ export function ChatMessage({
                 >
                     <Smile size={16} />
                 </button>
-                {!thread && !m.thread && onReply && (
+                {!thread && !replyTarget.thread && onReply && (
                     <button
                         title="Reply in thread"
                         aria-label="Reply in thread"
                         disabled={
                             !permission('threads.reply') ||
-                            (!m.replyCount && !permission('threads.create'))
+                            (!replyTarget.replyCount && !permission('threads.create'))
                         }
-                        onClick={() => onReply(m)}
+                        onClick={() => onReply(replyTarget)}
                     >
                         <Reply size={16} />
                     </button>

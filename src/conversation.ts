@@ -1,6 +1,17 @@
 import type { Message } from './types';
+import { inlineReplyLimit } from '../shared/threads.js';
 
-export type MessagePage = { messages: Message[]; next: string | null };
+// A channel page also carries the replies of its short threads.
+export type MessagePage = { messages: Message[]; next: string | null; replies?: Message[] };
+// A short thread's replies, shown under its message. Null when the thread opens in
+// the panel instead: it is too long, the view has no inline replies, or some of its
+// replies have not arrived yet.
+export function inlineReplies(message: Message, replies: Map<string, Message[]> | null) {
+    if (!replies || message.thread) return null;
+    const loaded = replies.get(message.id) ?? [];
+    const count = Math.max(message.replyCount ?? 0, loaded.length);
+    return count <= inlineReplyLimit && loaded.length >= count ? loaded : null;
+}
 // A message after retention removed its files and link cards, which leave placeholders.
 export const removeFiles = (message: Message): Message => ({
     ...message,
@@ -77,7 +88,8 @@ export function createConversation(
         try {
             const page = await load(older ? snapshot.next : null, current.controller.signal);
             if (closed || pending !== current) return;
-            const initial = older ? [...snapshot.messages, ...page.messages] : page.messages;
+            const received = [...page.messages, ...(page.replies ?? [])];
+            const initial = older ? [...snapshot.messages, ...received] : received;
             let messages = [
                 ...new Map(
                     initial.filter((m) => m.room === room && matches(m)).map((m) => [m.id, m]),

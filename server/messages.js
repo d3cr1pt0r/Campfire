@@ -3,6 +3,7 @@ import express from 'express';
 import { imageInfo, imageMime } from './images.js';
 import { formatUploadLimit, maxUploadFiles } from '../shared/uploads.js';
 import { canonicalRoom } from '../shared/rooms.js';
+import { inlineReplyLimit } from '../shared/threads.js';
 import { emojis } from '../shared/emojis.js';
 import { check, route } from './policies.js';
 import { containsText, transaction } from './database.js';
@@ -144,7 +145,21 @@ export function registerMessages({
             const messages = messageViews(rows.filter((row) => !row.gone).reverse()).map((view) =>
                 forViewer(view, req.user.id),
             );
-            res.json({ messages, next });
+            if (req.query.thread !== undefined || req.query.search || req.query.pinned === '1')
+                return res.json({ messages, next });
+            // Short threads show under their message, so their replies come with the page.
+            const short = messages
+                .filter((m) => m.replyCount && m.replyCount <= inlineReplyLimit)
+                .map((m) => m.id);
+            const replies = short.length
+                ? messageViews(
+                      all(
+                          `SELECT * FROM messages WHERE thread IN (${short.map(() => '?').join(',')}) ORDER BY created,id`,
+                          ...short,
+                      ),
+                  ).map((view) => forViewer(view, req.user.id))
+                : [];
+            res.json({ messages, next, replies });
         }),
     );
     // Text and polls arrive as JSON; files as multipart/form-data with room, body and thread

@@ -3239,6 +3239,56 @@ button:disabled {
 .thread-replies:hover {
     text-decoration: underline;
 }
+/* Short threads sit under their message, indented to its text column. */
+.inline-thread {
+    --reply-indent: 36px;
+    padding-bottom: 4px;
+}
+.inline-thread-normal {
+    --reply-indent: 46px;
+}
+.inline-thread-hidden {
+    --reply-indent: 24px;
+}
+.inline-thread > .message,
+.inline-reply {
+    padding-left: var(--reply-indent);
+}
+.inline-thread .message-meta button {
+    font-size: 14px;
+}
+.inline-reply {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    max-width: 820px;
+    padding-right: 30px;
+}
+.inline-reply-box {
+    flex: 1;
+    min-width: 0;
+}
+.inline-reply .composer-wrap {
+    padding: 4px 0 6px;
+}
+.inline-reply-close {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    margin-top: 12px;
+    padding: 6px;
+    color: var(--muted);
+}
+.inline-reply .thread-emoji-picker {
+    padding: 4px 0;
+}
+.inline-reply .emoji-picker {
+    max-height: 200px;
+    margin-bottom: 0;
+}
+.inline-reply .emoji-grid {
+    grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+}
 .thread-emoji-picker {
     display: flex;
     align-items: flex-start;

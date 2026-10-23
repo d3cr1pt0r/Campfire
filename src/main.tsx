@@ -30,6 +30,8 @@ import { connectionHint, pinsFor, trustStep } from './serverTrust';
 import { version as appVersion } from '../package.json';
 import { ChatComposer } from './ChatComposer';
 import { ThreadPanel } from './ThreadPanel';
+import { InlineReply } from './ThreadReply';
+import { inlineReplies } from './conversation';
 import { PollDialog, type PollTarget } from './PollDialog';
 import { ChatMessages } from './ChatMessages';
 import type { ChatScrollPosition } from './chatScroll';
@@ -47,7 +49,7 @@ import { useDialog } from './useDialog';
 import { useModalNavigation } from './modalNavigation';
 import { createApiClient, messagePayload } from './api';
 import { useConversation } from './useConversation';
-import { useUnread, useConversationRead } from './useUnread';
+import { useUnread, useConversationRead, useInlineThreadsRead } from './useUnread';
 import { useNotificationPreferences } from './useNotificationPreferences';
 import { isReadingConversation } from './activity';
 import { canonicalRoom, dmParticipant } from '../shared/rooms.js';
@@ -385,7 +387,17 @@ function App() {
     const [thread, setThread] = useState<Message | null>(null);
     const [composerFocus, setComposerFocus] = useState(0);
     const [threadFocus, setThreadFocus] = useState(0);
-    useEffect(() => setThread(null), [room, url, token]);
+    // The short thread with a reply box open under its message.
+    const [inlineThread, setInlineThread] = useState<string | null>(null);
+    const [inlineFocus, setInlineFocus] = useState(0);
+    useEffect(() => {
+        setThread(null);
+        setInlineThread(null);
+    }, [room, url, token]);
+    const openThread = (message: Message) => {
+        setThread(message);
+        setThreadFocus((request) => request + 1);
+    };
     const [search, setSearch] = useState(''),
         [pins, setPins] = useState(false),
         [members, setMembers] = useState(() => window.innerWidth > 1100),
@@ -510,12 +522,21 @@ function App() {
         (room.startsWith('dm:') ||
             state.channels.some((channel) => channel.id === room && channel.kind === 'text'));
     const conversation = useConversation(api, socket, room, !!token && roomVisible, search, pins);
-    useConversationRead(
-        room,
-        conversation.messages,
-        !!token && roomVisible && conversation.loaded && !conversation.loading && !search && !pins,
-        markRead,
+    const reading =
+        !!token && roomVisible && conversation.loaded && !conversation.loading && !search && !pins;
+    useConversationRead(room, conversation.messages, reading, markRead);
+    const inlineThreads = useMemo(
+        () =>
+            new Map(
+                conversation.messages.flatMap((message): [string, Message[]][] => {
+                    const shown = inlineReplies(message, conversation.replies);
+                    return shown?.length ? [[message.id, shown]] : [];
+                }),
+            ),
+        [conversation.messages, conversation.replies],
     );
+    // Only while the room has unread messages, so opening it costs no request per thread.
+    useInlineThreadsRead(room, inlineThreads, reading && !!unread[room], markRead);
     useEffect(() => {
         if (
             state &&
@@ -2131,9 +2152,36 @@ function App() {
                                         pins,
                                     ])}
                                     onReply={(message) => {
-                                        setThread(message);
-                                        setThreadFocus((request) => request + 1);
+                                        if (!inlineReplies(message, conversation.replies))
+                                            return openThread(message);
+                                        setInlineThread(message.id);
+                                        setInlineFocus((request) => request + 1);
                                     }}
+                                    onOpenThread={openThread}
+                                    replies={conversation.replies}
+                                    inlineThread={inlineThread}
+                                    renderInlineComposer={(parent, collapsed) => (
+                                        <InlineReply
+                                            key={parent.id}
+                                            parent={parent}
+                                            collapsed={collapsed}
+                                            focusRequest={inlineFocus}
+                                            api={api}
+                                            socket={socket}
+                                            state={state}
+                                            permission={conversationPermission}
+                                            user={user}
+                                            connected={connected}
+                                            openPoll={openPoll}
+                                            formattingToolbar={formattingToolbar}
+                                            setFormattingToolbar={setFormattingToolbar}
+                                            onClose={() => setInlineThread(null)}
+                                            onMoveToPanel={() => {
+                                                setInlineThread(null);
+                                                openThread(parent);
+                                            }}
+                                        />
+                                    )}
                                     permission={conversationPermission}
                                     conversation={conversation}
                                     search={search}
