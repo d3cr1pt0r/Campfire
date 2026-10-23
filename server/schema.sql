@@ -139,6 +139,61 @@ CREATE TABLE IF NOT EXISTS messages(
     thread TEXT REFERENCES messages(id) ON DELETE CASCADE,
     since INTEGER NOT NULL
 );
+-- Stable activity order survives clock changes, equal timestamps, and message deletion.
+CREATE TABLE IF NOT EXISTS message_activity(
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    message TEXT NOT NULL UNIQUE REFERENCES messages(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS activity_version(
+    id INTEGER PRIMARY KEY CHECK(id=1),
+    version INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO activity_version(id) VALUES(1);
+CREATE TABLE IF NOT EXISTS activity_baselines(
+    user TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    sequence INTEGER NOT NULL CHECK(sequence>=0)
+);
+CREATE TABLE IF NOT EXISTS conversation_reads(
+    user TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    room TEXT NOT NULL,
+    thread TEXT NOT NULL DEFAULT '',
+    sequence INTEGER NOT NULL CHECK(sequence>=0),
+    PRIMARY KEY(user,room,thread)
+);
+CREATE TABLE IF NOT EXISTS notification_preferences(
+    user TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    settings TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS record_message_activity AFTER INSERT ON messages BEGIN
+    INSERT INTO message_activity(message) VALUES(NEW.id);
+END;
+CREATE TRIGGER IF NOT EXISTS message_activity_added AFTER INSERT ON message_activity BEGIN
+    UPDATE activity_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS message_activity_removed AFTER DELETE ON message_activity BEGIN
+    UPDATE activity_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS conversation_read_added AFTER INSERT ON conversation_reads BEGIN
+    UPDATE activity_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS conversation_read_updated AFTER UPDATE ON conversation_reads BEGIN
+    UPDATE activity_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS initialize_activity_baseline AFTER INSERT ON users BEGIN
+    INSERT INTO activity_baselines(user,sequence)
+    VALUES(NEW.id,COALESCE((SELECT MAX(sequence) FROM message_activity),0));
+END;
+CREATE TRIGGER IF NOT EXISTS delete_channel_reads AFTER DELETE ON channels BEGIN
+    DELETE FROM conversation_reads WHERE room=OLD.id;
+END;
+CREATE TRIGGER IF NOT EXISTS delete_thread_reads AFTER DELETE ON messages WHEN OLD.thread IS NULL BEGIN
+    DELETE FROM conversation_reads WHERE thread=OLD.id;
+END;
+-- Additive initialization: keep old history read, without resetting anyone on restart.
+INSERT INTO message_activity(message)
+SELECT id FROM messages WHERE id NOT IN (SELECT message FROM message_activity) ORDER BY created,id;
+INSERT OR IGNORE INTO activity_baselines(user,sequence)
+SELECT id,COALESCE((SELECT MAX(sequence) FROM message_activity),0) FROM users;
 -- The server default for channels, and the one period for every direct message.
 CREATE TABLE IF NOT EXISTS retention_policies(
     scope TEXT PRIMARY KEY CHECK(scope IN ('server','dm')),

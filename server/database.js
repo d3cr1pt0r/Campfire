@@ -90,6 +90,12 @@ export function messageViews(all, messages) {
         placeholders = ids.map(() => '?').join(',');
     const attachments = new Map(),
         reactions = new Map();
+    const sequences = new Map(
+        all(
+            `SELECT message,sequence FROM message_activity WHERE message IN (${placeholders})`,
+            ...ids,
+        ).map(({ message, sequence }) => [message, sequence]),
+    );
     for (const { message, width, height, animated, removed, ...value } of all(
         `SELECT a.message,a.id,a.name,a.mime,a.removed,i.width,i.height,i.animated FROM attachments a LEFT JOIN attachment_images i ON i.attachment=a.id WHERE a.message IN (${placeholders})`,
         ...ids,
@@ -138,6 +144,7 @@ export function messageViews(all, messages) {
         const clock = clocks.get(m.thread || m.id);
         const view = {
             ...m,
+            sequence: sequences.get(m.id),
             replyCount: m.thread ? 0 : clock?.replies || 0,
             attachments: attachments.get(m.id) || [],
             reactions: reactions.get(m.id) || [],

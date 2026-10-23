@@ -1,6 +1,16 @@
 # Notification settings
 
-Open **Settings → Notifications**. Settings save automatically on this device. Server defaults, category rules, and conversation overrides are kept separately for each account and server; they do not change anyone else's settings or channel access.
+Open **Settings → Notifications**. Server mute, channel defaults, category rules, DM defaults, and conversation overrides save to your account on this server and sync across devices. Desktop-alert permission, sounds, volume, and output devices remain local. These choices do not change anyone else's settings or channel access. On first connection, existing local rules are imported only if the account has no saved rules.
+
+## Missed messages and unread badges
+
+Unread badges survive app and server restarts. Each server stores your read position for each conversation; messages received while the app is closed appear as unread when you reconnect. Reading or explicitly clearing a conversation synchronizes to your other devices. Restoring badges does not replay old sounds or desktop alerts.
+
+Opening an unfiltered channel or DM while Campfire is visible and focused marks the loaded messages read. Incoming messages in that conversation stay quiet. Search and pinned-message views do not clear unread history. Thread replies remain unread until their thread is opened, and an explicit conversation clear includes its threads. Removing a DM from Messages clears its unread activity through the latest received snapshot; later arrivals remain unread.
+
+Unread badges are independent of alert preferences: mute and Do not disturb silence alerts while retaining missed activity. Deleted or expired messages stop contributing to badges, and inaccessible conversations are omitted.
+
+When this feature is first installed, existing message history starts as read. Subsequent activity is tracked persistently. There is no notification inbox yet.
 
 ## Delivery
 
@@ -34,6 +44,8 @@ Notification settings cover the features described above. They do not include mo
 
 ## Verification
 
+- `node test/activity.test.js`: restart persistence, read races, thread scopes, permissions, deletion, synced rules, and account-specific socket updates.
+- `node --experimental-strip-types test/activity-client.test.js`: stale-response handling, focused-conversation suppression, and preference scoping.
 - `node --experimental-strip-types test/mentions-notifications.test.js`: precedence, legacy defaults, DMs, threads, server/account isolation, mute, and DND.
 - `node scripts/verify-notification-settings.mjs`: Electron controls, persistence, permission feedback, inheritance reset, and dark/light layouts at desktop and narrow sizes.
 - `node scripts/verify-member-messaging.mjs --sound`: real Web Audio playback and socket-message policy checks, including category inheritance and focused-conversation behavior. Desktop alerts are observed through an instrumented Notification API; this does not prove native OS delivery on every platform.

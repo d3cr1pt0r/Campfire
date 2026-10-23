@@ -47,6 +47,9 @@ import { useDialog } from './useDialog';
 import { useModalNavigation } from './modalNavigation';
 import { createApiClient, messagePayload } from './api';
 import { useConversation } from './useConversation';
+import { useUnread, useConversationRead } from './useUnread';
+import { useNotificationPreferences } from './useNotificationPreferences';
+import { isReadingConversation } from './activity';
 import { canonicalRoom, dmParticipant } from '../shared/rooms.js';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -386,9 +389,28 @@ function App() {
     const [search, setSearch] = useState(''),
         [pins, setPins] = useState(false),
         [members, setMembers] = useState(() => window.innerWidth > 1100),
-        [typing, setTyping] = useState<Record<string, number>>({}),
-        [unread, setUnread] = useState<Record<string, number>>({});
-    const [prefs, setPrefs] = useState<Preferences>(initialPreferences);
+        [typing, setTyping] = useState<Record<string, number>>({});
+    const notify = useCallback((text: string) => setError(text), []);
+    const reportError = useCallback((error: Error) => notify(error.message), [notify]);
+    const client = useMemo(() => createApiClient(url, token), [url, token]);
+    const api = client.json;
+    const [localPrefs, setLocalPrefs] = useState<Preferences>(initialPreferences);
+    const { prefs, setPrefs } = useNotificationPreferences(
+        api,
+        socket,
+        state,
+        setState,
+        localPrefs,
+        setLocalPrefs,
+        url,
+        reportError,
+    );
+    const { unread, markRead, dismissUnread } = useUnread(
+        api,
+        socket,
+        state?.activity,
+        reportError,
+    );
     const formattingToolbar = prefs.formattingToolbar !== false;
     const setFormattingToolbar = (shown: boolean) =>
         setPrefs((previous) => ({ ...previous, formattingToolbar: shown }));
@@ -442,14 +464,13 @@ function App() {
         roomRef = useRef(room),
         stateRef = useRef(state),
         prefsRef = useRef(prefs),
+        threadRef = useRef(thread),
         lastTyping = useRef(0);
     roomRef.current = room;
     stateRef.current = state;
     prefsRef.current = prefs;
+    threadRef.current = thread;
     const messageSoundRef = useRef<ReturnType<typeof createNotificationSound> | null>(null);
-    const notify = useCallback((text: string) => setError(text), []);
-    const client = useMemo(() => createApiClient(url, token), [url, token]);
-    const api = client.json;
     // Starred GIFs belong to the account, so they are loaded from the server per sign-in.
     const [gifFavorites, setGifFavorites] = useState<GifFavorite[]>([]);
     const gifFavoritesRef = useRef(gifFavorites);
@@ -485,6 +506,12 @@ function App() {
         (room.startsWith('dm:') ||
             state.channels.some((channel) => channel.id === room && channel.kind === 'text'));
     const conversation = useConversation(api, socket, room, !!token && roomVisible, search, pins);
+    useConversationRead(
+        room,
+        conversation.messages,
+        !!token && roomVisible && conversation.loaded && !conversation.loading && !search && !pins,
+        markRead,
+    );
     useEffect(() => {
         if (
             state &&
@@ -507,7 +534,6 @@ function App() {
                         setToken('');
                         setState(null);
                         resetModals();
-                        setUnread({});
                         setRoom('general');
                         storage.removeItem('connection');
                     }
@@ -708,13 +734,6 @@ function App() {
             if (seenMessages.has(m.id)) return;
             seenMessages.add(m.id);
             if (seenMessages.size > 1000) seenMessages.delete(seenMessages.values().next().value!);
-            if (
-                m.author !== stateRef.current?.me.id &&
-                (m.room !== roomRef.current ||
-                    !document.hasFocus() ||
-                    document.visibilityState === 'hidden')
-            )
-                setUnread((prev) => ({ ...prev, [m.room]: (prev[m.room] || 0) + 1 }));
             const me = stateRef.current?.me;
             const preferences = prefsRef.current;
             if (
@@ -729,12 +748,14 @@ function App() {
                 )
             )
                 return;
-            if (
-                preferences.messageSounds !== false &&
-                (m.room !== roomRef.current ||
-                    document.visibilityState !== 'visible' ||
-                    !document.hasFocus())
-            )
+            const reading = isReadingConversation(
+                m,
+                roomRef.current,
+                threadRef.current?.id ?? null,
+                document.visibilityState === 'visible',
+                document.hasFocus(),
+            );
+            if (preferences.messageSounds !== false && !reading)
                 void messageSound.play(notificationSound(m, me, stateRef.current?.users));
             if (
                 preferences.notifications &&
@@ -772,7 +793,6 @@ function App() {
     }, [url, token, refresh, verifiedUrl]);
     useEffect(() => {
         if (!token || !state) return;
-        setUnread((prev) => ({ ...prev, [room]: 0 }));
         setTyping({});
         setDraft('');
         setAttachments([]);
@@ -792,19 +812,6 @@ function App() {
             1500,
         );
         return () => clearInterval(t);
-    }, []);
-    useEffect(() => {
-        const markRead = () => {
-            if (document.visibilityState === 'visible' && document.hasFocus()) {
-                setUnread((previous) => ({ ...previous, [roomRef.current]: 0 }));
-            }
-        };
-        window.addEventListener('focus', markRead);
-        document.addEventListener('visibilitychange', markRead);
-        return () => {
-            window.removeEventListener('focus', markRead);
-            document.removeEventListener('visibilitychange', markRead);
-        };
     }, []);
     useEffect(() => {
         if (modal !== 'settings') return;
@@ -903,7 +910,6 @@ function App() {
         if (!state) return;
         setComposerFocus((request) => request + 1);
         const destination = canonicalRoom(`dm:${state.me.id}:${id}`);
-        setUnread((previous) => ({ ...previous, [destination]: 0 }));
         setRoom(destination);
         setNavigationOpen(false);
         setSearch('');
@@ -1134,7 +1140,6 @@ function App() {
             setToken('');
             setState(null);
             resetModals();
-            setUnread({});
             setRoom('general');
             storage.removeItem('connection');
         });
@@ -1641,10 +1646,7 @@ function App() {
                                 color={color}
                                 dm={dm}
                                 close={(destination) => {
-                                    setUnread((previous) => ({
-                                        ...previous,
-                                        [destination]: 0,
-                                    }));
+                                    dismissUnread(destination);
                                     if (room === destination)
                                         selectRoom(
                                             state.channels.find(
@@ -2193,6 +2195,7 @@ function App() {
                                     focusRequest={threadFocus}
                                     key={`${url}:${state.me.id}:${room}:${thread.id}`}
                                     parent={thread}
+                                    markRead={markRead}
                                     api={api}
                                     socket={socket}
                                     state={state}
@@ -2327,7 +2330,6 @@ function App() {
                                                 call.leave();
                                                 setToken('');
                                                 setState(null);
-                                                setUnread({});
                                                 setRoom('general');
                                                 resetModals();
                                                 storage.removeItem('connection');

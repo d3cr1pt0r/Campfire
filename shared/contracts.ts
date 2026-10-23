@@ -58,7 +58,21 @@ export type CallMember = {
     deafened?: boolean;
     camera?: boolean;
 };
+export type ActivitySnapshot = {
+    version: number;
+    unread: Record<string, number>;
+    latest: Record<string, number>;
+};
+export type NotificationPreferences = {
+    muted: boolean;
+    directMessages: boolean;
+    defaultMode: ChannelNotificationMode;
+    channels: Record<string, ChannelNotificationMode>;
+    categories: Record<string, ChannelNotificationMode>;
+};
 export type State = {
+    activity?: ActivitySnapshot;
+    notificationPreferences?: NotificationPreferences | null;
     me: User;
     name: string;
     icon?: string | null;
@@ -88,6 +102,7 @@ export type State = {
     identity?: { fingerprint?: string; certificateSha256: string };
 };
 export type Message = {
+    sequence?: number;
     thread?: string | null;
     replyCount?: number;
     id: string;
@@ -232,6 +247,8 @@ export type CallSignal = {
 
 export type JoinResult = { peers: CallMember[]; error?: never } | { error: string; peers?: never };
 export interface ServerEvents {
+    activity: (snapshot: ActivitySnapshot) => void;
+    'notification-preferences': (preferences: NotificationPreferences) => void;
     presence: (statuses: Record<string, PresenceStatus>) => void;
     refresh: () => void;
     message: (message: Message) => void;

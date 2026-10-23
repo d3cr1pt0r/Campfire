@@ -119,8 +119,8 @@ export function NotificationSettings({
             <section className="settings-section" aria-label="Notification delivery">
                 <h3>Notification delivery</h3>
                 <p className="muted">
-                    Saved on this device. Server and conversation choices are separate for each
-                    account and server.
+                    Desktop alerts and sound settings are saved on this device. Server and
+                    conversation notification choices sync across devices for this account.
                 </p>
                 <Toggle
                     title="Desktop notifications"

@@ -13,6 +13,7 @@ import { originPolicy, route } from './policies.js';
 import { createSessions } from './sessions.js';
 import { registerAccounts } from './accounts.js';
 import { registerMessages } from './messages.js';
+import { createActivity } from './activity.js';
 import { registerPolls } from './polls.js';
 import { forViewer } from './poll-view.js';
 import { registerProfiles } from './profiles.js';
@@ -137,6 +138,7 @@ export function createApp({
             : maxStoredUploadBytes;
     };
     const messageView = (message) => views([message])[0];
+    let activity;
     const emitRoom = (rawRoom, event, data) => {
         const room = canonicalRoom(rawRoom);
         for (const socket of io.sockets.sockets.values()) {
@@ -144,6 +146,8 @@ export function createApp({
             // Each member gets their own view of a poll: results only after voting.
             if (user && hasRoom(user, room)) socket.emit(event, forViewer(data, user.id));
         }
+        if (['message', 'message:delete', 'messages:expired'].includes(event))
+            activity?.publish(room);
     };
     const previews = createLinkPreviews({
         get,
@@ -178,6 +182,7 @@ export function createApp({
     );
     registration.mount();
     accounts.mount();
+    activity = createActivity(context);
     app.post(
         '/api/logout',
         route((req, res) => {
@@ -201,6 +206,8 @@ export function createApp({
             const visible = new Set(channels.map((channel) => channel.id));
             res.json({
                 me: sessions.publicUser(req.user),
+                activity: activity.snapshot(req.user),
+                notificationPreferences: activity.savedPreferences(req.user.id),
                 name: get('SELECT value FROM settings WHERE key=?', 'name').value,
                 icon: get("SELECT value FROM settings WHERE key='icon'")?.value || null,
                 reactionAuthors:

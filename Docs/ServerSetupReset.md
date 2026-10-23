@@ -4,8 +4,9 @@ The setup snapshot keeps usernames and password hashes, ownership, bans, role
 assignments, role names/colors/order/permissions, server settings (including the
 attachment storage limit), message retention, nicknames, profile frames, and saved
 presence preferences, channels, channel order, names, descriptions, privacy, reaction-author
-visibility, role permission overrides, and per-channel retention. Appearance, audio, and notification
-preferences saved on clients remain on those clients.
+visibility, role permission overrides, and per-channel retention. Appearance, audio, and desktop-alert
+preferences saved on clients remain on those clients. Personal server notification rules and read
+positions are not included in setup snapshots; a reset clears them along with message history.
 
 The current local setup is saved in `.private/server-setup.json`. Keep a private
 backup of that file: it contains password hashes and configuration, and is ignored

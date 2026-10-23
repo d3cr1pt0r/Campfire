@@ -139,7 +139,7 @@ export function DirectMessages({
         }))
         .filter(
             ({ destination }) =>
-                !(destination in saved.hidden) &&
+                (!(destination in saved.hidden) || unread[destination] > 0) &&
                 (destination in activity || unread[destination] > 0 || destination === room),
         )
         .sort(

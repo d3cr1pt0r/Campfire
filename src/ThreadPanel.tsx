@@ -4,6 +4,7 @@ import { ChatMessage, ChatMessages } from './ChatMessages';
 import { ChatComposer } from './ChatComposer';
 import { Emoji } from './ChatContent';
 import { useConversation } from './useConversation';
+import { useConversationRead } from './useUnread';
 import { removeFiles } from './conversation';
 import { messagePayload, type ApiClient } from './api';
 import type { AppSocket, Message, State, User } from './types';
@@ -20,6 +21,7 @@ type Props = {
     onJoinVoice?: (channel: string) => void;
     focusRequest: number;
     parent: Message;
+    markRead: (room: string, through: number, thread?: string | null) => void;
     api: ApiClient;
     socket: AppSocket | null;
     state: State;
@@ -64,6 +66,13 @@ export function ThreadPanel(props: Props) {
     const canPost =
         permission('threads.reply') && (!!root.replyCount || permission('threads.create'));
     const conversation = useConversation(api, socket, parent.room, true, search, pins, parent.id);
+    useConversationRead(
+        parent.room,
+        conversation.messages,
+        connected && conversation.loaded && !conversation.loading && !search && !pins,
+        props.markRead,
+        parent.id,
+    );
 
     useEffect(() => {
         mounted.current = true;

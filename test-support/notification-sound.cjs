@@ -361,6 +361,54 @@ app.whenReady()
             'removing override restores inherited sound delivery',
         );
 
+        // Closing the renderer disconnects its socket: badges must be restored from the
+        // database rather than relying on message events or the old React state.
+        await js('document.querySelector(\'button[aria-label="Close dialog"]\').click()');
+        await js(
+            'document.querySelector(\'button[aria-label="Remove conversation with Bob from Messages"]\').click()',
+        );
+        await js(`{
+            const key = ${JSON.stringify('direct-messages:' + origin + ':' + alice.user.id)};
+            const saved = JSON.parse(localStorage.getItem(key));
+            for (const room in saved.hidden) saved.hidden[room] = Date.now() + 86400000;
+            localStorage.setItem(key, JSON.stringify(saved));
+        }`);
+        win.hide();
+        await win.loadURL('about:blank');
+        await send('Missed DM while Campfire was closed');
+        await send('Missed channel message while Campfire was closed', 'introductions');
+        await win.loadURL(origin);
+        await wait(
+            'document.querySelector(".dm-unread")?.textContent.trim() === "1"',
+            'missed DM restores its badge and reopens a previously hidden conversation',
+        );
+        await wait(
+            '[...document.querySelectorAll(".nav-item.channel")].some(node => node.textContent.includes("introductions") && node.querySelector(".count"))',
+            'missed channel badge restores after the renderer was closed',
+        );
+        assert.equal(await js('window.__notificationAudio.tones'), 0);
+        assert.equal(await js('window.__notificationAudio.notifications.length'), 0);
+        console.log('PASS restoring missed activity does not replay sounds or desktop alerts');
+        win.show();
+        win.focus();
+        await wait('document.hasFocus()', 'restored app receives focus');
+        await js('document.querySelector(\'.direct-message[aria-label^="Message Bob"]\').click()');
+        await wait(
+            '!document.querySelector(".dm-unread")',
+            'opening the focused DM clears its persisted badge',
+        );
+        const dmRoom = 'dm:' + [alice.user.id, bob.user.id].sort().join(':');
+        assert.equal((await ownerApi('/activity', 'GET')).unread[dmRoom], undefined);
+        await send('Focused restored DM receives another message');
+        await wait(
+            'document.querySelector(".chat-area").textContent.includes("Focused restored DM receives another message") && !document.querySelector(".dm-unread")',
+            'focused open DM receives new messages without an unread badge',
+        );
+        await pause(200);
+        assert.equal(await js('window.__notificationAudio.tones'), 0);
+        assert.equal((await ownerApi('/activity', 'GET')).unread[dmRoom], undefined);
+        console.log('PASS focused DM suppression also persists its read position');
+
         win.destroy();
         clearTimeout(deadline);
         app.exit(0);
