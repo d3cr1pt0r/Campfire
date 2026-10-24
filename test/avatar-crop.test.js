@@ -48,7 +48,7 @@ test('preview and saved output use the same square transform with a filled backg
         y: 0.5,
         zoom: 1,
     });
-    assert.equal(context.fillStyle, '#211b18');
+    assert.equal(context.fillStyle, '#19191b');
     assert.deepEqual(calls, [
         ['fill', 0, 0, 512, 512],
         ['draw', bitmap, -256, -0, 1024, 512],
