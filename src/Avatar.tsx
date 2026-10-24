@@ -5,6 +5,7 @@ import { isAvatarFrame } from '../shared/frames.js';
 import { displayName, initials } from './profiles';
 export { initials } from './profiles';
 import { AuthImage } from './ChatContent';
+import { roleAvatar } from './theme';
 // Sparks, fireflies, leaves and other pieces each animate on their own staggered timeline.
 const particles: Record<AvatarFrame, number> = {
     ember: 3,
@@ -54,7 +55,7 @@ export function Avatar({
             title={user ? `${displayName(user)} (@${user.username})` : undefined}
             className={`avatar ${small ? 'small' : ''} ${speaking ? 'speaking' : ''} ${framed ? `framed frame-${framed}` : ''}`}
             // Saved pictures are opaque; a fill behind them bleeds through the antialiased corners.
-            style={user?.avatar ? undefined : { background: color || '#d9a466' }}
+            style={user?.avatar ? undefined : roleAvatar(color)}
         >
             {user?.avatar ? (
                 <AuthImage path={`/avatars/${user.avatar}`} alt={displayName(user)} />
