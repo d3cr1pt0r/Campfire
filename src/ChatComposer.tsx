@@ -405,6 +405,12 @@ export function ChatComposer({
                     )}
                 </div>
             )}
+            <div className="composer-typing" role="status" aria-live="polite">
+                {Object.keys(typing).length > 0 &&
+                    `${Object.keys(typing)
+                        .map((id) => displayName(user(id)))
+                        .join(', ')} is typing…`}
+            </div>
             <form className="composer" ref={form} onSubmit={submit}>
                 {formattingToolbar && canPost && editorState && (
                     <FormattingToolbar
@@ -511,17 +517,9 @@ export function ChatComposer({
                     <Send size={18} />
                 </button>
             </form>
-            {(Object.keys(typing).length > 0 || draft.length > 3500) && (
+            {draft.length > 3500 && (
                 <div className="composer-help">
-                    {Object.keys(typing).length > 0 && (
-                        <span>
-                            {Object.keys(typing)
-                                .map((id) => displayName(user(id)))
-                                .join(', ')}{' '}
-                            is typing…
-                        </span>
-                    )}
-                    {draft.length > 3500 && <span>{draft.length}/4000</span>}
+                    <span>{draft.length}/4000</span>
                 </div>
             )}
         </div>

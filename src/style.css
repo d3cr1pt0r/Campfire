@@ -1031,6 +1031,20 @@ small {
     font-weight: 500;
     color: var(--muted);
 }
+.composer-wrap:has(> .composer-typing) {
+    padding-top: 6px;
+}
+.composer-typing {
+    height: 18px;
+    margin-bottom: 2px;
+    padding-inline: 2px;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 18px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .attachment-preview {
     display: flex;
     align-items: center;
