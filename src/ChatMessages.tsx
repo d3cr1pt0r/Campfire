@@ -173,7 +173,8 @@ function ChatMessageList({
             saved && !saved.atEnd ? restoredScrollOffset(saved, visibleMessages) : 0,
         useAnimationFrameWithResizeObserver: true,
         anchorTo: 'end',
-        followOnAppend: !jump && !conversation.newer,
+        // A completed notification jump must not disable following indefinitely.
+        followOnAppend: (!jump || completedJump.current === jump.request) && !conversation.newer,
         scrollEndThreshold: 80,
         rangeExtractor: (range) => {
             const indexes = defaultRangeExtractor(range);
