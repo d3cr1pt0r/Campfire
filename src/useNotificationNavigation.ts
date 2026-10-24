@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ApiClient } from './api';
-import type { Message, MessageJump, NotificationTarget } from './types';
+import type { Message, MessageJump, NotificationTarget, NotificationHighlights } from './types';
 import { createNotificationNavigation } from './notificationNavigation';
 
 export function useNotificationNavigation(
     api: ApiClient,
     navigate: (room: string, parent: Message | null) => void,
-    acknowledge: (message: Message) => Promise<void>,
+    acknowledge: (message: Message, reactionsThrough?: number) => Promise<void>,
     acknowledgeVisible: (
         room: string,
         messages: string[],
         signal: AbortSignal,
-    ) => Promise<string[]>,
+    ) => Promise<NotificationHighlights>,
     fail: (error: Error) => void,
 ) {
     const [jump, setJump] = useState<(NotificationTarget & { request: number }) | null>(null);
@@ -73,20 +73,21 @@ export function useNotificationNavigation(
     const markShown = useCallback(
         async (request: number, part: 'message' | 'parent', visible: string[]) => {
             const current = pending.current;
-            if (current?.request !== request || !current.remaining.has(part)) return [];
+            const empty: NotificationHighlights = { messages: [], reactions: [] };
+            if (current?.request !== request || !current.remaining.has(part)) return empty;
             try {
                 const matched = await acknowledgeVisible(
                     current.target.room,
                     visible.filter((id) => id !== current.target.id),
                     current.signal,
                 );
-                if (pending.current !== current) return [];
+                if (pending.current !== current) return empty;
                 current.remaining.delete(part);
                 if (!current.remaining.size) current.resolve();
                 return matched;
             } catch (error) {
                 if (pending.current === current) current.reject(error as Error);
-                return [];
+                return empty;
             }
         },
         [acknowledgeVisible],
@@ -120,7 +121,11 @@ export function useNotificationNavigation(
             ? ({ id: jump.parent.id, request: jump.request } satisfies MessageJump)
             : undefined,
         messageJump: jump
-            ? ({ id: jump.message.id, request: jump.request } satisfies MessageJump)
+            ? ({
+                  id: jump.message.id,
+                  request: jump.request,
+                  reactions: jump.reactions,
+              } satisfies MessageJump)
             : undefined,
     };
 }

@@ -1,7 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mentionSegments, mentionQuery, completeMention } from '../src/mentions.ts';
-import { notificationKey, shouldNotify, channelNotificationMode } from '../src/notifications.ts';
+import {
+    notificationKey,
+    shouldNotify,
+    shouldNotifyReaction,
+    channelNotificationMode,
+} from '../src/notifications.ts';
 
 const me = {
     id: 'me',
@@ -354,4 +359,41 @@ test('DM overrides can opt in or out of their default while server mute and DND 
     prefs.dmNotifications = true;
     prefs.channelNotifications[notificationKey(server, me.id, room)] = 'muted';
     assert.equal(shouldNotify(message('hello', { room }), me, prefs, server, users), false);
+});
+
+test('reaction alerts are only for another person reacting to your messages and respect alert policies', () => {
+    const server = 'https://chat.example';
+    const reaction = { message: message('', { author: me.id }), user: bob.id, emoji: '👍' };
+    const notify = (event = reaction, prefs = {}, person = me, channels = []) =>
+        shouldNotifyReaction(event, person, prefs, server, channels);
+    assert.equal(notify(), true, 'own-message reactions alert in mentions-only channels');
+    assert.equal(notify({ ...reaction, user: me.id }), false, 'self reactions stay silent');
+    assert.equal(notify({ ...reaction, message: message('') }), false, 'other authors stay silent');
+    assert.equal(notify(reaction, {}, { ...me, status: 'dnd' }), false);
+    assert.equal(
+        notify(reaction, { serverNotifications: { [notificationKey(server, me.id, '*')]: false } }),
+        false,
+    );
+    const key = notificationKey(server, me.id, 'general');
+    assert.equal(notify(reaction, { channelNotifications: { [key]: 'muted' } }), false);
+    assert.equal(
+        notify(
+            reaction,
+            { categoryNotifications: { [notificationKey(server, me.id, 'category')]: 'muted' } },
+            me,
+            [{ id: 'general', category: 'category' }],
+        ),
+        false,
+    );
+    assert.equal(notify({ ...reaction, message: { ...reaction.message, thread: 'parent' } }), true);
+    const dm = { ...reaction, message: { ...reaction.message, room: 'dm:bob:me' } };
+    assert.equal(notify(dm), true);
+    assert.equal(notify(dm, { dmNotifications: false }), false);
+    assert.equal(
+        notify(dm, {
+            dmNotifications: false,
+            channelNotifications: { [notificationKey(server, me.id, dm.message.room)]: 'all' },
+        }),
+        true,
+    );
 });

@@ -5589,6 +5589,10 @@ body.stream-popout-body {
     border-radius: 6px;
     animation: notification-message-ping 2s ease-out;
 }
+.reactions button.reaction-ping {
+    background: var(--soft-accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+}
 @keyframes notification-message-ping {
     from {
         background: color-mix(in srgb, var(--accent) 50%, transparent);

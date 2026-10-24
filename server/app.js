@@ -183,6 +183,7 @@ export function createApp({
     registration.mount();
     accounts.mount();
     activity = createActivity(context);
+    context.activity = activity;
     app.post(
         '/api/logout',
         route((req, res) => {

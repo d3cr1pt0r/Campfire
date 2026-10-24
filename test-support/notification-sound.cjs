@@ -30,10 +30,19 @@ app.whenReady()
         await win.webContents.debugger.sendCommand('Page.addScriptToEvaluateOnNewDocument', {
             source: `
         window.__expectedToneCheckpoint = 0;
-        window.__notificationAudio = { contexts: [], tones: 0, peak: 0, notifications: [] };
+        window.__notificationAudio = { contexts: [], tones: 0, peak: 0, notifications: [], reactionAnimations: [] };
         window.Notification = class {
             static permission = 'granted';
             constructor(title, options) { window.__notificationAudio.notifications.push({ title, ...options }); }
+        };
+        const originalAnimate = Element.prototype.animate;
+        Element.prototype.animate = function(frames, options) {
+            if (this.matches('.reactions button')) window.__notificationAudio.reactionAnimations.push({
+                message: this.closest('[data-message-id]')?.dataset.messageId,
+                emoji: this.dataset.reactionEmoji,
+                frames,
+            });
+            return originalAnimate.call(this, frames, options);
         };
         const OriginalAudioContext = window.AudioContext;
         window.AudioContext = class extends OriginalAudioContext {
@@ -77,6 +86,229 @@ app.whenReady()
             );
             throw Error('Timed out: ' + label);
         };
+        const ownerApi = async (endpoint, method, body) => {
+            const response = await fetch(origin + '/api' + endpoint, {
+                method,
+                headers: {
+                    Authorization: 'Bearer ' + alice.token,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(body),
+            });
+            assert.equal(response.status, 200);
+            return response.json();
+        };
+        const verifyReactions = async () => {
+            const general = `[...document.querySelectorAll('.nav-item.channel')].find(node=>node.textContent.startsWith('general'))`;
+            const count = `${general}?.querySelector('.count')?.textContent.trim()`;
+            const pinged = (id) =>
+                `!!document.querySelector('.message-ping[data-message-id="${id}"]')`;
+            const react = async (message, emoji, account = bob) => {
+                const response = await fetch(origin + '/api/messages/' + message.id + '/reaction', {
+                    method: 'POST',
+                    headers: {
+                        Authorization: 'Bearer ' + account.token,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ emoji }),
+                });
+                assert.equal(response.status, 200);
+            };
+            const ownRoot = await ownerApi('/messages', 'POST', {
+                room: 'general',
+                body: 'My reacted root',
+            });
+            const ownEarlierReply = await ownerApi('/messages', 'POST', {
+                room: 'general',
+                thread: ownRoot.id,
+                body: 'Neighboring reacted reply',
+            });
+            const ownReply = await ownerApi('/messages', 'POST', {
+                room: 'general',
+                thread: ownRoot.id,
+                body: 'My reacted reply',
+            });
+            win.hide();
+            await pause(800);
+            await react(ownRoot, '🔥');
+            await react(ownEarlierReply, '🚀');
+            await react(ownReply, '👍');
+            await wait(
+                `${count} === '3'`,
+                'reactions on your channel message and replies create unread badges',
+            );
+            await wait(
+                'window.__notificationAudio.tones > window.__expectedToneCheckpoint',
+                'reaction notification plays the message sound',
+            );
+            await wait(
+                'window.__notificationAudio.notifications.some(n => n.body.includes("Bob reacted 👍 to your message"))',
+                'reaction desktop alert identifies the reactor without quoting the message',
+            );
+            win.show();
+            win.focus();
+            await wait('document.hasFocus()', 'reaction recipient receives focus');
+            await js(`${general}.click()`);
+            await wait(
+                `!(${count}) && ${pinged(ownReply.id)} && ${pinged(ownRoot.id)} && !!document.querySelector('.thread-panel')`,
+                'reaction badge jumps to your reply and highlights its parent',
+            );
+            await wait(
+                `window.__notificationAudio.reactionAnimations.some(entry => entry.message === '${ownReply.id}' && entry.emoji === '👍' && entry.frames.some(frame => frame.transform === 'scale(1.28)'))`,
+                'selected reaction plays the punch-scale animation',
+            );
+            await wait(
+                `window.__notificationAudio.reactionAnimations.some(entry => entry.message === '${ownRoot.id}' && entry.emoji === '🔥') && window.__notificationAudio.reactionAnimations.some(entry => entry.message === '${ownEarlierReply.id}' && entry.emoji === '🚀')`,
+                'the same jump animates queued reactions in both the main and thread viewports',
+            );
+            await pause(800);
+            const quietTones = await js('window.__notificationAudio.tones');
+            await react(ownReply, '🔥');
+            await wait(
+                `!!document.querySelector('.thread-panel [data-message-id="${ownReply.id}"] .reactions button[aria-label^="🔥:"]')`,
+                'a visible own reply receives its new reaction',
+            );
+            await pause(300);
+            assert.equal((await ownerApi('/activity', 'GET')).unread.general, undefined);
+            assert.equal(await js('window.__notificationAudio.tones'), quietTones);
+            await react(ownReply, '🔥');
+            await react(ownReply, '🎉', alice);
+            await pause(300);
+            assert.equal((await ownerApi('/activity', 'GET')).unread.general, undefined);
+            assert.equal(await js('window.__notificationAudio.tones'), quietTones);
+            console.log('PASS visible reactions, removals, and self-reactions stay quiet');
+            win.hide();
+            await win.loadURL('about:blank');
+            await react(ownRoot, '👍');
+            await win.loadURL(origin);
+            await wait(`${count} === '1'`, 'missed reaction badge restores after reconnecting');
+            assert.equal(await js('window.__notificationAudio.tones'), 0);
+            assert.equal(await js('window.__notificationAudio.notifications.length'), 0);
+            win.show();
+            win.focus();
+            await wait('document.hasFocus()', 'restored reaction recipient receives focus');
+            await js(`${general}.click()`);
+            await wait(
+                `!(${count}) && ${pinged(ownRoot.id)}`,
+                'restored reaction jumps to your original message',
+            );
+            await wait(
+                `window.__notificationAudio.reactionAnimations.some(entry => entry.message === '${ownRoot.id}' && entry.emoji === '👍')`,
+                'restored reaction also animates its chip',
+            );
+
+            // Keep one pending reaction outside the viewport while two neighboring
+            // reactions share the latest incoming message's viewport.
+            const far = await ownerApi('/messages', 'POST', {
+                room: 'general',
+                body: 'Offscreen reacted message',
+            });
+            for (let i = 0; i < 35; i++)
+                await ownerApi('/messages', 'POST', {
+                    room: 'general',
+                    body: 'Reaction visibility filler ' + i,
+                });
+            const neighborA = await ownerApi('/messages', 'POST', {
+                room: 'general',
+                body: 'First neighboring reaction',
+            });
+            const neighborB = await ownerApi('/messages', 'POST', {
+                room: 'general',
+                body: 'Second neighboring reaction',
+            });
+            win.hide();
+            await react(far, '👍');
+            await react(neighborA, '👍');
+            await react(neighborB, '🔥');
+            // An unqueued emoji on the same chip row must not animate.
+            await react(neighborB, '🎉', alice);
+            const response = await fetch(origin + '/api/messages', {
+                method: 'POST',
+                headers: {
+                    Authorization: 'Bearer ' + bob.token,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    room: 'general',
+                    body: 'Newest queued message beside reactions',
+                }),
+            });
+            assert.equal(response.status, 200);
+            const latest = await response.json();
+            await wait(
+                `${count} === '4'`,
+                'message and reaction notifications accumulate together',
+            );
+            win.show();
+            win.focus();
+            await wait('document.hasFocus()', 'batch reaction recipient receives focus');
+            await js(`${general}.click()`);
+            await wait(
+                `${count} === '1' && ${pinged(latest.id)} && ${pinged(neighborA.id)} && ${pinged(neighborB.id)}`,
+                'one message jump pings neighboring reacted messages and clears their visible notifications',
+            );
+            for (const [message, emoji] of [
+                [neighborA, '👍'],
+                [neighborB, '🔥'],
+            ]) {
+                await wait(
+                    `window.__notificationAudio.reactionAnimations.some(entry => entry.message === '${message.id}' && entry.emoji === '${emoji}')`,
+                    'queued neighboring reaction animates: ' + emoji,
+                );
+            }
+            assert.equal(
+                await js(
+                    `window.__notificationAudio.reactionAnimations.some(entry => entry.message === '${far.id}' || (entry.message === '${neighborB.id}' && entry.emoji === '🎉'))`,
+                ),
+                false,
+            );
+            await js(`${general}.click()`);
+            await wait(
+                `!(${count}) && ${pinged(far.id)} && window.__notificationAudio.reactionAnimations.some(entry => entry.message === '${far.id}' && entry.emoji === '👍')`,
+                'offscreen reaction remains queued and animates on its own jump',
+            );
+            win.hide();
+            await react(far, '👍');
+            await react(far, '👍');
+            await wait(
+                `${count} === '1'`,
+                'a later reaction to the same message creates new activity',
+            );
+            win.show();
+            win.focus();
+            await wait('document.hasFocus()', 'repeated reaction jump receives focus');
+            const previousPunches = await js(
+                `window.__notificationAudio.reactionAnimations.filter(entry => entry.message === '${far.id}' && entry.emoji === '👍').length`,
+            );
+            await js(`${general}.click()`);
+            await wait(
+                `!(${count}) && window.__notificationAudio.reactionAnimations.filter(entry => entry.message === '${far.id}' && entry.emoji === '👍').length > ${previousPunches}`,
+                'a repeated jump restarts the same reaction animation',
+            );
+            await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', {
+                features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
+            });
+            win.hide();
+            await react(far, '🔥');
+            await wait(`${count} === '1'`, 'reduced-motion reaction remains navigable');
+            win.show();
+            win.focus();
+            await wait('document.hasFocus()', 'reduced-motion reaction recipient receives focus');
+            await js(`${general}.click()`);
+            await wait(
+                `!(${count}) && !!document.querySelector('[data-message-id="${far.id}"] .reaction-ping[data-reaction-emoji="🔥"]')`,
+                'reduced-motion reaction receives a static chip highlight',
+            );
+            assert.equal(
+                await js(
+                    `window.__notificationAudio.reactionAnimations.some(entry => entry.message === '${far.id}' && entry.emoji === '🔥')`,
+                ),
+                false,
+            );
+            await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', {
+                features: [],
+            });
+        };
         await win.loadURL(origin);
         await js(
             `localStorage.setItem('connection', JSON.stringify(${JSON.stringify({ url: origin, token: alice.token })})); localStorage.setItem('preferences',JSON.stringify({notifications:true,messageSounds:true,autoIdle:false,sounds:false}));`,
@@ -86,6 +318,13 @@ app.whenReady()
             'document.querySelector(".server-heading small")?.textContent.includes("Connected")',
             'saved account connects without pointer or keyboard interaction',
         );
+        if (process.env.MEMBER_REACTIONS === '1') {
+            await verifyReactions();
+            win.destroy();
+            clearTimeout(deadline);
+            app.exit(0);
+            return;
+        }
         win.hide();
         const send = async (
             body,
@@ -294,18 +533,6 @@ app.whenReady()
         );
         console.log('PASS focused current DM stays silent');
         // Exercise server/category inheritance through real UI changes and socket messages.
-        const ownerApi = async (endpoint, method, body) => {
-            const response = await fetch(origin + '/api' + endpoint, {
-                method,
-                headers: {
-                    Authorization: 'Bearer ' + alice.token,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(body),
-            });
-            assert.equal(response.status, 200);
-            return response.json();
-        };
         const category = await ownerApi('/categories', 'POST', { name: 'Notification category' });
         await ownerApi('/channels/introductions/category', 'PUT', {
             category: category.id,
@@ -598,6 +825,8 @@ app.whenReady()
             `!document.querySelector('.dm-unread')`,
             'DM context action clears only the selected conversation',
         );
+
+        await verifyReactions();
 
         win.destroy();
         clearTimeout(deadline);

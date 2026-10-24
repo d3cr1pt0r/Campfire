@@ -7,7 +7,7 @@ import { emojiInMessage, recordEmojiUse } from './emojiUsage';
 import { useConversation } from './useConversation';
 import { removeFiles } from './conversation';
 import { messagePayload, type ApiClient } from './api';
-import type { AppSocket, Message, State, User, MessageJump } from './types';
+import type { AppSocket, Message, State, User, MessageJump, NotificationHighlights } from './types';
 import type { MessageAvatarMode } from './messageAppearance';
 import type { PollTarget } from './PollDialog';
 import { appendText } from './richText';
@@ -21,7 +21,7 @@ type Props = {
     focusRequest: number;
     parent: Message;
     jump?: MessageJump;
-    onJumpShown?: (request: number, visible: string[]) => Promise<string[]>;
+    onJumpShown?: (request: number, visible: string[]) => Promise<NotificationHighlights>;
     onJumpFailed?: (request: number, error: Error) => void;
     api: ApiClient;
     socket: AppSocket | null;

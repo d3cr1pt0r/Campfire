@@ -43,7 +43,8 @@ export function createActivity({ app, io, get, all, run, hasRoom, userFor, messa
         const baseline =
             get('SELECT sequence FROM activity_baselines WHERE user=?', user.id)?.sequence ?? 0;
         const unread = {},
-            latest = {};
+            latest = {},
+            latestReactions = {};
         const rooms = all(
             `SELECT m.room,MAX(a.sequence) latest,
             SUM(CASE WHEN m.author IS NOT NULL AND m.author<>? AND seen.message IS NULL AND a.sequence>MAX(?,COALESCE(r.sequence,0),COALESCE(c.sequence,0)) THEN 1 ELSE 0 END) unread
@@ -63,10 +64,22 @@ export function createActivity({ app, io, get, all, run, hasRoom, userFor, messa
             latest[room.room] = room.latest;
             if (room.unread) unread[room.room] = room.unread;
         }
+        for (const room of all(
+            `SELECT m.room,MAX(n.sequence) latest,
+            SUM(CASE WHEN n.acknowledged=0 THEN 1 ELSE 0 END) unread
+            FROM reaction_notifications n JOIN messages m ON m.id=n.message
+            WHERE n.recipient=? GROUP BY m.room`,
+            user.id,
+        )) {
+            if (!hasRoom(user, room.room)) continue;
+            latestReactions[room.room] = room.latest;
+            if (room.unread) unread[room.room] = (unread[room.room] ?? 0) + room.unread;
+        }
         return {
             version: get('SELECT version FROM activity_version WHERE id=1').version,
             unread,
             latest,
+            latestReactions,
         };
     };
     const publish = (room, onlyUser) => {
@@ -83,6 +96,17 @@ export function createActivity({ app, io, get, all, run, hasRoom, userFor, messa
         const row = get('SELECT settings FROM notification_preferences WHERE user=?', id);
         return row ? JSON.parse(row.settings) : null;
     };
+    const reactionCutoff = (value = 0) => {
+        check(Number.isSafeInteger(value) && value >= 0, 'Invalid reaction read position');
+        check(
+            value <=
+                (get("SELECT seq FROM sqlite_sequence WHERE name='reaction_notifications'")?.seq ??
+                    0),
+            'Unknown reaction read position',
+            404,
+        );
+        return value;
+    };
     app.get(
         '/api/activity',
         route((req, res) => res.set('Cache-Control', 'no-store').json(snapshot(req.user))),
@@ -92,7 +116,7 @@ export function createActivity({ app, io, get, all, run, hasRoom, userFor, messa
         route((req, res) => {
             const room = canonicalRoom(req.query.room);
             check(hasRoom(req.user, room), 'Unknown conversation', 403);
-            const message = get(
+            let message = get(
                 `SELECT m.* FROM message_activity a JOIN messages m ON m.id=a.message
             LEFT JOIN conversation_reads r ON r.user=? AND r.room=m.room AND r.thread=COALESCE(m.thread,'')
             LEFT JOIN conversation_reads c ON c.user=? AND c.room=m.room AND c.thread='*'
@@ -107,6 +131,26 @@ export function createActivity({ app, io, get, all, run, hasRoom, userFor, messa
                 req.user.id,
                 req.user.id,
             );
+            const reaction = get(
+                `SELECT n.* FROM reaction_notifications n JOIN messages m ON m.id=n.message
+                WHERE n.recipient=? AND n.acknowledged=0 AND m.room=?
+                ORDER BY n.sequence DESC LIMIT 1`,
+                req.user.id,
+                room,
+            );
+            let reactionsThrough;
+            // Message sequence at reaction time orders both activity types without
+            // depending on wall-clock time or changing the message's own sequence.
+            if (
+                reaction &&
+                (!message ||
+                    reaction.after_message_sequence >=
+                        get('SELECT sequence FROM message_activity WHERE message=?', message.id)
+                            .sequence)
+            ) {
+                message = get('SELECT * FROM messages WHERE id=?', reaction.message);
+                reactionsThrough = reaction.sequence;
+            }
             res.set('Cache-Control', 'no-store').json(
                 message
                     ? {
@@ -119,6 +163,18 @@ export function createActivity({ app, io, get, all, run, hasRoom, userFor, messa
                                     req.user.id,
                                 )
                               : null,
+                          ...(reactionsThrough
+                              ? {
+                                    reactionsThrough,
+                                    reactions: all(
+                                        `SELECT DISTINCT message,emoji FROM reaction_notifications
+                                        WHERE recipient=? AND message=? AND sequence<=? AND acknowledged=0`,
+                                        req.user.id,
+                                        message.id,
+                                        reactionsThrough,
+                                    ),
+                                }
+                              : {}),
                       }
                     : null,
             );
@@ -139,10 +195,18 @@ export function createActivity({ app, io, get, all, run, hasRoom, userFor, messa
                 room,
             );
             check(message, 'Message not found', 404);
+            const reactionsThrough = reactionCutoff(req.body.reactionsThrough);
             run(
                 'INSERT OR IGNORE INTO activity_acknowledgments(user,message) VALUES(?,?)',
                 req.user.id,
                 message.id,
+            );
+            run(
+                `UPDATE reaction_notifications SET acknowledged=1
+                WHERE recipient=? AND message=? AND sequence<=? AND acknowledged=0`,
+                req.user.id,
+                message.id,
+                reactionsThrough,
             );
             publish(null, req.user.id);
             res.json(snapshot(req.user));
@@ -161,6 +225,7 @@ export function createActivity({ app, io, get, all, run, hasRoom, userFor, messa
                 'Invalid visible messages',
             );
             const unique = [...new Set(ids)];
+            const reactionsThrough = reactionCutoff(req.body.reactionsThrough);
             // Match the notification queue, then acknowledge only this viewport's
             // IDs in one statement. Offscreen and later arrivals stay pending.
             const acknowledged = unique.length
@@ -184,8 +249,24 @@ export function createActivity({ app, io, get, all, run, hasRoom, userFor, messa
                       req.user.id,
                   ).map((row) => row.message)
                 : [];
-            if (acknowledged.length) publish(null, req.user.id);
-            res.json({ ...snapshot(req.user), messages: acknowledged });
+            const reactions =
+                unique.length && reactionsThrough
+                    ? all(
+                          `UPDATE reaction_notifications SET acknowledged=1
+                      WHERE recipient=? AND sequence<=? AND acknowledged=0
+                      AND message IN (SELECT id FROM messages WHERE room=? AND id IN (${unique.map(() => '?').join(',')}))
+                      RETURNING message,emoji`,
+                          req.user.id,
+                          reactionsThrough,
+                          room,
+                          ...unique,
+                      )
+                    : [];
+            const messages = [
+                ...new Set([...acknowledged, ...reactions.map((row) => row.message)]),
+            ];
+            if (messages.length) publish(null, req.user.id);
+            res.json({ ...snapshot(req.user), messages, reactions });
         }),
     );
     app.post(
@@ -194,6 +275,7 @@ export function createActivity({ app, io, get, all, run, hasRoom, userFor, messa
             const room = canonicalRoom(req.body?.room);
             check(hasRoom(req.user, room), 'Unknown conversation', 403);
             const { through, thread = null, all: entireConversation = false } = req.body;
+            const reactionsThrough = reactionCutoff(req.body.reactionsThrough);
             check(Number.isSafeInteger(through) && through > 0, 'Invalid read position');
             check(typeof entireConversation === 'boolean', 'Invalid read scope');
             check(
@@ -232,6 +314,16 @@ export function createActivity({ app, io, get, all, run, hasRoom, userFor, messa
                 room,
                 scope,
                 through,
+            );
+            run(
+                `UPDATE reaction_notifications SET acknowledged=1
+                WHERE recipient=? AND sequence<=? AND acknowledged=0
+                AND message IN (SELECT id FROM messages WHERE room=? AND (?=1 OR thread IS ?))`,
+                req.user.id,
+                reactionsThrough,
+                room,
+                entireConversation ? 1 : 0,
+                thread,
             );
             publish(null, req.user.id);
             res.json(snapshot(req.user));

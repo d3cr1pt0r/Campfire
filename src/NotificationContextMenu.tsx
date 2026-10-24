@@ -12,11 +12,13 @@ import { createPortal } from 'react-dom';
 export function useNotificationContextMenu(
     unread: Record<string, number>,
     latest: Record<string, number>,
-    clear: (room: string, through: number) => void,
+    clear: (room: string, through: number, reactionsThrough: number) => void,
+    latestReactions: Record<string, number> = {},
 ) {
     const [menu, setMenu] = useState<{
         room: string;
         through: number;
+        reactionsThrough: number;
         x: number;
         y: number;
         trigger: HTMLElement;
@@ -60,7 +62,14 @@ export function useNotificationContextMenu(
             if (!(unread[room] > 0)) return;
             event.preventDefault();
             event.stopPropagation();
-            setMenu({ room, through: latest[room], x, y, trigger: event.currentTarget });
+            setMenu({
+                room,
+                through: latest[room],
+                reactionsThrough: latestReactions[room] ?? 0,
+                x,
+                y,
+                trigger: event.currentTarget,
+            });
         };
         return {
             onContextMenu: (event) => open(event, event.clientX, event.clientY),
@@ -94,7 +103,7 @@ export function useNotificationContextMenu(
                     <button
                         role="menuitem"
                         onClick={() => {
-                            clear(visible.room, visible.through);
+                            clear(visible.room, visible.through, visible.reactionsThrough);
                             close(true);
                         }}
                     >

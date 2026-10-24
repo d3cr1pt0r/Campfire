@@ -23,6 +23,9 @@ export function registerMessages({
     messageView,
     messageViews,
     emitRoom,
+    io,
+    userFor,
+    activity,
     storageQuota,
     uploadLimit,
     polls,
@@ -458,14 +461,13 @@ export function registerMessages({
                             get('SELECT id FROM emojis WHERE name=?', emoji.slice(1, -1)))),
                 'Unsupported emoji',
             );
-            if (
-                get(
-                    'SELECT * FROM reactions WHERE message=? AND user=? AND emoji=?',
-                    m.id,
-                    req.user.id,
-                    emoji,
-                )
-            )
+            const existing = get(
+                'SELECT * FROM reactions WHERE message=? AND user=? AND emoji=?',
+                m.id,
+                req.user.id,
+                emoji,
+            );
+            if (existing)
                 run(
                     'DELETE FROM reactions WHERE message=? AND user=? AND emoji=?',
                     m.id,
@@ -474,6 +476,25 @@ export function registerMessages({
                 );
             else run('INSERT INTO reactions VALUES(?,?,?)', m.id, req.user.id, emoji);
             emitRoom(m.room, 'message:update', messageView(m));
+            if (m.author && m.author !== req.user.id) activity.publish(m.room, m.author);
+            if (!existing && m.author && m.author !== req.user.id) {
+                const notification = get(
+                    'SELECT sequence FROM reaction_notifications WHERE message=? AND actor=? AND emoji=?',
+                    m.id,
+                    req.user.id,
+                    emoji,
+                );
+                for (const socket of io.sockets.sockets.values()) {
+                    const recipient = userFor(socket.data.token);
+                    if (recipient?.id === m.author && hasRoom(recipient, m.room))
+                        socket.emit('reaction:notification', {
+                            message: { id: m.id, room: m.room, thread: m.thread, author: m.author },
+                            user: req.user.id,
+                            emoji,
+                            sequence: notification.sequence,
+                        });
+                }
+            }
             res.json({ ok: true });
         }),
     );

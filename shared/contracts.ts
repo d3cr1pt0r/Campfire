@@ -58,12 +58,20 @@ export type CallMember = {
     deafened?: boolean;
     camera?: boolean;
 };
-export type NotificationTarget = { message: Message; parent: Message | null };
-export type MessageJump = { id: string; request: number };
+export type NotificationTarget = {
+    message: Message;
+    parent: Message | null;
+    reactionsThrough?: number;
+    reactions?: ReactionHighlight[];
+};
+export type ReactionHighlight = { message: string; emoji: string };
+export type NotificationHighlights = { messages: string[]; reactions: ReactionHighlight[] };
+export type MessageJump = { id: string; request: number; reactions?: ReactionHighlight[] };
 export type ActivitySnapshot = {
     version: number;
     unread: Record<string, number>;
     latest: Record<string, number>;
+    latestReactions?: Record<string, number>;
 };
 export type NotificationPreferences = {
     muted: boolean;
@@ -255,6 +263,7 @@ export interface ServerEvents {
     refresh: () => void;
     message: (message: Message) => void;
     'message:update': (message: Message) => void;
+    'reaction:notification': (event: ReactionNotification) => void;
     'message:delete': (event: { id: string; room: string }) => void;
     // Top-level messages whose retention period ended; their replies went with them.
     'messages:expired': (event: { room: string; ids: string[] }) => void;
@@ -269,6 +278,12 @@ export interface ServerEvents {
     'call:speaking': (event: { user: string; active: boolean }) => void;
     signal: (event: { from: string; user: string; data: CallSignal }) => void;
 }
+export type ReactionNotification = {
+    message: Pick<Message, 'id' | 'room' | 'thread' | 'author'>;
+    user: string;
+    emoji: string;
+    sequence: number;
+};
 export interface ClientEvents {
     'call:media': (shareId: string | null) => void;
     'call:status': (status: { muted: boolean; deafened: boolean; camera: boolean }) => void;

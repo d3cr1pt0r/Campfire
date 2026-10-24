@@ -11,6 +11,7 @@ import {
 } from '../shared/permissions.js';
 import {
     shouldNotify,
+    shouldNotifyReaction,
     createNotificationSound,
     notificationSound,
     callsRing,
@@ -408,12 +409,8 @@ function App() {
         url,
         reportError,
     );
-    const { unread, latest, acknowledge, acknowledgeVisible, dismissUnread } = useUnread(
-        api,
-        socket,
-        state?.activity,
-        reportError,
-    );
+    const { unread, latest, latestReactions, acknowledge, acknowledgeVisible, dismissUnread } =
+        useUnread(api, socket, state?.activity, reportError);
     const formattingToolbar = prefs.formattingToolbar !== false;
     const setFormattingToolbar = (shown: boolean) =>
         setPrefs((previous) => ({ ...previous, formattingToolbar: shown }));
@@ -453,7 +450,12 @@ function App() {
         acknowledgeVisible,
         reportError,
     );
-    const notificationMenu = useNotificationContextMenu(unread, latest, dismissUnread);
+    const notificationMenu = useNotificationContextMenu(
+        unread,
+        latest,
+        dismissUnread,
+        latestReactions,
+    );
     const [compact, setCompact] = useState(() => window.innerWidth <= 800);
     const navigation = useRef<HTMLDivElement>(null);
     useDialog(navigation, () => setNavigationOpen(false), compact && navigationOpen);
@@ -808,6 +810,63 @@ function App() {
                     });
                 } catch {
                     /* OS notifications are optional; do not interrupt message handling. */
+                }
+            }
+        });
+        s.on('reaction:notification', (event) => {
+            const me = stateRef.current?.me;
+            const preferences = prefsRef.current;
+            if (!me || event.message.author !== me.id || event.user === me.id) return;
+            const reading =
+                isReadingConversation(
+                    event.message,
+                    roomRef.current,
+                    threadRef.current?.id ?? null,
+                    document.visibilityState === 'visible',
+                    document.hasFocus(),
+                ) &&
+                [
+                    ...document.querySelectorAll<HTMLElement>(
+                        `.virtual-message[data-message-id="${CSS.escape(event.message.id)}"]`,
+                    ),
+                ].some((row) => {
+                    const bounds = row.querySelector('.message')?.getBoundingClientRect();
+                    const viewport = row.closest('.messages')?.getBoundingClientRect();
+                    return (
+                        bounds &&
+                        viewport &&
+                        bounds.bottom > Math.max(viewport.top, 0) &&
+                        bounds.top < Math.min(viewport.bottom, window.innerHeight) &&
+                        bounds.right > Math.max(viewport.left, 0) &&
+                        bounds.left < Math.min(viewport.right, window.innerWidth)
+                    );
+                });
+            if (reading)
+                void acknowledge(event.message, event.sequence).catch(
+                    (error: Error & { status?: number }) => {
+                        if (error.status !== 403 && error.status !== 404) reportError(error);
+                    },
+                );
+            if (!shouldNotifyReaction(event, me, preferences, url, stateRef.current?.channels))
+                return;
+            if (preferences.messageSounds !== false && !reading) void messageSound.play('message');
+            if (
+                preferences.notifications &&
+                (document.visibilityState === 'hidden' || !document.hasFocus()) &&
+                'Notification' in window &&
+                Notification.permission === 'granted'
+            ) {
+                try {
+                    const sender = displayName(
+                        stateRef.current?.users.find((user) => user.id === event.user),
+                        'Someone',
+                    );
+                    new Notification(stateRef.current?.name || 'Campfire', {
+                        body: `${sender} reacted ${event.emoji} to your message`,
+                        silent: true,
+                    });
+                } catch {
+                    /* OS notifications are optional; reaction updates still arrive. */
                 }
             }
         });

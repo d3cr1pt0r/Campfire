@@ -5,7 +5,10 @@ import type { ApiClient } from './api';
 export function createNotificationNavigation(
     api: ApiClient,
     display: (target: NotificationTarget, signal: AbortSignal) => Promise<void>,
-    acknowledge: (message: NotificationTarget['message']) => Promise<void>,
+    acknowledge: (
+        message: NotificationTarget['message'],
+        reactionsThrough?: number,
+    ) => Promise<void>,
     empty: (room: string) => void,
     fail: (error: Error) => void,
 ) {
@@ -41,7 +44,8 @@ export function createNotificationNavigation(
                         return;
                     }
                     await display(target, current.signal);
-                    if (!current.signal.aborted) await acknowledge(target.message);
+                    if (!current.signal.aborted)
+                        await acknowledge(target.message, target.reactionsThrough);
                 } catch (error) {
                     if (!current.signal.aborted) fail(error as Error);
                 }

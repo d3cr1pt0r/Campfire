@@ -168,14 +168,94 @@ test('visible acknowledgments update activity, return queued matches, and discar
         unread: { general: 1 },
         latest: { general: 4 },
         messages: ['visible'],
+        reactions: [{ message: 'visible', emoji: '👍' }],
     });
-    assert.deepEqual(await first, ['visible']);
+    assert.deepEqual(await first, {
+        messages: ['visible'],
+        reactions: [{ message: 'visible', emoji: '👍' }],
+    });
     assert.equal(client.getSnapshot().unread.general, 1);
-    assert.deepEqual(await client.acknowledgeVisible('general', []), []);
+    assert.deepEqual(await client.acknowledgeVisible('general', []), {
+        messages: [],
+        reactions: [],
+    });
     assert.equal(calls.length, 1);
     const stale = client.acknowledgeVisible('general', ['another']);
     client.cancel();
     calls[1].resolve({ version: 3, unread: {}, latest: { general: 5 }, messages: ['another'] });
-    assert.deepEqual(await stale, []);
+    assert.deepEqual(await stale, { messages: [], reactions: [] });
     assert.equal(client.getSnapshot().version, 2);
+});
+
+test('reaction acknowledgments and clears retain captured cutoffs across later arrivals', async () => {
+    const calls = [];
+    const client = createActivityClient(
+        async (path, _method, body) => {
+            calls.push({ path, body });
+            return {
+                version: calls.length,
+                unread: {},
+                latest: { general: 1 },
+                messages: ['visible'],
+            };
+        },
+        () => {},
+    );
+    client.receive({
+        version: 0,
+        unread: { general: 1 },
+        latest: { general: 1 },
+        latestReactions: { general: 10 },
+    });
+    await client.acknowledgeVisible('general', ['visible']);
+    assert.equal(calls[0].body.reactionsThrough, 10);
+    await client.acknowledge({ id: 'target', room: 'general' }, 8);
+    assert.equal(calls[1].body.reactionsThrough, 8);
+    client.receive({
+        version: 3,
+        unread: { general: 2 },
+        latest: { general: 1 },
+        latestReactions: { general: 11 },
+    });
+    client.dismiss('general', 1, 10); // Captured when the context menu opened.
+    await new Promise(setImmediate);
+    assert.equal(calls[2].body.reactionsThrough, 10);
+    client.receive({
+        version: 4,
+        unread: { general: 1 },
+        latest: { general: 1 },
+        latestReactions: { general: 11 },
+    });
+    client.dismiss('general'); // Same message position, newer reaction cutoff.
+    await new Promise(setImmediate);
+    assert.equal(calls[3].body.reactionsThrough, 11);
+    client.cancel();
+});
+
+test('jump acknowledgment uses the selected reaction cutoff even if another reaction arrives during display', async () => {
+    const acknowledgments = [];
+    let show;
+    const navigation = createNotificationNavigation(
+        async () => ({
+            message: { id: 'mine', room: 'general' },
+            parent: null,
+            reactionsThrough: 7,
+        }),
+        () =>
+            new Promise((resolve) => {
+                show = resolve;
+            }),
+        async (message, reactionsThrough) =>
+            acknowledgments.push({ id: message.id, reactionsThrough }),
+        () => {},
+        (error) => {
+            throw error;
+        },
+    );
+    const pending = navigation.open('general');
+    await new Promise(setImmediate);
+    assert.deepEqual(acknowledgments, []);
+    show();
+    await pending;
+    assert.deepEqual(acknowledgments, [{ id: 'mine', reactionsThrough: 7 }]);
 });

@@ -8,6 +8,7 @@ import { createApp } from '../test-support/open-server.js';
 import { request } from '../test-support/http.js';
 const root = path.resolve(import.meta.dirname, '..');
 const sound = process.argv.includes('--sound');
+const reactions = process.argv.includes('--reactions');
 const roles = process.argv.includes('--roles');
 const directory = await mkdtemp(path.join(tmpdir(), 'campfire-member-ui-'));
 const output = '/tmp/campfire-member-review';
@@ -39,6 +40,7 @@ try {
     await new Promise((resolve) => service.http.listen(0, '127.0.0.1', resolve));
     const env = {
         ...process.env,
+        MEMBER_REACTIONS: reactions ? '1' : '0',
         MEMBER_ORIGIN: `http://127.0.0.1:${service.http.address().port}`,
         MEMBER_FIXTURE: JSON.stringify(members),
         MEMBER_PROFILE: path.join(directory, 'profile'),
@@ -52,7 +54,7 @@ try {
                 root,
                 roles
                     ? 'test-support/roles-permissions.cjs'
-                    : sound
+                    : sound || reactions
                       ? 'test-support/notification-sound.cjs'
                       : 'test-support/member-messaging.cjs',
             ),

@@ -1,4 +1,12 @@
-import type { Channel, ChannelNotificationMode, Message, Preferences, State, User } from './types';
+import type {
+    Channel,
+    ChannelNotificationMode,
+    Message,
+    Preferences,
+    ReactionNotification,
+    State,
+    User,
+} from './types';
 import { mentionSegments } from './mentions.ts';
 import { messageParts } from './messageText.ts';
 import { messageTexts } from './messageFormat.ts';
@@ -89,6 +97,30 @@ export function shouldNotify(
     if (mode === 'muted') return false;
     if (mode === 'all') return true;
     return mentions(message, me, users);
+}
+
+export function shouldNotifyReaction(
+    event: ReactionNotification,
+    me: User,
+    prefs: Preferences,
+    server: string,
+    channels: Pick<Channel, 'id' | 'category'>[] = [],
+) {
+    if (event.message.author !== me.id || event.user === me.id || me.status === 'dnd') return false;
+    if (prefs.serverNotifications?.[notificationKey(server, me.id, '*')] === false) return false;
+    const room = event.message.room;
+    if (room.startsWith('dm:')) {
+        const override = explicitNotificationMode(
+            prefs.channelNotifications?.[notificationKey(server, me.id, room)],
+        );
+        if (override === 'muted') return false;
+        return override === 'all' || prefs.dmNotifications !== false;
+    }
+    const channel = channels.find((entry) => entry.id === room);
+    // A reaction to your message is directed at you, including in mentions-only channels.
+    return (
+        effectiveChannelNotificationMode(prefs, server, me.id, room, channel?.category) !== 'muted'
+    );
 }
 
 // Mentions inside code are quoted text, not pings.

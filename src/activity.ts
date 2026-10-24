@@ -1,4 +1,4 @@
-import type { ActivitySnapshot, Message } from './types';
+import type { ActivitySnapshot, Message, NotificationHighlights } from './types';
 import type { ApiClient } from './api';
 
 const empty: ActivitySnapshot = { version: -1, unread: {}, latest: {} };
@@ -16,8 +16,14 @@ export function createActivityClient(api: ApiClient, fail: (error: Error) => voi
         snapshot = value;
         listeners.forEach((listener) => listener());
     };
-    const read = (room: string, through: number, thread: string | null = null, all = false) => {
-        const key = JSON.stringify([room, thread, all]);
+    const read = (
+        room: string,
+        through: number,
+        thread: string | null = null,
+        all = false,
+        reactionsThrough = 0,
+    ) => {
+        const key = JSON.stringify([room, thread, all, reactionsThrough]);
         if (!through || through <= (acknowledged.get(key) ?? 0)) return;
         pending.set(key, Math.max(through, pending.get(key) ?? 0));
         if (running.has(key)) return;
@@ -34,6 +40,7 @@ export function createActivityClient(api: ApiClient, fail: (error: Error) => voi
                         through: position,
                         thread,
                         all,
+                        ...(reactionsThrough ? { reactionsThrough } : {}),
                     });
                     if (current !== generation) return;
                     acknowledged.set(key, position);
@@ -54,28 +61,40 @@ export function createActivityClient(api: ApiClient, fail: (error: Error) => voi
     return {
         receive,
         read,
-        acknowledge: async (message: Pick<Message, 'id' | 'room'>) => {
+        acknowledge: async (message: Pick<Message, 'id' | 'room'>, reactionsThrough = 0) => {
             const current = generation;
             const value = await api<ActivitySnapshot>('/activity/acknowledge', 'POST', {
                 room: message.room,
                 message: message.id,
+                ...(reactionsThrough ? { reactionsThrough } : {}),
             });
             if (current === generation) receive(value);
         },
         acknowledgeVisible: async (room: string, messages: string[], signal?: AbortSignal) => {
-            if (!messages.length) return [];
+            const empty: NotificationHighlights = { messages: [], reactions: [] };
+            if (!messages.length) return empty;
             const current = generation;
-            const value = await api<ActivitySnapshot & { messages: string[] }>(
+            const value = await api<ActivitySnapshot & NotificationHighlights>(
                 '/activity/acknowledge-visible',
                 'POST',
-                { room, messages },
+                {
+                    room,
+                    messages,
+                    ...(snapshot.latestReactions?.[room]
+                        ? { reactionsThrough: snapshot.latestReactions[room] }
+                        : {}),
+                },
                 signal,
             );
-            if (current !== generation) return [];
+            if (current !== generation) return empty;
             receive(value);
-            return value.messages;
+            return { messages: value.messages, reactions: value.reactions ?? [] };
         },
-        dismiss: (room: string, through = snapshot.latest[room]) => read(room, through, null, true),
+        dismiss: (
+            room: string,
+            through = snapshot.latest[room],
+            reactionsThrough = snapshot.latestReactions?.[room] ?? 0,
+        ) => read(room, through, null, true, reactionsThrough),
         getSnapshot: () => snapshot,
         subscribe(listener: () => void) {
             listeners.add(listener);

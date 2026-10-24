@@ -3,7 +3,14 @@ import { VoiceInviteCard } from './VoiceInviteCard';
 import { ReactionChip } from './ReactionChip';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
-import type { State, User, Message, MessageJump } from './types';
+import type {
+    State,
+    User,
+    Message,
+    MessageJump,
+    NotificationHighlights,
+    ReactionHighlight,
+} from './types';
 import type { ApiClient } from './api';
 
 import { Avatar } from './Avatar';
@@ -119,7 +126,7 @@ function ChatMessageList({
     onJumpFailed,
 }: {
     jump?: MessageJump;
-    onJumpShown?: (request: number, visible: string[]) => Promise<string[]>;
+    onJumpShown?: (request: number, visible: string[]) => Promise<NotificationHighlights>;
     onJumpFailed?: (request: number, error: Error) => void;
     messageAvatars?: MessageAvatarMode;
     showRoleColors?: boolean;
@@ -153,7 +160,11 @@ function ChatMessageList({
     const scroll = useRef<HTMLDivElement>(null);
     const initialized = useRef(false);
     const [focusedId, setFocusedId] = useState<string | null>(null);
-    const [ping, setPing] = useState<{ request: number; ids: string[] } | null>(null);
+    const [ping, setPing] = useState<{
+        request: number;
+        ids: string[];
+        reactions: ReactionHighlight[];
+    } | null>(null);
     const completedJump = useRef(0);
     const virtualizer = useVirtualizer({
         count: visibleMessages.length + 1,
@@ -228,7 +239,11 @@ function ChatMessageList({
                     bounds.top < viewport.bottom
                 ) {
                     completedJump.current = jump.request;
-                    setPing({ request: jump.request, ids: [jump.id] });
+                    setPing({
+                        request: jump.request,
+                        ids: [jump.id],
+                        reactions: jump.reactions ?? [],
+                    });
                     const visible = [
                         ...(scroll.current?.querySelectorAll<HTMLElement>(
                             '.virtual-message[data-message-id]',
@@ -245,11 +260,15 @@ function ChatMessageList({
                             );
                         })
                         .map((row) => row.dataset.messageId!);
-                    void onJumpShown?.(jump.request, visible).then((ids) => {
-                        if (!ids.length) return;
+                    void onJumpShown?.(jump.request, visible).then((highlights) => {
+                        if (!highlights.messages.length) return;
                         setPing((current) =>
                             current?.request === jump.request
-                                ? { ...current, ids: [...new Set([...current.ids, ...ids])] }
+                                ? {
+                                      ...current,
+                                      ids: [...new Set([...current.ids, ...highlights.messages])],
+                                      reactions: [...current.reactions, ...highlights.reactions],
+                                  }
                                 : current,
                         );
                     });
@@ -461,6 +480,19 @@ function ChatMessageList({
                                     )}
                                     <ChatMessage
                                         message={m}
+                                        reactionPing={
+                                            ping
+                                                ? {
+                                                      request: ping.request,
+                                                      emojis: ping.reactions
+                                                          .filter(
+                                                              (reaction) =>
+                                                                  reaction.message === m.id,
+                                                          )
+                                                          .map((reaction) => reaction.emoji),
+                                                  }
+                                                : undefined
+                                        }
                                         showTime={showTime}
                                         permission={permission}
                                         state={state}
@@ -533,6 +565,7 @@ export function ChatMessage({
     notify,
     retentionUnit,
     showTime = true,
+    reactionPing,
 }: Pick<
     React.ComponentProps<typeof ChatMessageList>,
     | 'messageAvatars'
@@ -553,7 +586,11 @@ export function ChatMessage({
     | 'thread'
     | 'notify'
     | 'retentionUnit'
-> & { message: Message; showTime?: boolean }) {
+> & {
+    message: Message;
+    showTime?: boolean;
+    reactionPing?: { request: number; emojis: string[] };
+}) {
     const u = m.author ? user(m.author) : undefined;
     const avatars = messageAvatarMode(messageAvatars);
     const now = Date.now();
@@ -686,6 +723,11 @@ export function ChatMessage({
                         <ReactionChip
                             key={emoji}
                             emoji={emoji}
+                            notificationRequest={
+                                reactionPing?.emojis.includes(emoji)
+                                    ? reactionPing.request
+                                    : undefined
+                            }
                             people={m.reactions
                                 .filter((r) => r.emoji === emoji)
                                 .map((r) => ({

@@ -346,6 +346,37 @@ CREATE TABLE IF NOT EXISTS reactions(
     emoji TEXT NOT NULL,
     PRIMARY KEY(message,user,emoji)
 );
+-- New reactions are private activity for the message author. Existing reactions
+-- are not replayed when this table is first installed.
+CREATE TABLE IF NOT EXISTS reaction_notifications(
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    message TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    recipient TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    actor TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    emoji TEXT NOT NULL,
+    after_message_sequence INTEGER NOT NULL,
+    acknowledged INTEGER NOT NULL DEFAULT 0 CHECK(acknowledged IN (0,1)),
+    UNIQUE(message,actor,emoji),
+    FOREIGN KEY(message,actor,emoji) REFERENCES reactions(message,user,emoji) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS reaction_notifications_recipient
+    ON reaction_notifications(recipient,acknowledged,sequence);
+CREATE TRIGGER IF NOT EXISTS record_reaction_notification AFTER INSERT ON reactions BEGIN
+    INSERT INTO reaction_notifications(message,recipient,actor,emoji,after_message_sequence)
+    SELECT NEW.message,m.author,NEW.user,NEW.emoji,
+        COALESCE((SELECT seq FROM sqlite_sequence WHERE name='message_activity'),0)
+    FROM messages m WHERE m.id=NEW.message AND m.author IS NOT NULL AND m.author<>NEW.user;
+END;
+CREATE TRIGGER IF NOT EXISTS reaction_notification_added AFTER INSERT ON reaction_notifications BEGIN
+    UPDATE activity_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS reaction_notification_removed AFTER DELETE ON reaction_notifications BEGIN
+    UPDATE activity_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS reaction_notification_read AFTER UPDATE OF acknowledged ON reaction_notifications
+WHEN OLD.acknowledged<>NEW.acknowledged BEGIN
+    UPDATE activity_version SET version=version+1 WHERE id=1;
+END;
 CREATE TABLE IF NOT EXISTS emojis(
     id TEXT PRIMARY KEY,
     name TEXT UNIQUE NOT NULL,

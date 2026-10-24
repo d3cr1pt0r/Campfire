@@ -24,6 +24,7 @@ export function useUnread(
     return {
         unread: snapshot.unread,
         latest: snapshot.latest,
+        latestReactions: snapshot.latestReactions ?? {},
         acknowledge: client.acknowledge,
         acknowledgeVisible: client.acknowledgeVisible,
         dismissUnread: client.dismiss,
