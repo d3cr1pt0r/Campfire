@@ -2,7 +2,7 @@ import { messageAvatarMode, type MessageAvatarMode } from './messageAppearance';
 import { VoiceInviteCard } from './VoiceInviteCard';
 import { ReactionChip } from './ReactionChip';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
+import { defaultRangeExtractor, observeElementRect, useVirtualizer } from '@tanstack/react-virtual';
 import type {
     State,
     User,
@@ -169,6 +169,37 @@ function ChatMessageList({
     const virtualizer = useVirtualizer({
         count: visibleMessages.length + 1,
         getScrollElement: useCallback(() => scroll.current, []),
+        observeElementRect: useCallback<typeof observeElementRect<HTMLDivElement>>(
+            (instance, onRect) => {
+                let previousHeight = 0;
+                let windowHeight = window.innerHeight;
+                let offset = instance.scrollOffset ?? 0;
+                const element = instance.scrollElement!;
+                const rememberOffset = () => {
+                    // Growing the viewport can clamp scrollTop before the resize
+                    // observer runs. Retain the position from before that clamp.
+                    if (windowHeight === window.innerHeight) offset = element.scrollTop;
+                };
+                element.addEventListener('scroll', rememberOffset, { passive: true });
+                const cleanup = observeElementRect(instance, (rect) => {
+                    const resizedWindow = windowHeight !== window.innerHeight;
+                    const delta = previousHeight - rect.height;
+                    previousHeight = rect.height;
+                    windowHeight = window.innerHeight;
+                    onRect(rect);
+                    if (initialized.current && resizedWindow && delta) {
+                        instance.cancelScroll();
+                        instance.scrollToOffset(offset + delta);
+                    }
+                    offset = element.scrollTop;
+                });
+                return () => {
+                    cleanup?.();
+                    element.removeEventListener('scroll', rememberOffset);
+                };
+            },
+            [],
+        ),
         getItemKey: useCallback(
             (index: number) => (index === 0 ? 'history-header' : visibleMessages[index - 1].id),
             [visibleMessages],
