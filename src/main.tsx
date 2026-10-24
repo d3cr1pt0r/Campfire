@@ -1542,6 +1542,7 @@ function App() {
                             )}
                         </form>
                     )}
+                    <DesktopUpdates />
                 </main>
                 {showError}
             </div>

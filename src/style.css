@@ -2863,6 +2863,9 @@ label textarea {
     min-height: 40px;
     padding: 10px 14px;
 }
+.auth-form > .account-section {
+    margin-top: 24px;
+}
 
 @media (max-width: 1100px) {
     .app-shell {
