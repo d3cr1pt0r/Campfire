@@ -4576,6 +4576,20 @@ body.stream-popout-body {
 .message.message-avatars-hidden .message-actions {
     top: 0;
 }
+@media (hover: hover) {
+    .message-actions {
+        --control-size: 30px;
+        top: -24px;
+        padding: 2px;
+    }
+    .message-actions button {
+        padding: 4px;
+    }
+    .message.message-avatars-compact .message-actions,
+    .message.message-avatars-hidden .message-actions {
+        top: -24px;
+    }
+}
 .thread-panel .thread-original .message.message-avatars-compact {
     padding-block: 3px;
 }
