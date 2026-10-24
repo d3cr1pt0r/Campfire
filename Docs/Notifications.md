@@ -1,6 +1,6 @@
 # Notification settings
 
-Open **Settings → Notifications**. Server mute, channel defaults, category rules, DM defaults, and conversation overrides save to your account on this server and sync across devices. Desktop-alert permission, sounds, volume, and output devices remain local. These choices do not change anyone else's settings or channel access. On first connection, existing local rules are imported only if the account has no saved rules.
+Open **Settings → Notifications**. **Visual alerts** controls desktop popups, **Sounds** controls message and reaction audio, and **What triggers alerts** sets the rules for both. Unread badges and jump highlights remain active when alerts are off. Server mute, channel defaults, category rules, DM defaults, and conversation overrides save to your account on this server and sync across devices. Desktop-alert permission, sounds, volume, and output devices remain local. These choices do not change anyone else's settings or channel access. On first connection, existing local rules are imported only if the account has no saved rules.
 
 ## Missed messages and unread badges
 
@@ -24,11 +24,11 @@ When persistent tracking is first installed, existing message history starts as 
 
 Desktop alerts and message sounds are independent. Desktop alerts require permission and appear when Campfire is hidden or unfocused. They identify the sender/conversation without including message text. A blocked permission is explained beside the control.
 
-The visible, focused conversation stays quiet. Other conversations can still produce sounds while Campfire is focused. Use **Test notification sound** to check playback, or **Audio output & volume** to adjust the device and sound-effects volume.
+The visible, focused conversation stays quiet. Other conversations can still produce sounds while Campfire is focused. Use **Audio output & volume** to adjust the device and sound-effects volume.
 
 ## Server defaults and overrides
 
-Choose **All messages**, **Mentions only**, or **Nothing** as the default for this server's text channels. Mentions means a direct mention of your permanent username. Thread replies follow their parent channel's notification policy. Reactions to your own messages are directed at you and can alert in both All messages and Mentions only; Nothing silences them. DM reaction alerts follow the DM default and conversation override.
+Choose **All messages**, **Mentions & reactions**, or **Nothing** as the default for this server's text channels. Mentions means a direct mention of your permanent username. Thread replies follow their parent channel's notification policy. Reactions to your own messages are directed at you and can alert in both All messages and Mentions & reactions; Nothing silences them. DM reaction alerts follow the DM default and conversation override.
 
 The most specific rule wins:
 
@@ -36,7 +36,7 @@ The most specific rule wins:
 2. An override for the channel's category.
 3. The server default.
 
-Under **Notification overrides**, categories and text channels appear in a collapsible hierarchy, with a notification dropdown beside each row. Reordering and category channel counts are omitted here. The inheritance option shows the current parent default; select it to remove an override and return to inheritance. Category notification rules apply to every text channel in that category, including channels with custom access permissions.
+Under **Channel and category rules**, categories and text channels appear in a collapsible hierarchy, with a notification dropdown beside each row. Reordering and category channel counts are omitted here. The inheritance option shows the current parent default; select it to remove an override and return to inheritance. Category notification rules apply to every text channel in that category, including channels with custom access permissions.
 
 Existing channel choices are retained. Until you choose a new server default, the previous direct-mention preference supplies its default.
 

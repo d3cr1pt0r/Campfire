@@ -84,9 +84,7 @@ export function SettingsPanel({
     call,
     uploadEmoji,
     permission,
-    testNotificationSound,
 }: {
-    testNotificationSound: () => Promise<void>;
     state: State;
     prefs: Preferences;
     setPrefs: Dispatch<SetStateAction<Preferences>>;
@@ -724,7 +722,6 @@ export function SettingsPanel({
                         url={url}
                         busy={busy}
                         act={act}
-                        testSound={testNotificationSound}
                         openSettings={setSettingsTab}
                         api={api}
                         refresh={refresh}

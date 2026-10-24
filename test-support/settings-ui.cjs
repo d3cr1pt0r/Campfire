@@ -205,7 +205,7 @@ app.whenReady()
             await select(a, '#settings-section', 'notifications');
             await js(
                 a,
-                `document.querySelector('button[aria-label="Notify for direct messages"]').click()`,
+                `document.querySelector('button[aria-label="Alert for direct messages"]').click()`,
             );
             await select(a, '#settings-section', 'appearance');
             await select(a, 'select[aria-label="Message avatars"]', 'compact');
@@ -213,7 +213,7 @@ app.whenReady()
             assert.equal(
                 await js(
                     a,
-                    `document.querySelector('button[aria-label="Notify for direct messages"]').getAttribute("aria-checked")`,
+                    `document.querySelector('button[aria-label="Alert for direct messages"]').getAttribute("aria-checked")`,
                 ),
                 'false',
             );

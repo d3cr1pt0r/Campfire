@@ -2389,13 +2389,6 @@ function App() {
                                 <SettingsPanel
                                     state={state}
                                     prefs={prefs}
-                                    testNotificationSound={async () => {
-                                        const played = await messageSoundRef.current?.play();
-                                        if (!played)
-                                            throw new Error(
-                                                'Notification audio could not play. Check your output device and try again.',
-                                            );
-                                    }}
                                     setPrefs={setPrefs}
                                     channelSettingsTarget={channelSettingsTarget}
                                     settingsTab={settingsTab}

@@ -367,20 +367,9 @@ app.whenReady()
         await js(
             'document.dispatchEvent(new KeyboardEvent("keydown", { key: ",", ctrlKey: true, bubbles: true }))',
         );
-        await wait('!!document.querySelector(".settings-nav")', 'settings opens for playback test');
+        await wait('!!document.querySelector(".settings-nav")', 'notification settings open');
         await js(
             '[...document.querySelectorAll(".settings-nav button")].find(button => button.textContent.includes("Notifications")).click()',
-        );
-        await wait(
-            '[...document.querySelectorAll("button")].some(button => button.textContent === "Test notification sound")',
-            'notification settings offer a sound test',
-        );
-        await js(
-            '[...document.querySelectorAll("button")].find(button => button.textContent === "Test notification sound").click()',
-        );
-        await wait(
-            'window.__notificationAudio.tones > window.__expectedToneCheckpoint',
-            'test sound button uses the live notification player',
         );
         const openNotifications = async () => {
             await js(
@@ -403,7 +392,7 @@ app.whenReady()
         };
         await wait(
             `document.querySelector('input[name="server-notification-mode"][value="mentions"]').checked`,
-            'server defaults to Mentions only',
+            'server defaults to Mentions & reactions',
         );
         await setMode('all', true);
         await fs.writeFile(
@@ -440,7 +429,7 @@ app.whenReady()
         await send('@Alice mention in mentions mode', 'general');
         await wait(
             'window.__notificationAudio.tones > window.__expectedToneCheckpoint',
-            'Mentions only plays a sound for a direct mention',
+            'Mentions & reactions plays a sound for a direct mention',
         );
         await setMode('muted');
         await pause(800);

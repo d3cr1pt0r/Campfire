@@ -180,7 +180,7 @@ app.whenReady()
         );
         await click(
             a,
-            'document.querySelector(\'button[aria-label="Notify for direct messages"]\')',
+            'document.querySelector(\'button[aria-label="Alert for direct messages"]\')',
         );
         await js(a, 'document.querySelector(".dm-notification-settings").open=true');
         await input(a, '.dm-notification-settings input[type=search]', 'Bob');
@@ -193,21 +193,21 @@ app.whenReady()
             a,
             'window.Notification=class {static permission="denied";static async requestPermission(){return this.permission}};true',
         );
-        await click(a, 'document.querySelector(\'button[aria-label="Desktop notifications"]\')');
+        await click(a, 'document.querySelector(\'button[aria-label="Show desktop popups"]\')');
         await wait(
             a,
-            'document.querySelector(".notification-settings").textContent.includes("Desktop alerts are blocked")',
+            'document.querySelector(".notification-settings").textContent.includes("Desktop popups are blocked")',
             'blocked desktop permission is explained',
         );
         assert.equal((await saved()).notifications, false);
         await js(a, 'window.Notification.permission="granted"');
-        await click(a, 'document.querySelector(\'button[aria-label="Desktop notifications"]\')');
+        await click(a, 'document.querySelector(\'button[aria-label="Show desktop popups"]\')');
         await wait(
             a,
-            'document.querySelector(\'button[aria-label="Desktop notifications"]\').getAttribute("aria-checked")==="true"',
+            'document.querySelector(\'button[aria-label="Show desktop popups"]\').getAttribute("aria-checked")==="true"',
             'desktop delivery can be enabled',
         );
-        await click(a, 'document.querySelector(\'button[aria-label="Desktop notifications"]\')');
+        await click(a, 'document.querySelector(\'button[aria-label="Show desktop popups"]\')');
         await click(a, 'document.querySelector(\'button[aria-label="Mute Notification review"]\')');
         await a.reload();
         await wait(a, '!!document.querySelector(".server-heading")', 'client reloads');
@@ -238,9 +238,10 @@ app.whenReady()
             await select(a, '#settings-section', 'notifications');
             await js(a, 'document.querySelector(".dm-notification-settings").open=true');
             for (const label of [
-                'Notification delivery',
+                'Visual alerts',
+                'Sounds',
                 'Server notification defaults',
-                'Notification overrides',
+                'Channel and category rules',
                 'Direct message notifications',
             ]) {
                 await js(
