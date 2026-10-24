@@ -4,7 +4,6 @@ import { RolesSettings } from './RolesSettings';
 import { MemberManagement } from './MemberManagement';
 import { RegistrationSettings } from './RegistrationSettings';
 import { NotificationSettings } from './NotificationSettings';
-import { formatUploadLimit, uploadLimitCeiling } from '../shared/uploads.js';
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { formatFingerprint, serverLink } from './serverLink';
 import { pinsFor } from './serverTrust';
@@ -749,8 +748,6 @@ export function SettingsPanel({
                                     void act(async () => {
                                         await api('/settings', 'PATCH', {
                                             name: f.get('name'),
-                                            maxUploadBytes:
-                                                Number(f.get('maxUploadMegabytes')) * 1024 * 1024,
                                         });
                                         notify('Server settings saved.');
                                     });
@@ -765,25 +762,6 @@ export function SettingsPanel({
                                         maxLength={64}
                                         disabled={!permission('server.edit')}
                                     />
-                                </label>
-                                <label>
-                                    Maximum upload size (MB)
-                                    <input
-                                        key={state.maxUploadBytes}
-                                        name="maxUploadMegabytes"
-                                        type="number"
-                                        min={1}
-                                        max={uploadLimitCeiling / (1024 * 1024)}
-                                        step={1}
-                                        required
-                                        defaultValue={state.maxUploadBytes / (1024 * 1024)}
-                                        disabled={!permission('server.edit')}
-                                    />
-                                    <small className="field-help">
-                                        Combined size of the files in one message, up to{' '}
-                                        {formatUploadLimit(uploadLimitCeiling)}. Larger uploads use
-                                        more server memory and storage.
-                                    </small>
                                 </label>
                                 <button
                                     className="primary"

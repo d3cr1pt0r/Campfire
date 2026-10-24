@@ -5,6 +5,8 @@ import { KeepTextField, RetentionField } from './RetentionSettings';
 import { conversationSchedule, periodLabel } from './retention';
 import {
     formatBytes,
+    formatUploadLimit,
+    uploadLimitCeiling,
     formatStorageQuota,
     gigabyte,
     storageQuotaCeiling,
@@ -106,6 +108,42 @@ export function StorageSettings({
             </section>
             <section className="account-section storage-settings" aria-label="Attachment storage">
                 <h3>Attachment storage</h3>
+                <form
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        const megabytes = Number(
+                            new FormData(event.currentTarget).get('maxUploadMegabytes'),
+                        );
+                        void act(async () => {
+                            await api('/settings', 'PATCH', {
+                                maxUploadBytes: megabytes * 1024 * 1024,
+                            });
+                            notify('Maximum upload size saved.');
+                        });
+                    }}
+                >
+                    <label>
+                        Maximum upload size (MB)
+                        <input
+                            key={state.maxUploadBytes}
+                            name="maxUploadMegabytes"
+                            type="number"
+                            min={1}
+                            max={uploadLimitCeiling / (1024 * 1024)}
+                            step={1}
+                            required
+                            defaultValue={state.maxUploadBytes / (1024 * 1024)}
+                        />
+                        <small className="field-help">
+                            Combined size of the files in one message, up to{' '}
+                            {formatUploadLimit(uploadLimitCeiling)}. Larger uploads use more server
+                            memory and storage.
+                        </small>
+                    </label>
+                    <button className="primary" disabled={busy}>
+                        Save upload limit
+                    </button>
+                </form>
                 {!overview && <p className="muted">Loading storage use…</p>}
                 {overview && quota !== undefined && (
                     <form
