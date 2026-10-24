@@ -5,6 +5,7 @@ import { Avatar } from './Avatar';
 import { PresenceDot } from './PresenceDot';
 import { displayName } from './profiles';
 import { userStatus, type DisplayStatus } from './presence';
+import { roleText } from './theme';
 import type { State, User } from './types';
 
 // Shared identity for compact member rows; the caller owns its button, summary,
@@ -56,7 +57,7 @@ export function MemberIdentity({
                 {presence && <PresenceDot status={presence} />}
             </span>
             <span className={'member-identity-text ' + textClassName}>
-                <strong className={nameClassName} style={{ color: tint }}>
+                <strong className={nameClassName} style={roleText(tint)}>
                     {displayName(user)}
                     {self && <small className="member-self"> (you)</small>}
                 </strong>

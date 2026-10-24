@@ -4,6 +4,7 @@ import { Avatar } from './Avatar';
 import { displayName } from './profiles';
 import { messageAvatarMode } from './messageAppearance';
 import { Toggle } from './forms';
+import { roleText } from './theme';
 
 export function MessageAppearanceSettings({
     prefs,
@@ -59,10 +60,9 @@ export function MessageAppearanceSettings({
                                 <div className="message-line">
                                     <span className="message-meta">
                                         <strong
-                                            style={{
-                                                color:
-                                                    prefs.showRoleColors === false ? '#fff' : color,
-                                            }}
+                                            style={roleText(
+                                                prefs.showRoleColors === false ? undefined : color,
+                                            )}
                                         >
                                             {displayName(user)}
                                         </strong>

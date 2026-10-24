@@ -12,6 +12,7 @@ const {
     powerMonitor,
     clipboard,
     webContents,
+    nativeTheme,
 } = require('electron');
 const path = require('node:path');
 const { installUpdates } = require('./updates.cjs');
@@ -226,6 +227,7 @@ else {
                 try {
                     event.returnValue =
                         trusted(event.senderFrame?.url) && clientState.set(key, value);
+                    if (event.returnValue && key === 'preferences') applyWindowTheme();
                 } catch {
                     event.returnValue = false;
                 }
@@ -311,6 +313,20 @@ else {
                     return true;
                 }
             };
+            // The native title bar and the colour shown before the page paints follow the saved
+            // theme: Graphite unless the user picked Light or System.
+            const applyWindowTheme = () => {
+                let theme;
+                try {
+                    theme = JSON.parse(clientState.get('preferences') || '{}')?.theme;
+                } catch {
+                    theme = undefined;
+                }
+                nativeTheme.themeSource = theme === 'light' || theme === 'system' ? theme : 'dark';
+                const background = nativeTheme.shouldUseDarkColors ? '#19191b' : '#ffffff';
+                for (const win of BrowserWindow.getAllWindows()) win.setBackgroundColor(background);
+                return background;
+            };
             const showWindow = () => {
                 const win = BrowserWindow.getAllWindows()[0];
                 if (win) {
@@ -351,7 +367,7 @@ else {
                         'icons',
                         process.platform === 'win32' ? 'campfire.ico' : 'campfire.png',
                     ),
-                    backgroundColor: '#211b18',
+                    backgroundColor: applyWindowTheme(),
                     webPreferences: {
                         preload: path.join(__dirname, 'preload.cjs'),
                         contextIsolation: true,

@@ -20,6 +20,7 @@ import { Emoji } from './ChatContent';
 import { displayName } from './profiles';
 import { AudioVideoSettings } from './AudioVideoSettings';
 import { Toggle } from './forms';
+import { themePreference } from './theme';
 import type { AvatarFrame } from '../shared/frames.js';
 // None leads the static frames so "no frame" stays the first choice.
 const frameGroups: [string, [AvatarFrame | null, string][]][] = [
@@ -223,9 +224,9 @@ export function SettingsPanel({
                                 <legend className="sr-only">Color theme</legend>
                                 {(
                                     [
+                                        ['dark', 'Dark', 'Graphite · neutral greys'],
+                                        ['light', 'Light', 'Paper · clean white'],
                                         ['system', 'System', 'Follow your device'],
-                                        ['dark', 'Dark', 'Ember · charcoal & amber'],
-                                        ['light', 'Light', 'Canvas · warm cream'],
                                     ] as const
                                 ).map(([value, title, description]) => (
                                     <label className="theme-choice" key={value}>
@@ -248,7 +249,7 @@ export function SettingsPanel({
                                             type="radio"
                                             name="theme"
                                             value={value}
-                                            checked={(prefs.theme ?? 'system') === value}
+                                            checked={themePreference(prefs.theme) === value}
                                             onChange={() =>
                                                 setPrefs((previous) => ({
                                                     ...previous,

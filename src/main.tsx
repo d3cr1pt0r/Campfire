@@ -123,7 +123,7 @@ const defaultServerUrl =
           ? 'http://localhost:3001'
           : window.location.origin);
 const defaultPrefs: Preferences = {
-    theme: 'system',
+    theme: 'dark',
     messageAvatars: 'compact',
     showRoleColors: true,
     autoIdle: false,

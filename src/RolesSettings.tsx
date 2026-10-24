@@ -11,6 +11,7 @@ import type { State, User } from './types';
 import type { ApiClient } from './api';
 import { displayName } from './profiles';
 import { MemberIdentity } from './MemberIdentity';
+import { roleText } from './theme';
 
 type Props = {
     state: State;
@@ -295,7 +296,7 @@ function MemberRoles({ state, api, busy, refresh, act, user }: Props & { user: U
                                             )
                                         }
                                     />
-                                    <span style={{ color: role.color || undefined }}>
+                                    <span style={roleText(role.color || undefined)}>
                                         {role.name}
                                     </span>
                                 </label>

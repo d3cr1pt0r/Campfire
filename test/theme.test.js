@@ -18,39 +18,38 @@ function environment(dark) {
         },
     };
 }
-test('clients without a saved theme follow the OS, including live changes and cleanup', () => {
+test('clients without a saved theme use Graphite and ignore OS changes', () => {
     const env = environment(false);
     const stop = watchTheme(undefined, env.root, env.query);
-    assert.equal(env.root.dataset.theme, 'canvas');
+    assert.equal(env.root.dataset.theme, 'graphite');
     env.change(true);
-    assert.equal(env.root.dataset.theme, 'ember');
     env.change(false);
-    assert.equal(env.root.dataset.theme, 'canvas');
+    assert.equal(env.root.dataset.theme, 'graphite');
     stop();
-    env.change(true);
-    assert.equal(env.root.dataset.theme, 'canvas');
 });
-test('explicit dark and light choices ignore OS changes; returning to System resumes them', () => {
+test('explicit dark and light choices ignore OS changes; System follows them live', () => {
     const env = environment(false);
     let stop = watchTheme('dark', env.root, env.query);
-    assert.equal(env.root.dataset.theme, 'ember');
+    assert.equal(env.root.dataset.theme, 'graphite');
     env.change(true);
     env.change(false);
-    assert.equal(env.root.dataset.theme, 'ember');
+    assert.equal(env.root.dataset.theme, 'graphite');
     stop();
     stop = watchTheme('light', env.root, env.query);
     env.change(true);
-    assert.equal(env.root.dataset.theme, 'canvas');
+    assert.equal(env.root.dataset.theme, 'paper');
     stop();
     stop = watchTheme('system', env.root, env.query);
-    assert.equal(env.root.dataset.theme, 'ember');
+    assert.equal(env.root.dataset.theme, 'graphite');
     env.change(false);
-    assert.equal(env.root.dataset.theme, 'canvas');
+    assert.equal(env.root.dataset.theme, 'paper');
     stop();
+    env.change(true);
+    assert.equal(env.root.dataset.theme, 'paper');
 });
-test('unsupported or corrupt stored theme values fall back to System', () => {
+test('unsupported or corrupt stored theme values fall back to Dark', () => {
     for (const value of [undefined, null, 'forest', 'canvas', '', {}, 1])
-        assert.equal(themePreference(value), 'system');
-    assert.equal(themePreference('dark'), 'dark');
+        assert.equal(themePreference(value), 'dark');
+    assert.equal(themePreference('system'), 'system');
     assert.equal(themePreference('light'), 'light');
 });

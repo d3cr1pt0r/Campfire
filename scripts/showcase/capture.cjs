@@ -6,6 +6,7 @@ const { version } = require('../../package.json');
 
 app.setPath('userData', process.env.SHOWCASE_PROFILE);
 app.commandLine.appendSwitch('disable-gpu');
+app.commandLine.appendSwitch('mute-audio');
 app.commandLine.appendSwitch('force-device-scale-factor', '1');
 app.commandLine.appendSwitch('lang', 'en-US');
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -26,7 +27,7 @@ app.whenReady()
             height: scenario.height,
             useContentSize: true,
             show: true,
-            backgroundColor: '#1d1f1e',
+            backgroundColor: '#19191b',
             webPreferences: { backgroundThrottling: false },
         });
         const failures = [];
@@ -123,7 +124,7 @@ app.whenReady()
         window.webContents.sendInputEvent({ type: 'mouseMove', x: 1, y: 1 });
 
         await check(
-            `document.documentElement.dataset.theme === 'ember' && innerWidth === ${scenario.width} && innerHeight === ${scenario.height} && devicePixelRatio === 1`,
+            `document.documentElement.dataset.theme === 'graphite' && innerWidth === ${scenario.width} && innerHeight === ${scenario.height} && devicePixelRatio === 1`,
             'fixed dark theme, viewport, and device scale',
         );
         await check(

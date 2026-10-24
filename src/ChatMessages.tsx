@@ -8,6 +8,7 @@ import type { ApiClient } from './api';
 
 import { Avatar } from './Avatar';
 import { displayName } from './profiles';
+import { roleText } from './theme';
 import type { useConversation } from './useConversation';
 import {
     MessageCircle,
@@ -579,7 +580,7 @@ export function ChatMessage({
                     <span className="message-meta">
                         <button
                             title={`@${u?.username || 'unknown'}`}
-                            style={{ color: showRoleColors === false ? '#fff' : color(u) }}
+                            style={roleText(showRoleColors === false ? undefined : color(u))}
                             onClick={() => {
                                 if (u && u.id !== state.me.id) dm(u.id);
                             }}
