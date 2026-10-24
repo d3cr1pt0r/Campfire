@@ -574,6 +574,18 @@ export function ChatMessage({
     };
     return (
         <article className={`message message-avatars-${avatars}`}>
+            <time
+                className="message-time"
+                dateTime={new Date(m.created).toISOString()}
+                title={retention?.title}
+            >
+                {retention?.ending && (
+                    <Hourglass className="retention-ending" size={10} aria-hidden />
+                )}
+                <span className={showTime ? undefined : 'message-time-repeat'}>
+                    {messageTime(m.created)}
+                </span>
+            </time>
             {avatars !== 'hidden' && <Avatar user={u} color={color(u)} />}
             <div className="message-body">
                 <div className="message-line">
@@ -599,18 +611,6 @@ export function ChatMessage({
                             {Boolean(m.edited) && <small className="edited"> (edited)</small>}
                         </div>
                     )}
-                    <time
-                        className="message-time"
-                        dateTime={new Date(m.created).toISOString()}
-                        title={retention?.title}
-                    >
-                        {retention?.ending && (
-                            <Hourglass className="retention-ending" size={10} aria-hidden />
-                        )}
-                        <span className={showTime ? undefined : 'message-time-repeat'}>
-                            {messageTime(m.created)}
-                        </span>
-                    </time>
                 </div>
                 {!!m.previews?.length && (
                     <LinkPreviews

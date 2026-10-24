@@ -859,14 +859,20 @@ small {
     gap: 10px;
     position: relative;
     min-height: 40px;
+    --message-time-width: 42px;
+    /* Everything before the text: time, avatar and their gaps. Touch layouts wrap below it. */
+    --message-lead: calc(var(--message-time-width) + 10px + 28px + 10px);
 }
 .message:hover {
     background: var(--msg-hover);
 }
-/* Trails the message text. A minute matching the row above shows only on hover,
-   keeping its space so the row doesn't reflow. */
+/* Leads the row in a fixed column, wide enough for the expiry hourglass, so avatars and names
+   line up. A minute matching the row above shows only on hover, keeping its space. */
 .message-time {
-    margin-left: 8px;
+    flex: none;
+    width: var(--message-time-width);
+    align-self: baseline;
+    text-align: right;
     font-size: 10px;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
@@ -882,6 +888,8 @@ small {
     font-size: 11px;
 }
 .message-body {
+    /* Shares a baseline with the time, which sits in front of the avatar. */
+    align-self: baseline;
     flex: 1;
     min-width: 0;
 }
@@ -3007,15 +3015,15 @@ label textarea {
         opacity: 1;
         pointer-events: auto;
         align-self: flex-end;
-        margin-left: 38px;
+        margin-left: var(--message-lead);
         width: max-content;
-        max-width: calc(100% - 38px);
+        max-width: calc(100% - var(--message-lead));
     }
     .message {
         flex-wrap: wrap;
     }
     .message-body {
-        flex-basis: calc(100% - 38px);
+        flex-basis: calc(100% - var(--message-lead));
     }
     .nav-item,
     .settings-nav button,
@@ -4555,6 +4563,7 @@ body.stream-popout-body {
     min-height: 28px;
     padding-block: 3px;
     gap: 8px;
+    --message-lead: calc(var(--message-time-width) + 8px + 20px + 8px);
 }
 .message.message-avatars-compact > .avatar {
     width: 20px;
@@ -4567,6 +4576,7 @@ body.stream-popout-body {
     min-height: 24px;
     padding-block: 1px;
     gap: 8px;
+    --message-lead: calc(var(--message-time-width) + 8px);
 }
 .message.message-avatars-compact .message-line,
 .message.message-avatars-hidden .message-line {
@@ -4824,22 +4834,6 @@ body.stream-popout-body {
     .account-nickname-form,
     .account-security form {
         grid-template-columns: minmax(0, 1fr);
-    }
-}
-@media (hover: none) {
-    .message.message-avatars-compact .message-body {
-        flex-basis: calc(100% - 28px);
-    }
-    .message.message-avatars-hidden .message-body {
-        flex-basis: 100%;
-    }
-    .message.message-avatars-compact .message-actions {
-        margin-left: 28px;
-        max-width: calc(100% - 28px);
-    }
-    .message.message-avatars-hidden .message-actions {
-        margin-left: 0;
-        max-width: 100%;
     }
 }
 
