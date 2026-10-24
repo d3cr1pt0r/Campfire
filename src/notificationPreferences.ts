@@ -29,6 +29,7 @@ export function notificationPreferences(
     return {
         muted: prefs.serverNotifications?.[notificationKey(server, user, '*')] === false,
         directMessages: prefs.dmNotifications !== false,
+        reactions: prefs.reactionNotifications?.[notificationKey(server, user, '*')] !== false,
         defaultMode: serverNotificationMode(prefs, server, user),
         channels: scopes(prefs.channelNotifications),
         categories: scopes(prefs.categoryNotifications),
@@ -63,6 +64,10 @@ export function withNotificationPreferences(
     return {
         ...prefs,
         dmNotifications: value.directMessages,
+        reactionNotifications: {
+            ...prefs.reactionNotifications,
+            [notificationKey(server, user, '*')]: value.reactions !== false,
+        },
         serverNotifications: {
             ...prefs.serverNotifications,
             [notificationKey(server, user, '*')]: !value.muted,

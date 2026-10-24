@@ -112,6 +112,19 @@ app.whenReady()
         };
         const key = (scope) => JSON.stringify([new URL(origin).host, alice.user.id, scope]);
         await open();
+        await click(
+            a,
+            'document.querySelector(\'button[aria-label="Enable reaction notifications"]\')',
+        );
+        await wait(
+            a,
+            'document.querySelector(\'button[aria-label="Enable reaction notifications"]\').getAttribute("aria-checked")==="false"',
+            'reaction alerts can be disabled separately',
+        );
+        const reactionRules = await api(alice, '/notification-preferences');
+        assert.equal(reactionRules.reactions, false);
+        assert.equal((await saved()).reactionNotifications[key('*')], false);
+        assert.equal((await saved()).messageSounds, false);
         const originalOrder = await api(alice, '/state');
         assert.equal(
             await js(
@@ -220,6 +233,7 @@ app.whenReady()
             true,
         );
         assert.equal((await saved()).serverNotifications[key('*')], false);
+        assert.equal((await saved()).reactionNotifications[key('*')], false);
         assert.equal((await saved()).categoryNotifications[key(category.id)], 'muted');
         assert.equal((await saved()).channelNotifications[key(dm)], 'all');
         await click(a, 'document.querySelector(\'button[aria-label="Mute Notification review"]\')');
@@ -238,11 +252,12 @@ app.whenReady()
             await select(a, '#settings-section', 'notifications');
             await js(a, 'document.querySelector(".dm-notification-settings").open=true');
             for (const label of [
-                'Visual alerts',
+                'Desktop notifications',
                 'Sounds',
-                'Server notification defaults',
-                'Channel and category rules',
-                'Direct message notifications',
+                'Server notifications',
+                'Channel overrides',
+                'Direct messages',
+                'Reactions to your messages',
             ]) {
                 await js(
                     a,
@@ -267,6 +282,12 @@ app.whenReady()
         a.setSize(1440, 1000);
         await select(a, '#settings-section', 'appearance');
         await js(a, 'document.querySelector(\'input[name=theme][value="dark"]\').click()');
+        if (process.env.NOTIFICATIONS_ONLY === '1') {
+            assert.deepEqual(failures, []);
+            a.destroy();
+            app.exit(0);
+            return;
+        }
         const identityMetrics = (selector) =>
             js(
                 a,

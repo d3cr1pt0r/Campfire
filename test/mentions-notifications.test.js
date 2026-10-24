@@ -367,6 +367,37 @@ test('reaction alerts are only for another person reacting to your messages and 
     const notify = (event = reaction, prefs = {}, person = me, channels = []) =>
         shouldNotifyReaction(event, person, prefs, server, channels);
     assert.equal(notify(), true, 'own-message reactions alert in mentions-only channels');
+    assert.equal(
+        notify(reaction, {
+            reactionNotifications: { [notificationKey(server, me.id, '*')]: false },
+        }),
+        false,
+    );
+    assert.equal(
+        notify(reaction, {
+            reactionNotifications: {
+                [notificationKey('https://other.example', me.id, '*')]: false,
+            },
+        }),
+        true,
+    );
+    assert.equal(
+        notify(reaction, {
+            reactionNotifications: { [notificationKey(server, bob.id, '*')]: false },
+        }),
+        true,
+    );
+    assert.equal(
+        shouldNotify(
+            message('@d3cr1pt0r'),
+            me,
+            { reactionNotifications: { [notificationKey(server, me.id, '*')]: false } },
+            server,
+            users,
+        ),
+        true,
+        'reaction opt-out does not silence mentions',
+    );
     assert.equal(notify({ ...reaction, user: me.id }), false, 'self reactions stay silent');
     assert.equal(notify({ ...reaction, message: message('') }), false, 'other authors stay silent');
     assert.equal(notify(reaction, {}, { ...me, status: 'dnd' }), false);

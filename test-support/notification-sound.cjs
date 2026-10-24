@@ -392,7 +392,7 @@ app.whenReady()
         };
         await wait(
             `document.querySelector('input[name="server-notification-mode"][value="mentions"]').checked`,
-            'server defaults to Mentions & reactions',
+            'server defaults to Only mentions',
         );
         await setMode('all', true);
         await fs.writeFile(
@@ -429,7 +429,7 @@ app.whenReady()
         await send('@Alice mention in mentions mode', 'general');
         await wait(
             'window.__notificationAudio.tones > window.__expectedToneCheckpoint',
-            'Mentions & reactions plays a sound for a direct mention',
+            'Only mentions plays a sound for a direct mention',
         );
         await setMode('muted');
         await pause(800);

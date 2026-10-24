@@ -41,7 +41,7 @@ export function ChannelNotificationSelect({
             >
                 {inheritLabel && <option value="inherit">{inheritLabel}</option>}
                 <option value="all">All messages</option>
-                {!directMessage && <option value="mentions">Mentions &amp; reactions</option>}
+                {!directMessage && <option value="mentions">Only mentions</option>}
                 <option value="muted">Nothing</option>
             </select>
         </label>

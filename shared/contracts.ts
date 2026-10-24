@@ -76,6 +76,7 @@ export type ActivitySnapshot = {
 export type NotificationPreferences = {
     muted: boolean;
     directMessages: boolean;
+    reactions?: boolean;
     defaultMode: ChannelNotificationMode;
     channels: Record<string, ChannelNotificationMode>;
     categories: Record<string, ChannelNotificationMode>;
@@ -196,6 +197,7 @@ export type Preferences = {
     notifications: boolean;
     messageSounds?: boolean;
     dmNotifications?: boolean;
+    reactionNotifications?: Record<string, boolean>;
     mentionNotifications?: boolean;
     channelNotifications?: Record<string, ChannelNotificationMode>;
     serverNotifications?: Record<string, boolean>;

@@ -1,6 +1,8 @@
 # Notification settings
 
-Open **Settings → Notifications**. **Visual alerts** controls desktop popups, **Sounds** controls message and reaction audio, and **What triggers alerts** sets the rules for both. Unread badges and jump highlights remain active when alerts are off. Server mute, channel defaults, category rules, DM defaults, and conversation overrides save to your account on this server and sync across devices. Desktop-alert permission, sounds, volume, and output devices remain local. These choices do not change anyone else's settings or channel access. On first connection, existing local rules are imported only if the account has no saved rules.
+Open **Settings → Notifications**. **Desktop notifications** controls popups, and **Sounds** controls message and reaction audio. **Server notifications**, **Channel overrides**, and **Direct messages** choose which activity alerts you. **Reactions to your messages** has its own alert switch. These rules apply to both popups and sounds; unread badges and jump highlights stay on.
+
+Server mute, message levels, DM rules, and the reaction switch sync across devices for your account on this server. Desktop permission, sounds, volume, and output devices remain local. Existing accounts keep reaction alerts enabled until they turn them off.
 
 ## Missed messages and unread badges
 
@@ -28,7 +30,7 @@ The visible, focused conversation stays quiet. Other conversations can still pro
 
 ## Server defaults and overrides
 
-Choose **All messages**, **Mentions & reactions**, or **Nothing** as the default for this server's text channels. Mentions means a direct mention of your permanent username. Thread replies follow their parent channel's notification policy. Reactions to your own messages are directed at you and can alert in both All messages and Mentions & reactions; Nothing silences them. DM reaction alerts follow the DM default and conversation override.
+Choose **All messages**, **Only mentions**, or **Nothing** as the default for this server's text channels. Mentions means a direct mention of your permanent username. Thread replies follow their parent channel's notification policy. Reactions to your own messages are directed at you and can alert in both All messages and Only mentions; Nothing silences them. DM reaction alerts follow the DM default and conversation override. The separate reaction switch can silence reaction alerts without changing message alerts or unread badges.
 
 The most specific rule wins:
 
@@ -36,7 +38,7 @@ The most specific rule wins:
 2. An override for the channel's category.
 3. The server default.
 
-Under **Channel and category rules**, categories and text channels appear in a collapsible hierarchy, with a notification dropdown beside each row. Reordering and category channel counts are omitted here. The inheritance option shows the current parent default; select it to remove an override and return to inheritance. Category notification rules apply to every text channel in that category, including channels with custom access permissions.
+Under **Channel overrides**, categories and text channels appear in a collapsible hierarchy, with a notification dropdown beside each row. Reordering and category channel counts are omitted here. The inheritance option shows the current parent default; select it to remove an override and return to inheritance. Category notification rules apply to every text channel in that category, including channels with custom access permissions.
 
 Existing channel choices are retained. Until you choose a new server default, the previous direct-mention preference supplies its default.
 

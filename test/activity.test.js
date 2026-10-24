@@ -404,6 +404,7 @@ test('notification rules persist per account and first-client import cannot over
     const settings = {
         muted: true,
         directMessages: false,
+        reactions: false,
         defaultMode: 'all',
         channels: { general: 'muted' },
         categories: { community: 'mentions' },
@@ -432,6 +433,13 @@ test('notification rules persist per account and first-client import cannot over
         '/notification-preferences',
         'PUT',
         { ...settings, channels: { general: 'invalid' } },
+        400,
+    );
+    await f.api(
+        f.member,
+        '/notification-preferences',
+        'PUT',
+        { ...defaults, reactions: 'no' },
         400,
     );
     await f.api(f.member, '/notification-preferences', 'PUT', defaults);

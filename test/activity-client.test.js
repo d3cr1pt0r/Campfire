@@ -132,6 +132,7 @@ test('synced notification rules replace only this account and server while devic
         notifications: false,
         messageSounds: false,
         output: 'device-speaker',
+        reactionNotifications: { [notificationKey(server, 'other', '*')]: false },
         dmNotifications: true,
         channelNotifications: { [key('general')]: 'all', [other]: 'muted' },
         categoryNotifications: { [key('old-category')]: 'muted' },
@@ -139,6 +140,7 @@ test('synced notification rules replace only this account and server while devic
     const settings = {
         muted: true,
         directMessages: false,
+        reactions: false,
         defaultMode: 'mentions',
         channels: { introductions: 'all' },
         categories: {},
@@ -148,6 +150,12 @@ test('synced notification rules replace only this account and server while devic
     assert.equal(merged.channelNotifications[other], 'muted');
     assert.equal(merged.channelNotifications[key('general')], undefined);
     assert.equal(merged.categoryNotifications[key('old-category')], undefined);
+    assert.equal(merged.reactionNotifications[key('*')], false);
+    assert.equal(merged.reactionNotifications[notificationKey(server, 'other', '*')], false);
+    const legacy = { ...settings };
+    delete legacy.reactions;
+    const restoredLegacy = withNotificationPreferences(merged, legacy, server, user);
+    assert.equal(notificationPreferences(restoredLegacy, server, user).reactions, true);
     assert.equal(merged.notifications, false);
     assert.equal(merged.messageSounds, false);
     assert.equal(merged.output, 'device-speaker');

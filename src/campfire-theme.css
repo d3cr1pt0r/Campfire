@@ -4264,15 +4264,6 @@ label,
     line-height: 1.65;
 }
 /* Alert delivery and the shared rules for popups and sounds. */
-.notification-rule-group {
-    min-width: 0;
-    margin-top: 20px;
-    padding-top: 16px;
-    border-top: 1px solid var(--line);
-}
-.settings-content .notification-rule-group h4 {
-    margin-top: 0;
-}
 .notification-sound-row {
     display: flex;
     align-items: center;

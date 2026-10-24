@@ -107,6 +107,7 @@ export function shouldNotifyReaction(
     channels: Pick<Channel, 'id' | 'category'>[] = [],
 ) {
     if (event.message.author !== me.id || event.user === me.id || me.status === 'dnd') return false;
+    if (prefs.reactionNotifications?.[notificationKey(server, me.id, '*')] === false) return false;
     if (prefs.serverNotifications?.[notificationKey(server, me.id, '*')] === false) return false;
     const room = event.message.room;
     if (room.startsWith('dm:')) {

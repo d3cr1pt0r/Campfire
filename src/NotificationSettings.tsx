@@ -15,7 +15,7 @@ import {
 import { canonicalRoom } from '../shared/rooms.js';
 import { displayName } from './profiles';
 
-const modeNames = { all: 'All messages', mentions: 'Mentions & reactions', muted: 'Nothing' };
+const modeNames = { all: 'All messages', mentions: 'Only mentions', muted: 'Nothing' };
 type Props = {
     state: State;
     prefs: Preferences;
@@ -114,11 +114,13 @@ export function NotificationSettings({
     );
     return (
         <div className="settings-page notification-settings">
-            <section className="settings-section" aria-label="Visual alerts">
-                <h3>Visual alerts</h3>
-                <p className="muted">
-                    Popups while Campfire is in the background. Saved on this device.
-                </p>
+            <p className="field-help">
+                Server and conversation rules apply to both popups and sounds. Unread badges stay
+                on.
+            </p>
+            <section className="settings-section" aria-label="Desktop notifications">
+                <h3>Desktop notifications</h3>
+                <p className="muted">Show popups when Campfire is in the background.</p>
                 <Toggle
                     title="Show desktop popups"
                     value={prefs.notifications}
@@ -151,10 +153,10 @@ export function NotificationSettings({
             </section>
             <section className="settings-section" aria-label="Sounds">
                 <h3>Sounds</h3>
-                <p className="muted">Message and reaction sounds on this device.</p>
+                <p className="muted">Play a sound when you receive an alert.</p>
                 <div className="notification-sound-row">
                     <Toggle
-                        title="Play message and reaction sounds"
+                        title="Message and reaction sounds"
                         value={prefs.messageSounds !== false}
                         set={(value) =>
                             setPrefs((previous) => ({ ...previous, messageSounds: value }))
@@ -167,186 +169,177 @@ export function NotificationSettings({
                     </button>
                 </div>
             </section>
-            <section className="settings-section" aria-label="What triggers alerts">
-                <h3>What triggers alerts</h3>
-                <p className="muted">
-                    These rules apply to desktop popups and sounds. They sync across devices.
+            {state.me.status === 'dnd' && (
+                <p className="notification-status" role="status">
+                    Do not disturb is on. Popups and sounds are paused.{' '}
+                    <button className="permission-link" onClick={() => openSettings('account')}>
+                        Change status →
+                    </button>
                 </p>
-                <p className="field-help">
-                    Unread badges and jump highlights stay on when alerts are off.
-                </p>
-                {state.me.status === 'dnd' && (
+            )}
+            <section className="settings-section" aria-label="Server notifications">
+                <h3>Server notifications — {state.name}</h3>
+                <p className="muted">Default for this server’s channels and threads.</p>
+                <Toggle
+                    title={'Mute ' + state.name}
+                    value={muted}
+                    set={(value) =>
+                        setPrefs((previous) => ({
+                            ...previous,
+                            serverNotifications: {
+                                ...previous.serverNotifications,
+                                [key('*')]: !value,
+                            },
+                        }))
+                    }
+                />
+                <p className="field-help">Mute message, reaction, and call alerts.</p>
+                {muted && (
                     <p className="notification-status" role="status">
-                        Do not disturb is on. Popups and sounds are paused.{' '}
-                        <button className="permission-link" onClick={() => openSettings('account')}>
-                            Change status →
-                        </button>
+                        This server is muted. Unmute to receive alerts.
                     </p>
                 )}
-                <section
-                    className="notification-rule-group"
-                    aria-label="Server notification defaults"
-                >
-                    <h4>{state.name}</h4>
-                    <Toggle
-                        title={'Mute ' + state.name}
-                        value={muted}
-                        set={(value) =>
-                            setPrefs((previous) => ({
-                                ...previous,
-                                serverNotifications: {
-                                    ...previous.serverNotifications,
-                                    [key('*')]: !value,
-                                },
-                            }))
-                        }
-                    />
-                    <p className="field-help">
-                        Turns off popups and sounds for messages, DMs, and calls.
-                    </p>
-                    {muted && (
-                        <p className="notification-status" role="status">
-                            This server is muted. Unmute to receive alerts.
-                        </p>
-                    )}
-                    <fieldset className="notification-mode-options">
-                        <legend>Default channel rule</legend>
-                        {(
-                            [
-                                ['all', 'Every message and reactions to your messages.'],
-                                ['mentions', 'Direct @mentions and reactions to your messages.'],
-                                ['muted', 'No popups or sounds from channels or threads.'],
-                            ] as const
-                        ).map(([mode, description]) => (
-                            <label
-                                className={
-                                    'notification-mode-option ' +
-                                    (serverMode === mode ? 'is-selected' : '')
+                <fieldset className="notification-mode-options">
+                    <legend>Notify me about</legend>
+                    {(
+                        [
+                            ['all', 'Every message in channels and threads.'],
+                            ['mentions', 'Messages that directly @mention you.'],
+                            ['muted', 'No message or reaction alerts.'],
+                        ] as const
+                    ).map(([mode, description]) => (
+                        <label
+                            className={
+                                'notification-mode-option ' +
+                                (serverMode === mode ? 'is-selected' : '')
+                            }
+                            key={mode}
+                        >
+                            <input
+                                type="radio"
+                                name="server-notification-mode"
+                                value={mode}
+                                checked={serverMode === mode}
+                                onChange={() =>
+                                    setPrefs((previous) => ({
+                                        ...previous,
+                                        serverNotificationModes: {
+                                            ...previous.serverNotificationModes,
+                                            [key('*')]: mode,
+                                        },
+                                    }))
                                 }
-                                key={mode}
-                            >
-                                <input
-                                    type="radio"
-                                    name="server-notification-mode"
-                                    value={mode}
-                                    checked={serverMode === mode}
-                                    onChange={() =>
-                                        setPrefs((previous) => ({
-                                            ...previous,
-                                            serverNotificationModes: {
-                                                ...previous.serverNotificationModes,
-                                                [key('*')]: mode,
-                                            },
-                                        }))
+                            />
+                            <span>
+                                <strong>{modeNames[mode]}</strong>
+                                <small>{description}</small>
+                            </span>
+                        </label>
+                    ))}
+                </fieldset>
+            </section>
+            <section className="settings-section" aria-label="Channel overrides">
+                <h3>Channel overrides</h3>
+                <p className="muted">
+                    Use a different notification level for specific channels or categories.
+                </p>
+                <ChannelTree
+                    mode="notifications"
+                    state={{
+                        ...state,
+                        channels: state.channels.filter((channel) => channel.kind === 'text'),
+                    }}
+                    api={api}
+                    refresh={refresh}
+                    permission={can}
+                    busy={busy}
+                    renderCategoryControl={(category) =>
+                        notificationMode('category', category.id, category.name)
+                    }
+                    renderChannel={(channel) => (
+                        <>
+                            <span className="notification-channel-name">
+                                <Hash size={15} />
+                                <span>{channel.name}</span>
+                                {channel.private && <Lock size={11} />}
+                            </span>
+                            {notificationMode(
+                                'channel',
+                                channel.id,
+                                channel.name,
+                                channel.category,
+                            )}
+                        </>
+                    )}
+                />
+            </section>
+            <section className="settings-section" aria-label="Direct messages">
+                <h3>Direct messages</h3>
+                <Toggle
+                    title="Alert for direct messages"
+                    value={prefs.dmNotifications !== false}
+                    set={(value) =>
+                        setPrefs((previous) => ({ ...previous, dmNotifications: value }))
+                    }
+                />
+                <p className="field-help">Choose which conversations alert you.</p>
+                <details className="account-details dm-notification-settings">
+                    <summary>Conversation rules</summary>
+                    <label className="notification-search">
+                        Find a member
+                        <input
+                            type="search"
+                            value={dmQuery}
+                            onChange={(event) => setDmQuery(event.target.value)}
+                            placeholder="Name or username"
+                        />
+                    </label>
+                    {dmUsers.map((user) => {
+                        const room = canonicalRoom('dm:' + state.me.id + ':' + user.id);
+                        const override = explicitNotificationMode(
+                            prefs.channelNotifications?.[key(room)],
+                        );
+                        return (
+                            <div className="member-preference-row" key={user.id}>
+                                <MemberIdentity user={user} state={state} />
+                                <ChannelNotificationSelect
+                                    label={displayName(user) + ' DM notifications'}
+                                    mode={
+                                        override === 'mentions' ? 'inherit' : override || 'inherit'
+                                    }
+                                    directMessage
+                                    inheritLabel={
+                                        'Use DM default · ' +
+                                        (prefs.dmNotifications === false
+                                            ? 'Nothing'
+                                            : 'All messages')
+                                    }
+                                    onChange={(value) =>
+                                        updateOverride('channelNotifications', room, value)
                                     }
                                 />
-                                <span>
-                                    <strong>{modeNames[mode]}</strong>
-                                    <small>{description}</small>
-                                </span>
-                            </label>
-                        ))}
-                    </fieldset>
-                </section>
-                <section
-                    className="notification-rule-group"
-                    aria-label="Channel and category rules"
-                >
-                    <h4>Channel and category rules</h4>
-                    <p className="muted">
-                        Channels use their category’s rule, then the server default.
-                    </p>
-                    <ChannelTree
-                        mode="notifications"
-                        state={{
-                            ...state,
-                            channels: state.channels.filter((channel) => channel.kind === 'text'),
-                        }}
-                        api={api}
-                        refresh={refresh}
-                        permission={can}
-                        busy={busy}
-                        renderCategoryControl={(category) =>
-                            notificationMode('category', category.id, category.name)
-                        }
-                        renderChannel={(channel) => (
-                            <>
-                                <span className="notification-channel-name">
-                                    <Hash size={15} />
-                                    <span>{channel.name}</span>
-                                    {channel.private && <Lock size={11} />}
-                                </span>
-                                {notificationMode(
-                                    'channel',
-                                    channel.id,
-                                    channel.name,
-                                    channel.category,
-                                )}
-                            </>
-                        )}
-                    />
-                </section>
-                <section
-                    className="notification-rule-group"
-                    aria-label="Direct message notifications"
-                >
-                    <h4>Direct messages</h4>
-                    <Toggle
-                        title="Alert for direct messages"
-                        value={prefs.dmNotifications !== false}
-                        set={(value) =>
-                            setPrefs((previous) => ({ ...previous, dmNotifications: value }))
-                        }
-                    />
-                    <p className="field-help">
-                        Includes reactions to your messages. Set a different rule for any
-                        conversation below.
-                    </p>
-                    <details className="account-details dm-notification-settings">
-                        <summary>Conversation rules</summary>
-                        <label className="notification-search">
-                            Find a member
-                            <input
-                                type="search"
-                                value={dmQuery}
-                                onChange={(event) => setDmQuery(event.target.value)}
-                                placeholder="Name or username"
-                            />
-                        </label>
-                        {dmUsers.map((user) => {
-                            const room = canonicalRoom('dm:' + state.me.id + ':' + user.id);
-                            const override = explicitNotificationMode(
-                                prefs.channelNotifications?.[key(room)],
-                            );
-                            return (
-                                <div className="member-preference-row" key={user.id}>
-                                    <MemberIdentity user={user} state={state} />
-                                    <ChannelNotificationSelect
-                                        label={displayName(user) + ' DM notifications'}
-                                        mode={
-                                            override === 'mentions'
-                                                ? 'inherit'
-                                                : override || 'inherit'
-                                        }
-                                        directMessage
-                                        inheritLabel={
-                                            'Use DM default · ' +
-                                            (prefs.dmNotifications === false
-                                                ? 'Nothing'
-                                                : 'All messages')
-                                        }
-                                        onChange={(value) =>
-                                            updateOverride('channelNotifications', room, value)
-                                        }
-                                    />
-                                </div>
-                            );
-                        })}
-                        {!dmUsers.length && (
-                            <p className="field-help">No members match your search.</p>
-                        )}
-                    </details>
-                </section>
+                            </div>
+                        );
+                    })}
+                    {!dmUsers.length && <p className="field-help">No members match your search.</p>}
+                </details>
+            </section>
+            <section className="settings-section" aria-label="Reactions to your messages">
+                <h3>Reactions to your messages</h3>
+                <Toggle
+                    title="Enable reaction notifications"
+                    value={prefs.reactionNotifications?.[key('*')] !== false}
+                    set={(value) =>
+                        setPrefs((previous) => ({
+                            ...previous,
+                            reactionNotifications: {
+                                ...previous.reactionNotifications,
+                                [key('*')]: value,
+                            },
+                        }))
+                    }
+                />
+                <p className="field-help">Muted channels and conversations stay quiet.</p>
             </section>
         </div>
     );

@@ -13,6 +13,10 @@ function preferences(value) {
         'Invalid notification settings',
     );
     check(modes.includes(value.defaultMode), 'Invalid notification mode');
+    check(
+        value.reactions === undefined || typeof value.reactions === 'boolean',
+        'Invalid reaction notification setting',
+    );
     const overrides = (entries) => {
         check(
             entries && typeof entries === 'object' && !Array.isArray(entries),
@@ -32,6 +36,7 @@ function preferences(value) {
     return {
         muted: value.muted,
         directMessages: value.directMessages,
+        ...(value.reactions === undefined ? {} : { reactions: value.reactions }),
         defaultMode: value.defaultMode,
         channels: overrides(value.channels),
         categories: overrides(value.categories),

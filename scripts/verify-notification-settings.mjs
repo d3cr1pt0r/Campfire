@@ -23,6 +23,7 @@ try {
     await new Promise((resolve) => service.http.listen(0, '127.0.0.1', resolve));
     const env = {
         ...process.env,
+        NOTIFICATIONS_ONLY: process.argv.includes('--notifications-only') ? '1' : '0',
         MEMBER_ORIGIN: `http://127.0.0.1:${service.http.address().port}`,
         MEMBER_FIXTURE: JSON.stringify(members),
         MEMBER_PROFILE: path.join(directory, 'profile'),
