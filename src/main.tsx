@@ -774,7 +774,7 @@ function App() {
                 document.hasFocus(),
             );
             if (reading && me && m.author !== me.id)
-                void acknowledge(m).catch((error: Error & { status?: number }) => {
+                void acknowledge(m, 0, true).catch((error: Error & { status?: number }) => {
                     if (error.status !== 403 && error.status !== 404) reportError(error);
                 });
             if (

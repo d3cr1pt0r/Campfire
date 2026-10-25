@@ -6,15 +6,28 @@ const empty: ActivitySnapshot = { version: -1, unread: {}, latest: {} };
 // Versioned snapshots keep a delayed HTTP response from undoing a newer socket update.
 export function createActivityClient(api: ApiClient, fail: (error: Error) => void) {
     let snapshot = empty,
+        received = empty,
         generation = 0;
     const listeners = new Set<() => void>();
     const acknowledged = new Map<string, number>();
     const pending = new Map<string, number>();
     const running = new Set<string>();
-    const receive = (value: ActivitySnapshot) => {
-        if (value.version < snapshot.version) return;
-        snapshot = value;
+    const quietRooms = new Map<string, number>();
+    const publish = () => {
+        const unread = { ...received.unread };
+        // Live messages in the focused conversation are already being read. Keep
+        // its badge stable until persistence catches up, without delaying other rooms.
+        for (const room of quietRooms.keys()) {
+            if (snapshot.unread[room]) unread[room] = snapshot.unread[room];
+            else delete unread[room];
+        }
+        snapshot = { ...received, unread };
         listeners.forEach((listener) => listener());
+    };
+    const receive = (value: ActivitySnapshot) => {
+        if (value.version < received.version) return;
+        received = value;
+        publish();
     };
     const read = (
         room: string,
@@ -61,14 +74,29 @@ export function createActivityClient(api: ApiClient, fail: (error: Error) => voi
     return {
         receive,
         read,
-        acknowledge: async (message: Pick<Message, 'id' | 'room'>, reactionsThrough = 0) => {
+        acknowledge: async (
+            message: Pick<Message, 'id' | 'room'>,
+            reactionsThrough = 0,
+            quiet = false,
+        ) => {
             const current = generation;
-            const value = await api<ActivitySnapshot>('/activity/acknowledge', 'POST', {
-                room: message.room,
-                message: message.id,
-                ...(reactionsThrough ? { reactionsThrough } : {}),
-            });
-            if (current === generation) receive(value);
+            if (quiet) quietRooms.set(message.room, (quietRooms.get(message.room) ?? 0) + 1);
+            try {
+                const value = await api<ActivitySnapshot>('/activity/acknowledge', 'POST', {
+                    room: message.room,
+                    message: message.id,
+                    ...(reactionsThrough ? { reactionsThrough } : {}),
+                });
+                if (current === generation) receive(value);
+            } finally {
+                if (quiet && current === generation) {
+                    const remaining = quietRooms.get(message.room)! - 1;
+                    if (remaining) quietRooms.set(message.room, remaining);
+                    else quietRooms.delete(message.room);
+                    // Also restore authoritative unread state if the request failed.
+                    publish();
+                }
+            }
         },
         acknowledgeVisible: async (room: string, messages: string[], signal?: AbortSignal) => {
             const empty: NotificationHighlights = { messages: [], reactions: [] };
@@ -107,6 +135,8 @@ export function createActivityClient(api: ApiClient, fail: (error: Error) => voi
             pending.clear();
             running.clear();
             acknowledged.clear();
+            quietRooms.clear();
+            publish();
         },
     };
 }

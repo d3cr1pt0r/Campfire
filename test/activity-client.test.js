@@ -123,6 +123,81 @@ test('focused conversation suppression requires visibility, focus and matching t
     );
 });
 
+test('focused live arrivals keep badges stable until persisted while other rooms update', async () => {
+    const calls = [],
+        displayed = [];
+    const client = createActivityClient(
+        () => new Promise((resolve) => calls.push({ resolve })),
+        assert.fail,
+    );
+    client.receive({ version: 1, unread: { general: 2 }, latest: { general: 2 } });
+    client.subscribe(() => displayed.push(client.getSnapshot().unread));
+    const first = client.acknowledge({ room: 'general', id: 'live-1' }, 0, true);
+    const second = client.acknowledge({ room: 'general', id: 'live-2' }, 0, true);
+    client.receive({
+        version: 3,
+        unread: { general: 4, 'dm:other': 1 },
+        latest: { general: 4, 'dm:other': 5 },
+    });
+    assert.deepEqual(client.getSnapshot().unread, { general: 2, 'dm:other': 1 });
+    // Socket confirmation can arrive before either HTTP response.
+    client.receive({
+        version: 5,
+        unread: { general: 2, 'dm:other': 1 },
+        latest: { general: 4, 'dm:other': 5 },
+    });
+    calls[1].resolve({ version: 5, unread: { general: 2 }, latest: { general: 4 } });
+    await second;
+    calls[0].resolve({ version: 4, unread: { general: 3 }, latest: { general: 4 } });
+    await first;
+    assert.ok(displayed.every((unread) => unread.general === 2));
+    assert.equal(client.getSnapshot().version, 5);
+});
+
+test('focused DM arrivals never flash a badge and failed persistence restores unread activity', async () => {
+    const calls = [],
+        displayed = [];
+    const room = 'dm:me:other';
+    const client = createActivityClient(
+        () => new Promise((resolve, reject) => calls.push({ resolve, reject })),
+        assert.fail,
+    );
+    client.receive({ version: 1, unread: {}, latest: {} });
+    client.subscribe(() => displayed.push(client.getSnapshot().unread[room] ?? 0));
+    const first = client.acknowledge({ room, id: 'live' }, 0, true);
+    client.receive({ version: 2, unread: { [room]: 1 }, latest: { [room]: 1 } });
+    calls[0].resolve({ version: 3, unread: {}, latest: { [room]: 1 } });
+    await first;
+    assert.ok(displayed.every((count) => count === 0));
+
+    const failed = client.acknowledge({ room, id: 'unpersisted' }, 0, true);
+    client.receive({ version: 4, unread: { [room]: 1 }, latest: { [room]: 2 } });
+    calls[1].reject(Error('Offline'));
+    await assert.rejects(failed, /Offline/);
+    assert.equal(client.getSnapshot().unread[room], 1);
+});
+
+test('cleared notifications stay cleared across delayed live acknowledgments and state snapshots', async () => {
+    const calls = [];
+    const client = createActivityClient(
+        (path) => new Promise((resolve) => calls.push({ path, resolve })),
+        assert.fail,
+    );
+    client.receive({ version: 1, unread: { general: 1 }, latest: { general: 1 } });
+    const live = client.acknowledge({ room: 'general', id: 'live' }, 0, true);
+    client.receive({ version: 2, unread: { general: 2 }, latest: { general: 2 } });
+    client.dismiss('general');
+    calls[1].resolve({ version: 4, unread: {}, latest: { general: 2 } });
+    await new Promise(setImmediate);
+    calls[0].resolve({ version: 3, unread: { general: 1 }, latest: { general: 2 } });
+    await live;
+    client.receive({ version: 2, unread: { general: 2 }, latest: { general: 2 } });
+    assert.equal(client.getSnapshot().unread.general, undefined);
+    // A genuinely later arrival must still show up.
+    client.receive({ version: 5, unread: { general: 1 }, latest: { general: 3 } });
+    assert.equal(client.getSnapshot().unread.general, 1);
+});
+
 test('synced notification rules replace only this account and server while device settings remain local', () => {
     const server = 'https://chat.example',
         user = 'me';
